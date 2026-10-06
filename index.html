@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sonicake Smart Box - PC Preset Manager</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/images/logo_sonicake.svg">
+  
+  <link rel="stylesheet" href="/src/styles/main.css">
+  <link rel="stylesheet" href="/src/styles/rack.css">
+  <link rel="stylesheet" href="/src/styles/knobs.css">
+  <link rel="stylesheet" href="/src/styles/tone3000.css">
+  <link rel="stylesheet" href="/src/styles/drums-tuner.css">
+</head>
+<body>
+  <!-- Header Bar -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="app-brand" title="Sonicake Smart Box & Pocket Master Editor">
+        <img src="/assets/images/logo_sonicake.svg" alt="Sonicake" class="brand-logo" onerror="this.src='/assets/images/effects.svg'">
+        <div class="brand-text">
+          <span class="brand-title">Sonicake Smart Box</span>
+          <span class="brand-sub">PC Preset Manager</span>
+        </div>
+      </div>
+
+      <!-- Connection Pill -->
+      <div class="connection-widget">
+        <div class="conn-led" id="connectionLed"></div>
+        <span class="conn-text" id="connectionText">Disconnected</span>
+        <div class="conn-btns">
+          <button class="btn-conn" id="connectUsbBtn" title="Connect via USB MIDI">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+            </svg>
+            USB
+          </button>
+          <button class="btn-conn" id="connectBleBtn" title="Connect via Bluetooth BLE">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="m7 7 10 10-5 5V2l5 5L7 17"></path>
+            </svg>
+            BLE
+          </button>
+          <button class="btn-conn" id="disconnectBtn" style="display:none;" title="Disconnect device">
+            &times;
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Preset Status in Header -->
+    <div class="header-center">
+      <span class="current-slot-badge" id="headerSlotBadge">U01</span>
+      <span class="current-preset-name" id="headerPresetName">Init Tone</span>
+      <span class="dirty-indicator" id="headerDirtyIndicator">*</span>
+    </div>
+
+    <!-- Header Tools & Features -->
+    <div class="header-right">
+      <button class="btn-action" id="btnSyncHardware" title="Sync all 100 presets & current parameters from pedal">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+        </svg>
+        Sync
+      </button>
+
+      <!-- A/B Comparison -->
+      <button class="btn-action" id="btnAbToggle" title="Toggle A/B Tone Comparison (Alt+A)">
+        <span style="font-weight: 800; color: var(--accent-orange);">A/B</span>
+      </button>
+
+      <!-- Undo / Redo -->
+      <button class="btn-action" id="btnUndo" title="Undo parameter tweak (Ctrl+Z)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 7v6h6M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+        </svg>
+      </button>
+      <button class="btn-action" id="btnRedo" title="Redo parameter tweak (Ctrl+Y)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 7v6h-6M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>
+        </svg>
+      </button>
+
+      <!-- Drum Machine -->
+      <button class="btn-action" id="btnOpenDrums" title="100 Rhythms Drum Machine & Tap Tempo">
+        &#129345; Drums
+      </button>
+
+      <!-- Chromatic Tuner -->
+      <button class="btn-action" id="btnOpenTuner" title="Chromatic Guitar & Bass Tuner">
+        &#127926; Tuner
+      </button>
+
+      <!-- Tone3000 Cloud -->
+      <button class="btn-action btn-tone3000" id="btnOpenTone3000" title="Browse Tone3000 Neural Amp Modeler captures">
+        &#9889; Tone3000
+      </button>
+
+      <!-- Save to Pedal -->
+      <button class="btn-action btn-save" id="btnOpenSave" title="Save preset to hardware slot (Ctrl+S)">
+        &#128190; Save
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Body Layout -->
+  <main class="app-body">
+    <!-- Left Sidebar: 100 Presets -->
+    <aside class="app-sidebar" id="presetSidebar"></aside>
+
+    <!-- Center Workspace -->
+    <section class="app-content">
+      <!-- Upper Rack: 9 Modules Signal Chain -->
+      <div class="rack-section" id="signalChainRack"></div>
+
+      <!-- Lower Editor: Active Module Knob Controls -->
+      <div class="editor-section" id="moduleEditorArea"></div>
+
+      <!-- Bottom Hardware Log Drawer -->
+      <div class="log-drawer" id="logDrawer">
+        <div class="log-header" id="logToggleHeader">
+          <div class="log-title">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="4 17 10 11 4 5"></polyline>
+              <line x1="12" y1="19" x2="20" y2="19"></line>
+            </svg>
+            Hardware SysEx Console
+          </div>
+          <svg class="log-toggle-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="18 15 12 9 6 15"></polyline>
+          </svg>
+        </div>
+        <div class="log-content" id="logContainer">
+          <div class="log-line info">[System] Sonicake Smart Box Preset Manager ready.</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modals -->
+  <div class="modal-overlay" id="tone3000ModalOverlay"></div>
+  <div class="modal-overlay" id="drumModalOverlay"></div>
+  <div class="modal-overlay" id="tunerModalOverlay"></div>
+  <div class="modal-overlay" id="saveModalOverlay"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>

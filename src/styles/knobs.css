@@ -1,0 +1,267 @@
+/* ==========================================================================
+   Knobs & Parameter Controls Styles
+   Skeuomorphic hardware rotary knobs, vintage switches, and dropdowns
+   ========================================================================== */
+
+.module-editor-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  height: 100%;
+}
+
+.module-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-card);
+  padding: 16px 20px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+}
+
+.module-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.module-header-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.module-header-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.module-header-title {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+.module-header-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 550px;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+/* Model Selector Dropdown */
+.model-selector-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.model-selector-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.model-select {
+  background: var(--bg-inset);
+  border: 1px solid var(--border-light);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 6px;
+  outline: none;
+  cursor: pointer;
+  min-width: 180px;
+  transition: all 0.2s;
+}
+
+.model-select:focus {
+  border-color: var(--accent-orange);
+  box-shadow: 0 0 8px var(--accent-orange-glow);
+}
+
+/* ==========================================================================
+   Knobs Grid Panel
+   ========================================================================== */
+.controls-panel {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 28px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  min-height: 220px;
+}
+
+/* Individual Knob Component */
+.knob-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 90px;
+}
+
+.knob-label {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Rotary Knob Dial */
+.rotary-knob {
+  width: 64px;
+  height: 64px;
+  position: relative;
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.rotary-knob:active {
+  cursor: grabbing;
+}
+
+/* SVG Arc Track & Active Fill */
+.knob-arc-svg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.knob-track-bg {
+  stroke: var(--border-light);
+  stroke-width: 4;
+  fill: none;
+}
+
+.knob-track-fill {
+  stroke: var(--accent-orange);
+  stroke-width: 4;
+  fill: none;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.05s ease-out;
+  filter: drop-shadow(0 0 3px var(--accent-orange-glow));
+}
+
+/* Metallic Center Cap */
+.knob-cap {
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #3e4453 0%, #1c1f28 70%, #14161d 100%);
+  border: 2px solid #2b303e;
+  box-shadow: 
+    inset 0 1px 1px rgba(255,255,255,0.25),
+    0 4px 8px rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.05s ease-out;
+}
+
+/* Pointer Line / Notch */
+.knob-pointer {
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 3px;
+  height: 10px;
+  border-radius: 2px;
+  background: #ffffff;
+  box-shadow: 0 0 4px #ffffff;
+}
+
+/* Value Display Readout */
+.knob-value-display {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--bg-inset);
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  min-width: 36px;
+  text-align: center;
+  cursor: text;
+  transition: border-color 0.15s;
+}
+
+.knob-value-display:hover {
+  border-color: var(--accent-orange);
+}
+
+.knob-value-input {
+  width: 38px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--bg-inset);
+  border: 1px solid var(--accent-orange);
+  border-radius: 4px;
+  text-align: center;
+  outline: none;
+}
+
+/* Switch / Toggle Widget */
+.switch-control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 90px;
+}
+
+.toggle-switch-btn {
+  width: 44px;
+  height: 24px;
+  background: var(--bg-inset);
+  border: 2px solid var(--border-light);
+  border-radius: 12px;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-switch-btn.active {
+  background: var(--accent-orange);
+  border-color: var(--accent-orange);
+  box-shadow: 0 0 8px var(--accent-orange-glow);
+}
+
+.toggle-switch-thumb {
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+}
+
+.toggle-switch-btn.active .toggle-switch-thumb {
+  transform: translateX(20px);
+}

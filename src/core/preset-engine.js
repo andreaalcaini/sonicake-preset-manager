@@ -1,7 +1,8 @@
 /**
  * Sonicake Preset Engine
- * Manages active preset state, 100 hardware slots, A/B comparison,
- * Undo/Redo stack, dirty tracking, and bidirectional hardware SysEx sync.
+ * Manages active preset state, 100 hardware slots, User IRs (1-5),
+ * Clone Amp / NAM profiles (1-5), A/B comparison, Undo/Redo stack,
+ * dirty tracking, and bidirectional hardware SysEx sync.
  */
 
 import { connection } from './connection.js';
@@ -13,11 +14,14 @@ import {
   REQUEST_PRESET_NAMES_CMD,
   REQUEST_CURRENT_PRESET_NUM_CMD,
   REQUEST_PRESET_STATE_CMD,
+  REQUEST_USER_IR_NAMES_CMD,
+  REQUEST_CLONE_AMP_NAMES_CMD,
   buildSignatureToFxIdMaps,
   buildSavePresetCommand,
   decodePresetStateAndOrder,
   decodeSelectedEffects,
   decodeParameterValues,
+  decodeName,
   parsePacketForNames
 } from './protocol.js';
 import { PrstParser } from './prst-parser.js';
@@ -31,6 +35,10 @@ export class PresetEngine {
     this.currentSlot = 1; // 1-based index (1 to 100)
     this.isDirty = false;
     this.clipboard = null;
+
+    // User IR & Clone Amp Profile Names
+    this.irSlotNames = ['User IR 1', 'User IR 2', 'User IR 3', 'User IR 4', 'User IR 5'];
+    this.cloneSlotNames = ['User Profile 1', 'User Profile 2', 'User Profile 3', 'User Profile 4', 'User Profile 5'];
 
     // Active Preset State
     this.activePreset = this.createDefaultPreset('U01: Init Tone');
@@ -46,7 +54,6 @@ export class PresetEngine {
     this.undoStack = [];
     this.redoStack = [];
     this.maxHistory = 50;
-    this.debounceTimer = null;
 
     // SysEx Dump Sync State
     this.isSyncingNames = false;
@@ -54,6 +61,10 @@ export class PresetEngine {
     this.isWaitingForPresetNumber = false;
     this.dumpPackets = [];
     this.nameSyncResolve = null;
+    this.cloneNameResolve = null;
+    this.irNameResolve = null;
+    this.nameSyncTimeoutId = null;
+    this.syncTimeoutId = null;
 
     // Event listeners
     this.listeners = {
@@ -61,6 +72,7 @@ export class PresetEngine {
       presetListChange: new Set(),
       dirtyChange: new Set(),
       slotChange: new Set(),
+      userSlotsChange: new Set(),
       syncProgress: new Set()
     };
 
@@ -74,6 +86,7 @@ export class PresetEngine {
   onPresetListChange(cb) { this.listeners.presetListChange.add(cb); return () => this.listeners.presetListChange.delete(cb); }
   onDirtyChange(cb) { this.listeners.dirtyChange.add(cb); return () => this.listeners.dirtyChange.delete(cb); }
   onSlotChange(cb) { this.listeners.slotChange.add(cb); return () => this.listeners.slotChange.delete(cb); }
+  onUserSlotsChange(cb) { this.listeners.userSlotsChange.add(cb); return () => this.listeners.userSlotsChange.delete(cb); }
   onSyncProgress(cb) { this.listeners.syncProgress.add(cb); return () => this.listeners.syncProgress.delete(cb); }
 
   emit(event, data) {
@@ -180,50 +193,141 @@ export class PresetEngine {
   handleIncomingSysEx(hexString) {
     const cleanHex = hexString.replace(/\s+/g, '').toUpperCase();
 
-    // 1. Preset Names Sync
-    if (this.isSyncingNames) {
-      if (cleanHex === TERMINATOR_PACKET || cleanHex.endsWith('0200000000F7')) {
+    // 1. Clone Amp / NAM Names Response (signature: 01020204)
+    if (cleanHex.indexOf('01020204') >= 0 && cleanHex.length >= 80) {
+      connection.log('Received Clone Amp (NAM) profile names data from hardware.', 'info');
+      this.decodeAndApplyUserNames(cleanHex, 'Clone');
+      if (this.cloneNameResolve) {
+        this.cloneNameResolve();
+        this.cloneNameResolve = null;
+      }
+      return;
+    }
+
+    // 2. User IR Names Response (signature: 01020200)
+    if (cleanHex.indexOf('01020200') >= 0 && cleanHex.length >= 80) {
+      connection.log('Received User IR names data from hardware.', 'info');
+      this.decodeAndApplyUserNames(cleanHex, 'IR');
+      if (this.irNameResolve) {
+        this.irNameResolve();
+        this.irNameResolve = null;
+      }
+      return;
+    }
+
+    // 3. Preset Names Sync
+    if (this.isSyncingNames && cleanHex.startsWith('8080F0') && cleanHex.endsWith('F7')) {
+      clearTimeout(this.nameSyncTimeoutId);
+
+      if (connection.connectionType === 'usb') {
+        connection.log('Received complete USB preset names packet. Decoding...', 'info');
+        this.dumpPackets.push(cleanHex);
         this.processNamesDump();
-        return;
+      } else if (cleanHex === TERMINATOR_PACKET || cleanHex.endsWith('0200000000F7')) {
+        connection.log(`Terminator packet received. Decoding ${this.dumpPackets.length} name packets...`, 'info');
+        this.processNamesDump();
+      } else {
+        this.dumpPackets.push(cleanHex);
+        this.nameSyncTimeoutId = setTimeout(() => {
+          if (this.isSyncingNames) {
+            this.processNamesDump();
+          }
+        }, 1200);
       }
-      // Accumulate name packet
-      this.dumpPackets.push(cleanHex);
-      this.emit('syncProgress', { type: 'names', count: this.dumpPackets.length });
       return;
     }
 
-    // 2. Preset State Sync (Multi-packet dump 1 to 5)
-    if (this.isWaitingForPresetDump) {
+    // 4. Preset State Sync (5-packet dump)
+    if (this.isWaitingForPresetDump && cleanHex.startsWith('8080F0') && cleanHex.endsWith('F7') && cleanHex.length > 50) {
       this.dumpPackets.push(cleanHex);
-      if (this.dumpPackets.length >= 5 || cleanHex.endsWith('F7')) {
-        // If we collected 5 packets (or 1 large USB SysEx packet)
-        this.processPresetDump(this.dumpPackets);
-        this.dumpPackets = [];
+
+      if (this.dumpPackets.length === 5 || connection.connectionType === 'usb') {
+        let packets = this.dumpPackets;
+
+        // On USB MIDI, re-create the expected 5 sub-packets if delivered as 1 reassembled SysEx
+        if (connection.connectionType === 'usb') {
+          const hdr = "8080F00706000100000000";
+          const p1 = hdr + cleanHex.slice(22, 422) + "F7";
+          const p2 = hdr + cleanHex.slice(422, 822) + "F7";
+          const p3 = hdr + cleanHex.slice(822, 1222) + "F7";
+          const p4 = hdr + cleanHex.slice(1222, 1622) + "F7";
+          const p5 = hdr + cleanHex.slice(1622);
+          packets = [p1, p2, p3, p4, p5];
+        }
+
+        clearTimeout(this.syncTimeoutId);
+        this.syncTimeoutId = null;
         this.isWaitingForPresetDump = false;
+
+        this.processPresetDump(packets);
+        this.dumpPackets = [];
       }
       return;
     }
 
-    // 3. Preset Number Response (e.g. 8080F0000700010000000201020403...)
+    // 5. Preset Number Response (extract 2 nibbles at chars 30..34)
     if (this.isWaitingForPresetNumber) {
       this.parseActivePresetSlotResponse(cleanHex);
       this.isWaitingForPresetNumber = false;
     }
   }
 
+  decodeAndApplyUserNames(packet, type) {
+    const PAYLOAD_START_OFFSET = 50; // 25 bytes * 2
+    if (packet.length < PAYLOAD_START_OFFSET) return;
+    const hexPayload = packet.substring(PAYLOAD_START_OFFSET);
+
+    const namesArray = type === 'Clone' ? this.cloneSlotNames : this.irSlotNames;
+    const baseFxId = type === 'Clone' ? 901 : 416;
+    const logName = type === 'Clone' ? 'Clone Amp (NAM)' : 'User IR';
+
+    const foundNames = [];
+    const BLOCK_STRIDE = 64; // 32 bytes
+    const NAME_DATA_LENGTH = 40; // 20 bytes
+
+    for (let i = 0; i < 5; i++) {
+      const blockStart = i * BLOCK_STRIDE;
+      if (hexPayload.length >= blockStart + NAME_DATA_LENGTH) {
+        const nameHex = hexPayload.substring(blockStart, blockStart + NAME_DATA_LENGTH);
+        const decoded = decodeName(nameHex).trim();
+        foundNames.push(decoded || `${type} ${i + 1}`);
+      }
+    }
+
+    if (foundNames.length === 5) {
+      connection.log(`Decoded 5 ${logName} names: ${foundNames.join(', ')}`, 'success');
+      foundNames.forEach((name, i) => {
+        namesArray[i] = name;
+        const fxId = baseFxId + i;
+        if (MODULE_LIBRARY_DATA.effectLibrary[fxId]) {
+          MODULE_LIBRARY_DATA.effectLibrary[fxId].name = name;
+        }
+      });
+      this.emit('userSlotsChange', { type, names: namesArray });
+      this.emit('stateChange', this.activePreset);
+    }
+  }
+
   parseActivePresetSlotResponse(hexString) {
     try {
-      const bytes = hexString.match(/.{1,2}/g);
-      if (bytes && bytes.length >= 8) {
-        // Preset index is at byte offset in response
-        const slot = parseInt(bytes[bytes.length - 2], 16) + 1;
-        if (slot >= 1 && slot <= 100) {
-          this.currentSlot = slot;
-          this.emit('slotChange', this.currentSlot);
-          connection.log(`Hardware active slot: ${this.getSlotCode(slot)}`, 'info');
-          // Automatically sync active preset state
-          this.syncCurrentPresetState();
+      const hexDigit1AsByte = hexString.substring(30, 32);
+      const hexDigit2AsByte = hexString.substring(32, 34);
+      const digit1 = parseInt(hexDigit1AsByte, 16);
+      const digit2 = parseInt(hexDigit2AsByte, 16);
+      const finalHexString = digit1.toString(16) + digit2.toString(16);
+      const presetIndex = parseInt(finalHexString, 16); // 0-based
+      const slot = presetIndex + 1; // 1 to 100
+
+      if (slot >= 1 && slot <= 100) {
+        this.currentSlot = slot;
+        const presetItem = this.presetList[slot - 1];
+        if (presetItem) {
+          this.activePreset.name = presetItem.name;
         }
+        this.emit('slotChange', this.currentSlot);
+        connection.log(`Active Hardware Preset: ${this.getSlotCode(slot)} - ${this.activePreset.name}`, 'success');
+        // Fetch preset parameters for this active slot
+        setTimeout(() => this.syncCurrentPresetState(), 100);
       }
     } catch (e) {
       console.warn('Failed to parse preset number response:', e);
@@ -236,7 +340,7 @@ export class PresetEngine {
     this.dumpPackets = [];
 
     if (allNames.length > 0) {
-      connection.log(`Successfully synced ${allNames.length} preset names from hardware!`, 'success');
+      connection.log(`Successfully synced ${allNames.length} preset names from pedal flash!`, 'success');
       for (let i = 0; i < allNames.length && i < this.presetList.length; i++) {
         if (allNames[i].trim()) {
           this.presetList[i].name = allNames[i].trim();
@@ -257,13 +361,13 @@ export class PresetEngine {
 
   processPresetDump(packets) {
     try {
-      connection.log('Parsing hardware preset dump...', 'info');
+      connection.log('Parsing preset parameters dump...', 'info');
       const packet1 = packets[0];
       const packet2 = packets[1] || packet1;
 
       // Decode module states, chain order, amp mode, preset volume
       const stateOrder = decodePresetStateAndOrder(packet1);
-      
+
       // Decode selected effects
       const effects = decodeSelectedEffects(packet2, this.signatureToFxIdMaps);
 
@@ -276,7 +380,7 @@ export class PresetEngine {
       this.activePreset.order = stateOrder.order || [0, 1, 2, 3, 4, 5, 6, 7, 8];
       this.activePreset.ampMode = stateOrder.ampMode || 'factory';
       this.activePreset.selectedEffects = { ...this.activePreset.selectedEffects, ...effects.selectedEffects };
-      
+
       for (const modId in parameters) {
         if (!this.activePreset.parameters[modId]) {
           this.activePreset.parameters[modId] = {};
@@ -290,7 +394,7 @@ export class PresetEngine {
       this.isDirty = false;
       this.emit('dirtyChange', false);
       this.emit('stateChange', this.activePreset);
-      connection.log(`Preset "${this.activePreset.name}" synced from Smart Box!`, 'success');
+      connection.log(`Preset "${this.activePreset.name}" fully loaded from Smart Box!`, 'success');
     } catch (err) {
       connection.log(`Error parsing preset dump: ${err.message}`, 'error');
     }
@@ -298,22 +402,96 @@ export class PresetEngine {
 
   // --- Hardware Sync Requests ---
 
-  async syncPresetNames() {
-    if (!connection.isConnected) {
-      connection.log('Cannot sync: Hardware not connected', 'warning');
-      return;
+  async runInitialSyncSequence() {
+    if (!connection.isConnected) return;
+    connection.log('Starting full hardware synchronization sequence...', 'info');
+
+    try {
+      // 1. Sync Clone Amp (NAM) names
+      connection.log('Step 1/3: Reading Clone Amp (NAM) profiles...', 'info');
+      await this.syncCloneAmpNames();
+
+      // 2. Sync User IR names
+      connection.log('Step 2/3: Reading User IR profiles...', 'info');
+      await this.syncUserIRNames();
+
+      // 3. Sync Preset names (which also triggers active slot & current state)
+      connection.log('Step 3/3: Reading all 100 preset names from flash...', 'info');
+      await this.syncPresetNames();
+    } catch (err) {
+      connection.log(`Sync sequence warning: ${err.message}`, 'warning');
     }
-    this.isSyncingNames = true;
-    this.dumpPackets = [];
-    connection.log('Requesting all 100 preset names from hardware...', 'info');
-    await connection.writeCommand(REQUEST_PRESET_NAMES_CMD);
+  }
+
+  syncCloneAmpNames() {
+    return new Promise(async (resolve) => {
+      if (!connection.isConnected) return resolve();
+      const timeout = setTimeout(() => {
+        this.cloneNameResolve = null;
+        resolve();
+      }, 3000);
+
+      this.cloneNameResolve = () => {
+        clearTimeout(timeout);
+        this.cloneNameResolve = null;
+        resolve();
+      };
+      await connection.writeCommand(REQUEST_CLONE_AMP_NAMES_CMD);
+    });
+  }
+
+  syncUserIRNames() {
+    return new Promise(async (resolve) => {
+      if (!connection.isConnected) return resolve();
+      const timeout = setTimeout(() => {
+        this.irNameResolve = null;
+        resolve();
+      }, 3000);
+
+      this.irNameResolve = () => {
+        clearTimeout(timeout);
+        this.irNameResolve = null;
+        resolve();
+      };
+      await connection.writeCommand(REQUEST_USER_IR_NAMES_CMD);
+    });
+  }
+
+  syncPresetNames() {
+    return new Promise(async (resolve) => {
+      if (!connection.isConnected) {
+        connection.log('Cannot sync: Hardware not connected', 'warning');
+        return resolve();
+      }
+      this.isSyncingNames = true;
+      this.dumpPackets = [];
+      this.nameSyncResolve = resolve;
+
+      clearTimeout(this.nameSyncTimeoutId);
+      this.nameSyncTimeoutId = setTimeout(() => {
+        if (this.isSyncingNames) {
+          this.processNamesDump();
+        }
+      }, 5000);
+
+      await connection.writeCommand(REQUEST_PRESET_NAMES_CMD);
+    });
   }
 
   async syncCurrentPresetState() {
     if (!connection.isConnected) return;
     this.isWaitingForPresetDump = true;
     this.dumpPackets = [];
-    connection.log('Requesting current preset parameters from hardware...', 'info');
+
+    clearTimeout(this.syncTimeoutId);
+    this.syncTimeoutId = setTimeout(() => {
+      if (this.isWaitingForPresetDump) {
+        this.isWaitingForPresetDump = false;
+        connection.log('Preset state sync timed out.', 'warning');
+      }
+    }, 4000);
+
+    connection.log('Requesting active preset parameters...', 'info');
     await connection.writeCommand(REQUEST_PRESET_STATE_CMD);
   }
 
@@ -340,7 +518,6 @@ export class PresetEngine {
       if (cmd) {
         await connection.writeCommand(cmd);
         connection.log(`Switched to preset ${this.getSlotCode(slotNumber)}: ${this.activePreset.name}`, 'info');
-        // Fetch preset parameters after switching
         setTimeout(() => this.syncCurrentPresetState(), 100);
       }
     }
@@ -378,7 +555,6 @@ export class PresetEngine {
   async setEffectType(moduleId, fxId, syncHardware = true) {
     this.pushUndoSnapshot();
     this.activePreset.selectedEffects[moduleId] = fxId;
-    // Set default parameters for newly chosen effect
     this.activePreset.parameters[moduleId] = this.getDefaultParametersForFx(fxId);
     this.markDirty();
     this.emit('stateChange', this.activePreset);
@@ -412,7 +588,6 @@ export class PresetEngine {
     this.activePreset.volume = Math.max(0, Math.min(100, Math.round(volume)));
     this.markDirty();
     this.emit('stateChange', this.activePreset);
-    // Preset volume is also synced as global or module param when supported
   }
 
   async setChainOrder(newOrder, syncHardware = true) {
@@ -428,8 +603,6 @@ export class PresetEngine {
       if (cmd) {
         await connection.writeCommand(cmd);
         connection.log(`Updated signal chain: ${key}`, 'info');
-      } else {
-        connection.log(`Chain combination '${key}' not in lookup table.`, 'warning');
       }
     }
   }
@@ -467,37 +640,21 @@ export class PresetEngine {
   applySnapshot(snapshot) {
     this.activePreset = JSON.parse(JSON.stringify(snapshot));
     this.emit('stateChange', this.activePreset);
-    // Sync to hardware if connected
     if (connection.isConnected) {
-      // Sync bypass states
       for (const [modId, isOn] of Object.entries(this.activePreset.states)) {
         const cmd = COMMAND_LIBRARY_DATA.moduleStates?.[modId]?.[isOn ? 'on' : 'off'];
         if (cmd) connection.writeCommand(cmd);
       }
-      // Sync effect types
       for (const [modId, fxId] of Object.entries(this.activePreset.selectedEffects)) {
         const cmd = COMMAND_LIBRARY_DATA.effectTypes?.[modId]?.[fxId];
         if (cmd) connection.writeCommand(cmd);
       }
-      // Sync parameters
       for (const [modId, params] of Object.entries(this.activePreset.parameters)) {
         for (const [algId, val] of Object.entries(params)) {
           const cmd = COMMAND_LIBRARY_DATA.parameters?.[modId]?.[algId]?.[val];
           if (cmd) connection.writeCommand(cmd);
         }
       }
-    }
-  }
-
-  setABSnapshot(slot) {
-    if (slot === 'A') {
-      this.abState.snapshotA = this.takeSnapshot();
-      this.abState.active = 'A';
-      connection.log('Saved State A for comparison', 'info');
-    } else if (slot === 'B') {
-      this.abState.snapshotB = this.takeSnapshot();
-      this.abState.active = 'B';
-      connection.log('Saved State B for comparison', 'info');
     }
   }
 
@@ -527,7 +684,7 @@ export class PresetEngine {
     if (this.undoStack.length > this.maxHistory) {
       this.undoStack.shift();
     }
-    this.redoStack = []; // Clear redo
+    this.redoStack = [];
   }
 
   undo() {
@@ -587,6 +744,8 @@ export class PresetEngine {
       exportedAt: new Date().toISOString(),
       currentSlot: this.currentSlot,
       presetList: this.presetList,
+      cloneSlotNames: this.cloneSlotNames,
+      irSlotNames: this.irSlotNames,
       activePreset: this.activePreset
     }, null, 2);
   }
@@ -597,6 +756,22 @@ export class PresetEngine {
       this.presetList = data.presetList;
       this.emit('presetListChange', this.presetList);
     }
+    if (data.cloneSlotNames) {
+      this.cloneSlotNames = data.cloneSlotNames;
+      this.cloneSlotNames.forEach((n, i) => {
+        if (MODULE_LIBRARY_DATA.effectLibrary[901 + i]) {
+          MODULE_LIBRARY_DATA.effectLibrary[901 + i].name = n;
+        }
+      });
+    }
+    if (data.irSlotNames) {
+      this.irSlotNames = data.irSlotNames;
+      this.irSlotNames.forEach((n, i) => {
+        if (MODULE_LIBRARY_DATA.effectLibrary[416 + i]) {
+          MODULE_LIBRARY_DATA.effectLibrary[416 + i].name = n;
+        }
+      });
+    }
     if (data.activePreset) {
       this.pushUndoSnapshot();
       this.activePreset = data.activePreset;
@@ -606,24 +781,49 @@ export class PresetEngine {
     connection.log('Preset backup imported successfully!', 'success');
   }
 
-  // --- Tone3000 Cloud Integration ---
+  // --- Tone3000 Slot Replacement ---
+
+  replaceCloneProfile(slotIndex, tone) {
+    const idx = Math.max(0, Math.min(4, slotIndex));
+    const fxId = 901 + idx;
+    const cleanName = tone.title.slice(0, 10);
+
+    this.cloneSlotNames[idx] = cleanName;
+    if (MODULE_LIBRARY_DATA.effectLibrary[fxId]) {
+      MODULE_LIBRARY_DATA.effectLibrary[fxId].name = cleanName;
+      MODULE_LIBRARY_DATA.effectLibrary[fxId].descriptionEn = tone.description || `Tone3000 capture: ${tone.title}`;
+    }
+
+    // Switch amp mode to Clone/NAM & select this profile
+    this.setAmpMode('clone', true);
+    this.setEffectType(9, fxId, true);
+
+    this.emit('userSlotsChange', { type: 'Clone', names: this.cloneSlotNames });
+    this.emit('stateChange', this.activePreset);
+    connection.log(`Replaced Clone Profile ${idx + 1} with "${cleanName}" from Tone3000!`, 'success');
+  }
+
+  replaceUserIR(slotIndex, tone) {
+    const idx = Math.max(0, Math.min(4, slotIndex));
+    const fxId = 416 + idx;
+    const cleanName = tone.title.slice(0, 10);
+
+    this.irSlotNames[idx] = cleanName;
+    if (MODULE_LIBRARY_DATA.effectLibrary[fxId]) {
+      MODULE_LIBRARY_DATA.effectLibrary[fxId].name = cleanName;
+      MODULE_LIBRARY_DATA.effectLibrary[fxId].descriptionEn = tone.description || `Tone3000 IR: ${tone.title}`;
+    }
+
+    // Select this User IR in IR module (module 4)
+    this.setEffectType(4, fxId, true);
+
+    this.emit('userSlotsChange', { type: 'IR', names: this.irSlotNames });
+    this.emit('stateChange', this.activePreset);
+    connection.log(`Replaced User IR ${idx + 1} with "${cleanName}" from Tone3000!`, 'success');
+  }
 
   applyTone3000(tone) {
-    this.pushUndoSnapshot();
-    connection.log(`Applying Tone3000 capture: "${tone.title}"...`, 'info');
-
-    // Switch amp mode to Clone/NAM
-    this.setAmpMode('clone', true);
-
-    // Set Clone Amp profile slot 1 (ID 901)
-    this.setEffectType(9, 901, true);
-
-    // Set preset name to match tone title
-    this.activePreset.name = tone.title.slice(0, 10);
-    this.markDirty();
-    this.emit('stateChange', this.activePreset);
-
-    connection.log(`Tone3000 "${tone.title}" loaded into Clone/NAM slot!`, 'success');
+    this.replaceCloneProfile(0, tone);
   }
 
   // --- Utilities ---

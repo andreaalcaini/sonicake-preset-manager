@@ -138,7 +138,7 @@ export class SonicakeConnection {
    * Handle incoming USB MIDI messages (reassemble SysEx packets)
    */
   handleUsbMidiMessage(event) {
-    const data = event.data;
+    let data = event.data;
     if (!data || data.length === 0) return;
 
     // Check for SysEx (starts with F0, ends with F7)

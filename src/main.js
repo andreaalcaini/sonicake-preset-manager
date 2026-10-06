@@ -96,8 +96,8 @@ class App {
         btnConnectBle.style.display = 'none';
         btnDisconnect.style.display = 'inline-flex';
 
-        // Auto sync preset names and state on connection
-        setTimeout(() => presetEngine.syncPresetNames(), 300);
+        // Auto sync all Clone Amps, User IRs, and 100 presets on connection
+        setTimeout(() => presetEngine.runInitialSyncSequence(), 300);
       } else {
         connLed.classList.remove('connected');
         connText.textContent = 'Disconnected';
@@ -113,7 +113,7 @@ class App {
         alert('Please connect your Smart Box via USB or Bluetooth first.');
         return;
       }
-      presetEngine.syncPresetNames();
+      presetEngine.runInitialSyncSequence();
     });
 
     document.getElementById('btnAbToggle').addEventListener('click', () => {
@@ -210,6 +210,12 @@ class App {
       }
     } catch (e) {
       // Ignore initial probe error
+    }
+  }
+
+  openTone3000ForReplacement(options) {
+    if (this.tone3000Modal) {
+      this.tone3000Modal.openForReplacement(options);
     }
   }
 }

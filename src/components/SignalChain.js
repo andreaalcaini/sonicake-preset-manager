@@ -14,8 +14,9 @@ export class SignalChain {
     this.onSelectModule = onSelectModule;
     this.selectedModuleId = 3; // Default to AMP
 
-    // Subscribe to preset state changes
+    // Subscribe to preset state and custom slot names changes
     presetEngine.onStateChange(() => this.render());
+    presetEngine.onUserSlotsChange(() => this.render());
     this.render();
   }
 
@@ -81,13 +82,15 @@ export class SignalChain {
     const isSelected = this.selectedModuleId === modId;
     const modTag = MODULE_NAMES[modId] || `MOD ${modId}`;
 
-    // Get current effect name
-    const fxId = modId === 3 && preset.ampMode === 'clone' 
-      ? preset.selectedEffects[9] 
-      : preset.selectedEffects[modId];
-
-    const fxDef = MODULE_LIBRARY_DATA.effectLibrary[fxId];
-    const fxName = fxDef ? fxDef.name : (modId === 3 && preset.ampMode === 'clone' ? 'User Profile 1' : 'Off');
+    let fxName = 'Off';
+    if (modId === 3 && preset.ampMode === 'clone') {
+      const cloneFxId = preset.selectedEffects[9] || 901;
+      fxName = presetEngine.cloneSlotNames[cloneFxId - 901] || MODULE_LIBRARY_DATA.effectLibrary[cloneFxId]?.name || 'User Profile 1';
+    } else if (modId === 4 && fxId >= 416 && fxId <= 420) {
+      fxName = presetEngine.irSlotNames[fxId - 416] || (fxDef ? fxDef.name : `User IR ${fxId - 415}`);
+    } else if (fxDef) {
+      fxName = fxDef.name;
+    }
 
     // Official icon name
     const iconName = this.getModuleIconPath(modId, preset.ampMode);

@@ -287,6 +287,8 @@ body {
 /* Sidebar Presets List */
 .app-sidebar {
   width: var(--sidebar-width);
+  min-width: 280px;
+  flex-shrink: 0;
   background: var(--bg-panel);
   border-right: 1px solid var(--border-subtle);
   display: flex;

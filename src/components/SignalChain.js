@@ -82,10 +82,17 @@ export class SignalChain {
     const isSelected = this.selectedModuleId === modId;
     const modTag = MODULE_NAMES[modId] || `MOD ${modId}`;
 
+    // Get current effect ID and definition
+    const fxId = modId === 3 && preset.ampMode === 'clone' 
+      ? (preset.selectedEffects[9] || 901) 
+      : (preset.selectedEffects[modId] || 0);
+
+    const fxDef = MODULE_LIBRARY_DATA.effectLibrary[fxId];
+
     let fxName = 'Off';
     if (modId === 3 && preset.ampMode === 'clone') {
       const cloneFxId = preset.selectedEffects[9] || 901;
-      fxName = presetEngine.cloneSlotNames[cloneFxId - 901] || MODULE_LIBRARY_DATA.effectLibrary[cloneFxId]?.name || 'User Profile 1';
+      fxName = presetEngine.cloneSlotNames[cloneFxId - 901] || (fxDef ? fxDef.name : 'User Profile 1');
     } else if (modId === 4 && fxId >= 416 && fxId <= 420) {
       fxName = presetEngine.irSlotNames[fxId - 416] || (fxDef ? fxDef.name : `User IR ${fxId - 415}`);
     } else if (fxDef) {

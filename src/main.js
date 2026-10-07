@@ -13,12 +13,22 @@ import { Tone3000Modal } from './components/Tone3000Modal.js';
 import { DrumMachineModal } from './components/DrumMachineModal.js';
 import { TunerModal } from './components/TunerModal.js';
 import { SaveModal } from './components/SaveModal.js';
+import { ExportModal } from './components/ExportModal.js';
+import { SlotTransferModal } from './components/SlotTransferModal.js';
+import { StageModeModal } from './components/StageModeModal.js';
+import { ToneGeneratorModal } from './components/ToneGeneratorModal.js';
+import { HelpModal } from './components/HelpModal.js';
+import { SharePresetModal } from './components/SharePresetModal.js';
+import { ImportBundleModal } from './components/ImportBundleModal.js';
+import { decodePresetBundle } from './utils/bundle-encoder.js';
 
 class App {
   constructor() {
     this.initUI();
     this.initShortcuts();
+    this.initDragAndDrop();
     this.checkAvailableMidi();
+    this.checkSharedUrlOnLaunch();
   }
 
   initUI() {
@@ -35,6 +45,13 @@ class App {
     const drumModal = new DrumMachineModal(document.getElementById('drumModalOverlay'));
     const tunerModal = new TunerModal(document.getElementById('tunerModalOverlay'));
     const saveModal = new SaveModal(document.getElementById('saveModalOverlay'));
+    const exportModal = new ExportModal(document.getElementById('exportModalOverlay'));
+    const slotTransferModal = new SlotTransferModal(document.getElementById('slotTransferModalOverlay'));
+    const stageModeModal = new StageModeModal(document.getElementById('stageModalOverlay'), tunerModal);
+    const toneGenModal = new ToneGeneratorModal(document.getElementById('toneGenModalOverlay'));
+    const helpModal = new HelpModal(document.getElementById('helpModalOverlay'));
+    const importBundleModal = new ImportBundleModal(document.getElementById('importBundleModalOverlay'));
+    const shareModal = new SharePresetModal(document.getElementById('shareModalOverlay'), importBundleModal);
 
     // Store references
     this.signalChain = signalChain;
@@ -44,6 +61,13 @@ class App {
     this.drumModal = drumModal;
     this.tunerModal = tunerModal;
     this.saveModal = saveModal;
+    this.exportModal = exportModal;
+    this.slotTransferModal = slotTransferModal;
+    this.stageModeModal = stageModeModal;
+    this.toneGenModal = toneGenModal;
+    this.helpModal = helpModal;
+    this.importBundleModal = importBundleModal;
+    this.shareModal = shareModal;
 
     // 3. Header Preset Status Listeners
     const slotBadge = document.getElementById('headerSlotBadge');
@@ -140,9 +164,97 @@ class App {
       tone3000Modal.open();
     });
 
-    document.getElementById('btnOpenSave').addEventListener('click', () => {
+    // Preset Deck Navigation (Prev / Next)
+    document.getElementById('btnPrevSlot')?.addEventListener('click', () => {
+      const cur = presetEngine.currentSlot;
+      presetEngine.selectPreset(cur > 1 ? cur - 1 : 100);
+    });
+
+    document.getElementById('btnNextSlot')?.addEventListener('click', () => {
+      const cur = presetEngine.currentSlot;
+      presetEngine.selectPreset(cur < 100 ? cur + 1 : 1);
+    });
+
+    document.getElementById('btnOpenExport')?.addEventListener('click', () => {
+      exportModal.open();
+    });
+
+    document.getElementById('btnOpenSlotTransfer')?.addEventListener('click', () => {
+      slotTransferModal.open();
+    });
+
+    document.getElementById('btnOpenToneGen')?.addEventListener('click', () => {
+      toneGenModal.open();
+    });
+
+    document.getElementById('btnOpenStage')?.addEventListener('click', () => {
+      stageModeModal.open();
+    });
+
+    document.getElementById('btnOpenHelp')?.addEventListener('click', () => {
+      helpModal.open();
+    });
+
+    document.getElementById('btnOpenSave')?.addEventListener('click', () => {
       saveModal.open();
     });
+
+    const btnOpenShare = document.getElementById('btnOpenShare');
+    if (btnOpenShare) {
+      btnOpenShare.addEventListener('click', () => {
+        this.shareModal.open();
+      });
+    }
+
+    // Unified Tools Dropdown Toggle
+    const btnToolsDropdown = document.getElementById('btnToolsDropdown');
+    const toolsMenuDropdown = document.getElementById('toolsMenuDropdown');
+    if (btnToolsDropdown && toolsMenuDropdown) {
+      btnToolsDropdown.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toolsMenuDropdown.classList.toggle('hidden');
+      });
+
+      document.addEventListener('click', (e) => {
+        if (!toolsMenuDropdown.contains(e.target) && e.target !== btnToolsDropdown) {
+          toolsMenuDropdown.classList.add('hidden');
+        }
+      });
+
+      // Auto close dropdown when clicking any tool inside
+      toolsMenuDropdown.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          toolsMenuDropdown.classList.add('hidden');
+        });
+      });
+    }
+
+    // Mobile Tools menu buttons
+    document.getElementById('btnOpenTunerMenuMobile')?.addEventListener('click', () => {
+      tunerModal.open();
+    });
+    document.getElementById('btnOpenDrumsMenuMobile')?.addEventListener('click', () => {
+      drumModal.open();
+    });
+
+    // Mobile Presets Sidebar Drawer Toggle
+    const btnTogglePresetsMobile = document.getElementById('btnTogglePresetsMobile');
+    const presetSidebar = document.getElementById('presetSidebar');
+    const mobilePresetsBackdrop = document.getElementById('mobilePresetsBackdrop');
+    if (btnTogglePresetsMobile && presetSidebar && mobilePresetsBackdrop) {
+      const toggleDrawer = () => {
+        const isClosed = presetSidebar.classList.contains('-translate-x-full');
+        if (isClosed) {
+          presetSidebar.classList.remove('-translate-x-full');
+          mobilePresetsBackdrop.classList.remove('hidden');
+        } else {
+          presetSidebar.classList.add('-translate-x-full');
+          mobilePresetsBackdrop.classList.add('hidden');
+        }
+      };
+      btnTogglePresetsMobile.addEventListener('click', toggleDrawer);
+      mobilePresetsBackdrop.addEventListener('click', toggleDrawer);
+    }
 
     // 6. Hardware SysEx Log Drawer
     const logDrawer = document.getElementById('logDrawer');
@@ -167,8 +279,15 @@ class App {
     window.addEventListener('keydown', (e) => {
       const isInput = ['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName);
 
+      // Ctrl + Shift + S: Share Preset
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        this.shareModal.open();
+        return;
+      }
+
       // Ctrl + S: Save Preset
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault();
         this.saveModal.open();
         return;
@@ -198,6 +317,24 @@ class App {
         presetEngine.toggleAB();
         return;
       }
+
+      // F: Toggle Stage Mode (when not typing in an input)
+      if (!isInput && (e.key.toLowerCase() === 'f') && !e.ctrlKey && !e.altKey) {
+        e.preventDefault();
+        if (this.stageModeModal.isOpen()) {
+          this.stageModeModal.close();
+        } else {
+          this.stageModeModal.open();
+        }
+        return;
+      }
+
+      // ?: Help guide (when not typing in an input)
+      if (!isInput && e.key === '?') {
+        e.preventDefault();
+        this.helpModal.open();
+        return;
+      }
     });
   }
 
@@ -210,6 +347,71 @@ class App {
       }
     } catch (e) {
       // Ignore initial probe error
+    }
+  }
+
+  initDragAndDrop() {
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const file = e.dataTransfer?.files?.[0];
+      if (!file) return;
+
+      const isBundle = file.name.endsWith('.sonicbundle') || file.name.endsWith('.json');
+      if (isBundle) {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          try {
+            const parsed = JSON.parse(evt.target.result);
+            if (parsed && parsed.preset) {
+              if (parsed.tone3000Model) {
+                this.importBundleModal.open(parsed, () => {
+                  connection.log(`Bundle "${parsed.preset.name}" importato con successo!`, 'success');
+                });
+              } else {
+                presetEngine.applyPresetBundle(parsed, {});
+                connection.log(`Bundle "${parsed.preset.name}" applicato!`, 'success');
+              }
+            }
+          } catch (err) {
+            console.error('Failed to parse dropped bundle:', err);
+          }
+        };
+        reader.readAsText(file);
+      }
+    });
+  }
+
+  checkSharedUrlOnLaunch() {
+    try {
+      const hash = window.location.hash;
+      if (!hash) return;
+
+      if (hash.startsWith('#preset=') || hash.startsWith('#share=')) {
+        connection.log('Rilevato preset condiviso da URL hash...', 'info');
+        const bundle = decodePresetBundle(hash);
+
+        if (bundle && bundle.preset) {
+          setTimeout(() => {
+            if (bundle.tone3000Model) {
+              // Ask user for destination slot
+              this.importBundleModal.open(bundle, (imported) => {
+                connection.log(`Preset condiviso "${imported.preset.name}" caricato con successo!`, 'success');
+              });
+            } else {
+              presetEngine.applyPresetBundle(bundle, {});
+              connection.log(`Preset condiviso "${bundle.preset.name}" caricato con successo!`, 'success');
+            }
+            // Clean hash URL without triggering page reload
+            window.history.replaceState(null, '', window.location.pathname);
+          }, 350);
+        }
+      }
+    } catch (e) {
+      console.warn('Errore lettura preset condiviso da URL:', e);
     }
   }
 

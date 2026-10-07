@@ -466,20 +466,29 @@ export function decodeName(hexString) {
  * Parse a full SysEx packet hex string and extract all valid preset names found inside
  */
 export function parsePacketForNames(packetHex) {
+  if (!packetHex) return [];
+  let cleanPayload = packetHex;
+  // If packet includes SysEx framing (8080F0 ... F7 or F0 ... F7), strip it to ensure 2-byte character alignment
+  if (cleanPayload.startsWith('8080F0') && cleanPayload.endsWith('F7')) {
+    cleanPayload = cleanPayload.slice(6, -2);
+  } else if (cleanPayload.startsWith('F0') && cleanPayload.endsWith('F7')) {
+    cleanPayload = cleanPayload.slice(2, -2);
+  }
+
   const foundNames = [];
-  const NAME_HEX_LENGTH = 40; // 20 bytes
+  const NAME_HEX_LENGTH = 40; // 20 bytes (10 characters, each character is 4 hex chars / 2 bytes)
 
   let offset = 0;
-  while ((offset + NAME_HEX_LENGTH) <= packetHex.length) {
-    const windowHex = packetHex.substring(offset, offset + NAME_HEX_LENGTH);
+  while ((offset + NAME_HEX_LENGTH) <= cleanPayload.length) {
+    const windowHex = cleanPayload.substring(offset, offset + NAME_HEX_LENGTH);
     if (isValidNameBlock(windowHex)) {
       const decoded = decodeName(windowHex);
-      if (decoded.length > 0) {
-        foundNames.push(decoded);
+      if (decoded && decoded.trim().length > 0) {
+        foundNames.push(decoded.trim());
       }
       offset += NAME_HEX_LENGTH;
     } else {
-      offset += 4; // Move by 2 bytes
+      offset += 4; // Move by 2 bytes (one character code)
     }
   }
   return foundNames;

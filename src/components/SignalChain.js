@@ -30,43 +30,45 @@ export class SignalChain {
     const order = preset.order || [0, 1, 2, 3, 4, 5, 6, 7, 8];
 
     this.container.innerHTML = `
-      <div class="signal-chain-wrapper">
-        <div class="rack-top-bar">
-          <div class="chain-title">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <div class="flex flex-col gap-2.5">
+        <!-- Rack Top Header & Mode Toggle -->
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div class="flex items-center gap-2 text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400">
+            <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M4 12h16M4 6h16M4 18h16"/>
             </svg>
-            Signal Chain & Routing
+            <span>Catena Effetti & Routing (9 Moduli)</span>
           </div>
           
-          <div class="chain-controls">
+          <div class="flex items-center gap-2 sm:gap-3 flex-wrap">
             <!-- Amp Mode (Factory vs Clone/NAM) -->
-            <div class="amp-mode-toggle">
-              <button class="amp-mode-btn factory-btn ${preset.ampMode === 'factory' ? 'active' : ''}" data-mode="factory">
+            <div class="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-xs">
+              <button class="amp-mode-btn factory-btn px-2.5 py-1 rounded-md font-semibold transition ${preset.ampMode === 'factory' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-zinc-400 hover:text-zinc-200'}" data-mode="factory">
                 Factory Amp
               </button>
-              <button class="amp-mode-btn clone-btn ${preset.ampMode === 'clone' ? 'active' : ''}" data-mode="clone">
+              <button class="amp-mode-btn clone-btn px-2.5 py-1 rounded-md font-semibold transition ${preset.ampMode === 'clone' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'text-zinc-400 hover:text-zinc-200'}" data-mode="clone">
                 Clone / NAM
               </button>
             </div>
 
-            <!-- Patch Volume -->
-            <div class="preset-volume-widget">
-              <span class="preset-volume-label">Vol</span>
-              <input type="range" class="preset-volume-slider" min="0" max="100" value="${preset.volume}">
-              <span class="preset-volume-val">${preset.volume}</span>
+            <!-- Patch Volume Slider -->
+            <div class="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-lg px-2.5 py-1">
+              <span class="text-[10px] font-mono font-bold uppercase text-zinc-400">Vol</span>
+              <input type="range" class="preset-volume-slider w-16 sm:w-20 accent-cyan-400 cursor-pointer" min="0" max="100" value="${preset.volume}">
+              <span class="preset-volume-val font-mono text-[11px] font-bold text-cyan-400 w-6 text-right">${preset.volume}</span>
             </div>
           </div>
         </div>
 
-        <div class="signal-chain-container">
-          <div class="jack-node input">
+        <!-- 9 Modules Horizontal Rack with IN/OUT nodes -->
+        <div class="flex items-center gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+          <div class="shrink-0 px-2 sm:px-2.5 py-4 rounded-xl bg-zinc-950 border border-zinc-800 text-[10px] font-mono font-bold text-zinc-500 flex flex-col items-center justify-center">
             <span>IN</span>
           </div>
 
           ${order.map((modId, index) => this.renderModuleCard(modId, index, order.length)).join('')}
 
-          <div class="jack-node output">
+          <div class="shrink-0 px-2 sm:px-2.5 py-4 rounded-xl bg-zinc-950 border border-zinc-800 text-[10px] font-mono font-bold text-zinc-500 flex flex-col items-center justify-center">
             <span>OUT</span>
           </div>
         </div>
@@ -99,28 +101,42 @@ export class SignalChain {
       fxName = fxDef.name;
     }
 
-    // Official icon name
     const iconName = this.getModuleIconPath(modId, preset.ampMode);
 
     return `
-      <div class="module-card ${isBypassed ? 'bypassed' : ''} ${isSelected ? 'selected' : ''}" data-module-id="${modId}">
-        <div class="card-top">
-          <span class="module-tag">${modTag}</span>
-          <div class="card-move-btns">
-            ${index > 0 ? `<button class="btn-move btn-move-left" data-index="${index}" title="Move Left">&larr;</button>` : ''}
-            ${index < totalModules - 1 ? `<button class="btn-move btn-move-right" data-index="${index}" title="Move Right">&rarr;</button>` : ''}
+      <div class="module-card shrink-0 w-28 sm:w-32 rounded-xl border transition cursor-pointer select-none flex flex-col justify-between p-2 ${
+        isSelected 
+          ? 'bg-zinc-850 border-cyan-500/80 ring-1 ring-cyan-500/40 shadow-lg' 
+          : isBypassed 
+            ? 'bg-zinc-950/70 border-zinc-850 opacity-60 hover:opacity-80' 
+            : 'bg-zinc-900/90 border-zinc-800 hover:border-zinc-700'
+      }" data-module-id="${modId}">
+        <!-- Top header with tag and reorder arrows -->
+        <div class="flex items-center justify-between gap-1 mb-1.5">
+          <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${isSelected ? 'bg-cyan-500/20 text-cyan-300' : 'bg-zinc-800 text-zinc-400'}">
+            ${modTag}
+          </span>
+          <div class="flex items-center gap-0.5">
+            ${index > 0 ? `<button class="btn-move btn-move-left p-0.5 text-zinc-500 hover:text-white rounded hover:bg-zinc-800 transition text-[10px]" data-index="${index}" title="Sposta a sinistra">&larr;</button>` : ''}
+            ${index < totalModules - 1 ? `<button class="btn-move btn-move-right p-0.5 text-zinc-500 hover:text-white rounded hover:bg-zinc-800 transition text-[10px]" data-index="${index}" title="Sposta a destra">&rarr;</button>` : ''}
           </div>
         </div>
 
-        <div class="card-center">
-          <img src="${iconName}" alt="${modTag}" class="module-icon-img" onerror="this.style.display='none'">
-          <span class="effect-model-name" title="${fxName}">${fxName}</span>
+        <!-- Center Icon & Model Name -->
+        <div class="flex flex-col items-center justify-center my-1 text-center">
+          <img src="${iconName}" alt="${modTag}" class="w-6 h-6 object-contain mb-1 opacity-90" onerror="this.style.display='none'">
+          <span class="text-[11px] font-semibold text-zinc-100 truncate w-full" title="${fxName}">
+            ${fxName}
+          </span>
         </div>
 
-        <div class="card-bottom">
-          <div class="module-bypass-toggle" data-module-id="${modId}">
-            <div class="module-led"></div>
-            <span class="bypass-status-text">${isBypassed ? 'OFF' : 'ON'}</span>
+        <!-- Bottom Bypass LED Toggle Button -->
+        <div class="mt-1 pt-1.5 border-t border-zinc-800/60">
+          <div class="module-bypass-toggle flex items-center justify-center gap-1.5 py-1 px-2 rounded-lg bg-zinc-950/80 border border-zinc-800/80 hover:border-zinc-700 transition" data-module-id="${modId}" title="Attiva / Disattiva Bypass">
+            <div class="w-2 h-2 rounded-full transition ${isBypassed ? 'bg-zinc-700' : 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]'}"></div>
+            <span class="text-[10px] font-mono font-bold ${isBypassed ? 'text-zinc-500' : 'text-emerald-400'}">
+              ${isBypassed ? 'BYP' : 'ON'}
+            </span>
           </div>
         </div>
       </div>

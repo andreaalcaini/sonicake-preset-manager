@@ -246,64 +246,85 @@ export class DrumMachineModal {
     const patterns = DRUM_PATTERNS.filter(p => p.category === this.currentCategory);
 
     this.overlay.innerHTML = `
-      <div class="modal-dialog drum-modal">
-        <div class="modal-header">
-          <span class="modal-title">&#129345; DRUM MACHINE & METRONOME (100 RHYTHMS)</span>
-          <button class="modal-close-btn">&times;</button>
+      <div class="w-full max-w-xl bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+        <!-- Header -->
+        <div class="px-5 py-4 border-b border-zinc-800/80 bg-zinc-900/90 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <path d="M12 6v6l4 2"></path>
+              </svg>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold tracking-tight text-white uppercase">Drum Machine & Metronomo</h3>
+              <p class="text-[11px] text-zinc-400">100 pattern ritmici hardware integrati</p>
+            </div>
+          </div>
+          <button class="modal-close-btn p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
 
-        <div class="modal-body">
-          <div class="drum-machine-container">
-            <!-- Top Controls: Play, BPM, Tap, Vol -->
-            <div class="drum-top-controls">
-              <button class="drum-play-btn ${this.isPlaying ? 'playing' : ''}">
-                ${this.isPlaying ? '&#9632;' : '&#9658;'}
+        <!-- Body -->
+        <div class="p-5 overflow-y-auto space-y-4 text-sm max-h-[75vh]">
+          <!-- Top Controls: Play, BPM, Tap, Vol -->
+          <div class="p-4 bg-zinc-950/70 border border-zinc-800 rounded-xl flex flex-wrap sm:flex-nowrap items-center justify-between gap-4">
+            <!-- Play/Stop button -->
+            <button class="drum-play-btn w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold transition-all shadow-md shrink-0 ${this.isPlaying ? 'bg-amber-500 text-zinc-950 playing' : 'bg-emerald-500 hover:bg-emerald-400 text-zinc-950'}">
+              ${this.isPlaying ? '&#9632;' : '&#9658;'}
+            </button>
+
+            <!-- BPM and Tap -->
+            <div class="flex items-center gap-3 sm:gap-4 flex-1">
+              <div class="text-center shrink-0">
+                <div class="bpm-number text-2xl font-black font-mono text-white leading-none">${this.bpm}</div>
+                <div class="text-[10px] font-bold text-amber-500 uppercase tracking-wider mt-0.5">BPM</div>
+              </div>
+              
+              <input type="range" class="bpm-slider flex-1 accent-amber-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg" min="40" max="250" value="${this.bpm}">
+
+              <button class="tap-tempo-btn px-3 py-2 rounded-lg bg-zinc-900 border border-zinc-700 hover:border-amber-500 text-zinc-200 text-xs font-bold uppercase transition-all flex items-center gap-1.5 shrink-0 active:scale-95">
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                <span>TAP</span>
               </button>
+            </div>
 
-              <div class="drum-tempo-wrap">
-                <div class="bpm-display-wrap">
-                  <span class="bpm-number">${this.bpm}</span>
-                  <span class="bpm-unit">BPM</span>
-                </div>
-                
-                <input type="range" class="bpm-slider preset-volume-slider" style="width: 120px;" min="40" max="250" value="${this.bpm}">
+            <!-- Volume -->
+            <div class="flex flex-col items-center gap-1 shrink-0 pl-2 border-l border-zinc-800">
+              <span class="text-[10px] font-bold text-zinc-500 uppercase">VOL</span>
+              <input type="range" class="drum-vol-slider w-16 accent-cyan-500 cursor-pointer h-1.5 bg-zinc-800 rounded-lg" min="0" max="100" value="${this.volume}">
+            </div>
+          </div>
 
-                <button class="tap-tempo-btn">
-                  <div class="tap-led"></div>
-                  <span>TAP</span>
-                </button>
+          <!-- Categories filter pills -->
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+            ${categories.map(cat => `
+              <button class="drum-cat-btn px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors ${cat === this.currentCategory ? 'bg-amber-500 text-zinc-950 font-bold' : 'bg-zinc-950/60 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'}" data-cat="${cat}">
+                ${cat}
+              </button>
+            `).join('')}
+          </div>
+
+          <!-- Patterns Grid -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-2 bg-zinc-950/40 border border-zinc-800 rounded-xl">
+            ${patterns.map(pat => `
+              <div class="drum-pattern-item p-2.5 rounded-lg border cursor-pointer transition-all flex items-center justify-between ${pat.id === this.selectedPatternId ? 'bg-amber-500/15 border-amber-500/50 text-white font-bold' : 'bg-zinc-900/40 border-zinc-800/80 hover:bg-zinc-800/60 text-zinc-300'}" data-id="${pat.id}" data-bpm="${pat.defaultBpm}">
+                <span class="text-xs truncate">#${pat.id} ${pat.name}</span>
+                <span class="text-[10px] font-mono text-zinc-400 px-1.5 py-0.5 rounded bg-zinc-950/60 border border-zinc-800 shrink-0 ml-2">${pat.timeSignature}</span>
               </div>
-
-              <!-- Drum Vol -->
-              <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
-                <span style="font-size: 10px; font-weight: 700; color: var(--text-muted);">VOL</span>
-                <input type="range" class="drum-vol-slider preset-volume-slider" style="width: 70px;" min="0" max="100" value="${this.volume}">
-              </div>
-            </div>
-
-            <!-- Categories -->
-            <div class="drum-categories">
-              ${categories.map(cat => `
-                <button class="drum-cat-btn ${cat === this.currentCategory ? 'active' : ''}" data-cat="${cat}">
-                  ${cat}
-                </button>
-              `).join('')}
-            </div>
-
-            <!-- Patterns Grid -->
-            <div class="drum-pattern-list">
-              ${patterns.map(pat => `
-                <div class="drum-pattern-item ${pat.id === this.selectedPatternId ? 'active' : ''}" data-id="${pat.id}" data-bpm="${pat.defaultBpm}">
-                  <span>#${pat.id} ${pat.name}</span>
-                  <span style="font-family: var(--font-mono); font-size: 10px; opacity: 0.7;">${pat.timeSignature}</span>
-                </div>
-              `).join('')}
-            </div>
+            `).join('')}
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button class="btn-action modal-close-btn-bottom">Done</button>
+        <!-- Footer -->
+        <div class="px-5 py-3.5 border-t border-zinc-800/80 bg-zinc-950/40 flex items-center justify-end">
+          <button class="modal-close-btn-bottom px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-semibold transition-colors">
+            Chiudi
+          </button>
         </div>
       </div>
     `;

@@ -1,6 +1,7 @@
 /**
  * Chromatic Tuner Modal Component
  * Accurate chromatic pitch detection using Web Audio autocorrelation,
+ * device input selection (e.g. Sonicake Smart Box USB Audio interface),
  * large note display, cent meter needle, and in-tune indicator.
  */
 
@@ -12,6 +13,8 @@ export class TunerModal {
     this.micStream = null;
     this.isListening = false;
     this.animFrameId = null;
+    this.selectedDeviceId = '';
+    this.availableDevices = [];
 
     // Pitch state
     this.detectedNote = '--';
@@ -25,8 +28,10 @@ export class TunerModal {
     this.render();
   }
 
-  open() {
+  async open() {
     this.overlay.classList.add('active');
+    await this.refreshDevices();
+    this.render();
     this.startListening();
   }
 
@@ -35,13 +40,35 @@ export class TunerModal {
     this.overlay.classList.remove('active');
   }
 
-  async startListening() {
+  async refreshDevices() {
+    try {
+      if (navigator.mediaDevices?.enumerateDevices) {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        this.availableDevices = devices.filter(d => d.kind === 'audioinput');
+        if (!this.selectedDeviceId && this.availableDevices.length > 0) {
+          // Prefer Sonicake or USB Audio if available
+          const usbDev = this.availableDevices.find(d => /sonicake|smart\s*box|usb/i.test(d.label));
+          this.selectedDeviceId = usbDev ? usbDev.deviceId : this.availableDevices[0].deviceId;
+        }
+      }
+    } catch (e) {
+      console.warn('Error enumerating audio devices:', e);
+    }
+  }
+
+  async startListening(deviceId = this.selectedDeviceId) {
+    this.stopListening();
+
     try {
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       this.audioCtx = new AudioContext();
 
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        this.micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        const constraints = {
+          audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+          video: false
+        };
+        this.micStream = await navigator.mediaDevices.getUserMedia(constraints);
         const source = this.audioCtx.createMediaStreamSource(this.micStream);
         this.analyser = this.audioCtx.createAnalyser();
         this.analyser.fftSize = 2048;
@@ -50,11 +77,10 @@ export class TunerModal {
         this.isListening = true;
         this.detectPitchLoop();
       } else {
-        // Fallback simulation if no mic access
         this.simulateTuner();
       }
     } catch (err) {
-      console.warn('Microphone access not granted, running simulated tuner:', err);
+      console.warn('Audio input access not granted, running simulated tuner:', err);
       this.simulateTuner();
     }
   }
@@ -63,6 +89,7 @@ export class TunerModal {
     this.isListening = false;
     if (this.animFrameId) {
       cancelAnimationFrame(this.animFrameId);
+      this.animFrameId = null;
     }
     if (this.micStream) {
       this.micStream.getTracks().forEach(track => track.stop());
@@ -101,9 +128,10 @@ export class TunerModal {
       rms += val * val;
     }
     rms = Math.sqrt(rms / SIZE);
-    if (rms < 0.015) return -1; // Signal too quiet
+    if (rms < 0.015) return -1; // Gate threshold for guitar signal
 
-    let r1 = 0, r2 = SIZE - 1, thres = 0.2;
+    let r1 = 0, r2 = SIZE - 1;
+    const thres = 0.2;
     for (let i = 0; i < SIZE / 2; i++) {
       if (Math.abs(buffer[i]) < thres) { r1 = i; break; }
     }
@@ -112,7 +140,7 @@ export class TunerModal {
     }
 
     const trimmed = buffer.slice(r1, r2);
-    const c = new Array(trimmed.length).fill(0);
+    const c = new Float32Array(trimmed.length).fill(0);
     for (let i = 0; i < trimmed.length; i++) {
       for (let j = 0; j < trimmed.length - i; j++) {
         c[i] = c[i] + trimmed[j] * trimmed[j + i];
@@ -128,43 +156,46 @@ export class TunerModal {
         maxpos = i;
       }
     }
+
     let T0 = maxpos;
+    const x1 = c[T0 - 1], x2 = c[T0], x3 = c[T0 + 1];
+    const a = (x1 + x3 - 2 * x2) / 2;
+    const b = (x3 - x1) / 2;
+    if (a) T0 = T0 - b / (2 * a);
+
     return sampleRate / T0;
   }
 
-  calculateNoteFromPitch(frequency) {
-    const noteNum = 12 * (Math.log(frequency / this.referencePitch) / Math.log(2));
-    const midiNote = Math.round(noteNum) + 69;
-    const noteIndex = midiNote % 12;
-    const fullNoteName = this.noteStrings[noteIndex];
+  calculateNoteFromPitch(freq) {
+    const noteNum = 12 * (Math.log(freq / this.referencePitch) / Math.log(2));
+    const roundedNote = Math.round(noteNum) + 69;
+    const noteIndex = roundedNote % 12;
+    const noteNameFull = this.noteStrings[noteIndex];
 
-    const note = fullNoteName[0];
-    const accidental = fullNoteName.length > 1 ? fullNoteName[1] : '';
+    const note = noteNameFull[0];
+    const accidental = noteNameFull.length > 1 ? noteNameFull[1] : '';
 
-    const standardFreq = this.referencePitch * Math.pow(2, (midiNote - 69) / 12);
-    const cents = Math.round(1200 * (Math.log(frequency / standardFreq) / Math.log(2)));
+    const exactFreq = this.referencePitch * Math.pow(2, (roundedNote - 69) / 12);
+    const cents = Math.round(1200 * Math.log2(freq / exactFreq));
 
-    return { note, accidental, cents: Math.max(-50, Math.min(50, cents)) };
+    return { note, accidental, cents };
   }
 
   simulateTuner() {
-    this.isListening = true;
-    let currentCent = 0;
-    const notes = ["E", "A", "D", "G", "B", "E"];
-    let noteIdx = 0;
-
-    const interval = setInterval(() => {
+    const demoNotes = ['E', 'A', 'D', 'G', 'B'];
+    let idx = 0;
+    const timer = setInterval(() => {
       if (!this.isListening) {
-        clearInterval(interval);
+        clearInterval(timer);
         return;
       }
-      currentCent = Math.sin(Date.now() / 400) * 15;
-      this.detectedNote = notes[noteIdx];
+      this.detectedNote = demoNotes[idx % demoNotes.length];
       this.detectedAccidental = '';
-      this.cents = Math.round(currentCent);
+      this.cents = Math.floor(Math.random() * 20) - 10;
       this.isInTune = Math.abs(this.cents) <= 3;
       this.updateVisuals();
-    }, 50);
+      idx++;
+    }, 1200);
   }
 
   updateVisuals() {
@@ -176,12 +207,14 @@ export class TunerModal {
 
     if (mainNoteEl) mainNoteEl.textContent = this.detectedNote;
     if (accidentalEl) accidentalEl.textContent = this.detectedAccidental;
-    if (centsEl) centsEl.textContent = `${this.cents > 0 ? '+' : ''}${this.cents} cents`;
+    if (centsEl) {
+      centsEl.textContent = `${this.cents > 0 ? '+' : ''}${this.cents} cents`;
+    }
 
     if (needleEl) {
-      // Position from 0% (-50 cents) to 100% (+50 cents)
-      const percent = 50 + (this.cents);
-      needleEl.style.left = `${percent}%`;
+      const clampedCents = Math.max(-50, Math.min(50, this.cents));
+      const percentage = 50 + (clampedCents / 50) * 45;
+      needleEl.style.left = `${percentage}%`;
     }
 
     if (container) {
@@ -191,25 +224,43 @@ export class TunerModal {
 
   render() {
     this.overlay.innerHTML = `
-      <div class="modal-dialog tuner-modal">
-        <div class="modal-header">
-          <span class="modal-title">&#127926; CHROMATIC GUITAR & BASS TUNER</span>
-          <button class="modal-close-btn">&times;</button>
+      <div class="w-full max-w-md bg-zinc-900 border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
+        <!-- Header -->
+        <div class="px-5 py-4 border-b border-zinc-800/80 bg-zinc-900/90 flex items-center justify-between">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polygon points="10 8 16 12 10 16 10 8"></polygon>
+              </svg>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold tracking-tight text-white uppercase">Accordatore Cromatico</h3>
+              <p class="text-[11px] text-zinc-400">Rilevamento intonazione audio in tempo reale</p>
+            </div>
+          </div>
+          <button class="modal-close-btn p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
+            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
         </div>
 
-        <div class="modal-body">
+        <!-- Body -->
+        <div class="p-5 overflow-y-auto space-y-5 text-sm">
           <div class="tuner-container ${this.isInTune ? 'tuner-in-tune' : ''}">
-            <!-- Main Note -->
-            <div class="tuner-note-display">
-              <span class="tuner-main-note">${this.detectedNote}</span>
-              <span class="tuner-accidental">${this.detectedAccidental}</span>
+            <!-- Big Note Display -->
+            <div class="tuner-note-display my-2">
+              <span class="tuner-main-note text-7xl font-black text-white transition-colors">${this.detectedNote}</span>
+              <span class="tuner-accidental text-3xl font-bold text-amber-500">${this.detectedAccidental}</span>
             </div>
 
-            <!-- Cent Deviation -->
-            <span class="tuner-cents-text">${this.cents > 0 ? '+' : ''}${this.cents} cents</span>
+            <!-- Cents Indicator -->
+            <span class="tuner-cents-text font-mono text-sm font-semibold text-zinc-400">${this.cents > 0 ? '+' : ''}${this.cents} cents</span>
 
             <!-- Needle Meter -->
-            <div class="tuner-meter-wrap">
+            <div class="tuner-meter-wrap w-full max-w-xs my-2">
               <div class="meter-scale">
                 <div class="meter-center-mark"></div>
                 <div class="meter-needle" style="left: 50%;"></div>
@@ -223,16 +274,47 @@ export class TunerModal {
               </div>
             </div>
 
-            <!-- Options: A4 = 440 Hz -->
-            <div class="tuner-options">
-              <span>Standard Tuning (EADGBE)</span>
-              <span>Ref: <strong>A4 = ${this.referencePitch} Hz</strong></span>
+            <!-- Audio Input Source Selection -->
+            <div class="w-full p-3.5 bg-zinc-950/60 border border-zinc-800 rounded-xl space-y-1.5">
+              <div class="flex items-center justify-between">
+                <label class="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                  Sorgente Ingresso Audio:
+                </label>
+                <span class="text-[10px] text-cyan-400 font-mono">
+                  ${this.availableDevices.length > 0 ? `${this.availableDevices.length} dispositivi` : 'Default'}
+                </span>
+              </div>
+              
+              <select class="tuner-device-select w-full px-3 py-2 bg-zinc-900 border border-zinc-700/80 focus:border-cyan-500/80 rounded-lg text-xs text-zinc-100 outline-none transition-colors">
+                ${this.availableDevices.length > 0 ? this.availableDevices.map(d => `
+                  <option value="${d.deviceId}" ${d.deviceId === this.selectedDeviceId ? 'selected' : ''}>
+                    ${d.label || `Ingresso Audio ${d.deviceId.slice(0, 6)}`}
+                  </option>
+                `).join('') : `
+                  <option value="">Ingresso Predefinito del Sistema (Smart Box USB / Line-In)</option>
+                `}
+              </select>
+            </div>
+
+            <!-- Information / Technical Note -->
+            <div class="w-full p-3 bg-zinc-950/40 border border-zinc-800/80 rounded-xl text-xs text-zinc-400 leading-relaxed text-left flex items-start gap-2">
+              <svg class="w-4 h-4 text-zinc-400 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="16" x2="12" y2="12"></line>
+                <line x1="12" y1="8" x2="12.01" y2="8"></line>
+              </svg>
+              <span>
+                <strong>Analisi audio diretta:</strong> Il tuner a schermo rileva l'intonazione catturando il segnale della chitarra via scheda audio o USB Audio. (La pedaliera fisica non trasmette le frequenze del tuner via SysEx).
+              </span>
             </div>
           </div>
         </div>
 
-        <div class="modal-footer">
-          <button class="btn-action modal-close-btn-bottom">Done</button>
+        <!-- Footer -->
+        <div class="px-5 py-3.5 border-t border-zinc-800/80 bg-zinc-950/40 flex items-center justify-end">
+          <button class="modal-close-btn-bottom px-4 py-2 rounded-lg border border-zinc-700/60 bg-zinc-800/50 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-semibold transition-colors w-full sm:w-auto">
+            Chiudi Accordatore
+          </button>
         </div>
       </div>
     `;
@@ -248,5 +330,13 @@ export class TunerModal {
     this.overlay.addEventListener('click', (e) => {
       if (e.target === this.overlay) this.close();
     });
+
+    const devSelect = this.overlay.querySelector('.tuner-device-select');
+    if (devSelect) {
+      devSelect.addEventListener('change', (e) => {
+        this.selectedDeviceId = e.target.value;
+        this.startListening(this.selectedDeviceId);
+      });
+    }
   }
 }

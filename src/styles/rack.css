@@ -64,9 +64,9 @@
 }
 
 .amp-mode-btn.clone-btn.active {
-  background: linear-gradient(135deg, #7928ca 0%, #ff0080 100%);
+  background: var(--accent-orange);
   color: #fff;
-  box-shadow: 0 0 10px rgba(255, 0, 128, 0.4);
+  box-shadow: 0 0 8px var(--accent-orange-glow);
 }
 
 /* Patch Volume Control */

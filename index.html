@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="it" class="dark h-full">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sonicake Smart Box - PC Preset Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sonicake Smart Box — Studio Preset Manager</title>
   <link rel="icon" type="image/svg+xml" href="/assets/images/logo_sonicake.svg">
   
   <link rel="stylesheet" href="/src/styles/main.css">
@@ -12,136 +12,238 @@
   <link rel="stylesheet" href="/src/styles/tone3000.css">
   <link rel="stylesheet" href="/src/styles/drums-tuner.css">
 </head>
-<body>
-  <!-- Header Bar -->
-  <header class="app-header">
-    <div class="header-left">
-      <div class="app-brand" title="Sonicake Smart Box & Pocket Master Editor">
-        <img src="/assets/images/logo_sonicake.svg" alt="Sonicake" class="brand-logo" onerror="this.src='/assets/images/effects.svg'">
-        <div class="brand-text">
-          <span class="brand-title">Sonicake Smart Box</span>
-          <span class="brand-sub">PC Preset Manager</span>
+<body class="bg-zinc-950 text-zinc-100 font-sans h-full overflow-hidden flex flex-col select-none antialiased">
+  <!-- Top Navigation Header -->
+  <header class="h-14 sm:h-16 px-3 sm:px-5 bg-zinc-950/95 border-b border-zinc-800/80 backdrop-blur-md flex items-center justify-between gap-2 sm:gap-4 shrink-0 z-30">
+    <!-- Zone 1: Branding & Connection -->
+    <div class="flex items-center gap-2.5 sm:gap-4 shrink-0">
+      <!-- Mobile Presets Drawer Button -->
+      <button id="btnTogglePresetsMobile" class="lg:hidden flex items-center justify-center p-2 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800 transition" title="Mostra elenco 100 Preset">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+
+      <!-- Brand Identity -->
+      <div class="flex items-center gap-2 sm:gap-2.5 cursor-pointer" title="Sonicake Smart Box Studio Manager">
+        <img src="/assets/images/logo_sonicake.svg" alt="Sonicake" class="w-6 h-6 sm:w-7 sm:h-7 object-contain" onerror="this.src='/assets/images/effects.svg'">
+        <div class="hidden sm:flex flex-col leading-none">
+          <span class="text-xs font-bold uppercase tracking-wider text-zinc-100 font-mono">SONICAKE</span>
+          <span class="text-[10px] text-zinc-500 font-mono tracking-tight">SMART BOX</span>
         </div>
       </div>
 
-      <!-- Connection Pill -->
-      <div class="connection-widget">
-        <div class="conn-led" id="connectionLed"></div>
-        <span class="conn-text" id="connectionText">Disconnected</span>
-        <div class="conn-btns">
-          <button class="btn-conn" id="connectUsbBtn" title="Connect via USB MIDI">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-            </svg>
-            USB
+      <!-- Hardware Connection Status Widget -->
+      <div class="flex items-center gap-1.5 bg-zinc-900/90 border border-zinc-800/90 rounded-full px-2 sm:px-2.5 py-1 text-xs">
+        <div class="conn-led w-2 h-2 rounded-full bg-zinc-600 transition-colors" id="connectionLed"></div>
+        <span class="text-[11px] font-mono text-zinc-400 hidden md:inline truncate max-w-[130px]" id="connectionText">Non Connesso</span>
+        
+        <div class="flex items-center gap-1 ml-1">
+          <button id="connectUsbBtn" class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition flex items-center gap-1" title="Connetti via cavo USB MIDI">
+            <svg class="w-3 h-3 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <span>USB</span>
           </button>
-          <button class="btn-conn" id="connectBleBtn" title="Connect via Bluetooth BLE">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="m7 7 10 10-5 5V2l5 5L7 17"></path>
-            </svg>
-            BLE
+          <button id="connectBleBtn" class="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white transition flex items-center gap-1" title="Connetti via Bluetooth BLE Wireless">
+            <svg class="w-3 h-3 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg>
+            <span>BLE</span>
           </button>
-          <button class="btn-conn" id="disconnectBtn" style="display:none;" title="Disconnect device">
+          <button id="disconnectBtn" class="px-1.5 py-0.5 text-[11px] font-bold rounded-md bg-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white transition hidden" title="Disconnetti pedaliera">
             &times;
           </button>
         </div>
       </div>
     </div>
 
-    <!-- Active Preset Status in Header -->
-    <div class="header-center">
-      <span class="current-slot-badge" id="headerSlotBadge">U01</span>
-      <span class="current-preset-name" id="headerPresetName">Init Tone</span>
-      <span class="dirty-indicator" id="headerDirtyIndicator">*</span>
+    <!-- Zone 2: Preset Navigation Deck (Focal Centerpiece) -->
+    <div class="flex items-center gap-1 sm:gap-2">
+      <div class="flex items-center bg-zinc-900/95 border border-zinc-800 rounded-xl px-1.5 sm:px-2.5 py-1 shadow-inner">
+        <button id="btnPrevSlot" title="Preset precedente (Freccia Giù)" class="p-1 sm:p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+
+        <div class="flex items-center gap-1.5 px-1.5 sm:px-2">
+          <span id="headerSlotBadge" class="px-1.5 sm:px-2 py-0.5 rounded font-mono font-bold text-[11px] sm:text-xs bg-amber-500/10 text-amber-400 border border-amber-500/30">
+            U01
+          </span>
+          <span id="headerPresetName" class="text-xs sm:text-sm font-bold text-zinc-100 truncate max-w-[85px] xs:max-w-[120px] sm:max-w-[180px] md:max-w-[220px]">
+            Init Tone
+          </span>
+          <span id="headerDirtyIndicator" class="text-amber-400 font-bold text-xs opacity-0 transition-opacity" title="Modifiche non salvate">*</span>
+        </div>
+
+        <button id="btnNextSlot" title="Preset successivo (Freccia Su)" class="p-1 sm:p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg transition">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
+      </div>
+
+      <!-- Quick Save Primary Button -->
+      <button id="btnOpenSave" title="Salva preset sulla pedaliera (Ctrl+S)" class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-zinc-950 transition shadow-sm font-mono uppercase tracking-wide">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/>
+          <polyline points="7 3 7 8 15 8"/>
+        </svg>
+        <span class="hidden sm:inline">Salva</span>
+      </button>
     </div>
 
-    <!-- Header Tools & Features -->
-    <div class="header-right">
-      <button class="btn-action" id="btnSyncHardware" title="Sync all 100 presets & current parameters from pedal">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-        </svg>
-        Sync
+    <!-- Zone 3: Tweak Cluster & Unified Tools Dropdown -->
+    <div class="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      <!-- Quick Tweak: Undo / Redo -->
+      <div class="hidden sm:flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5">
+        <button id="btnUndo" title="Annulla modifica (Ctrl+Z)" class="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-md transition">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7v6h6M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+        </button>
+        <button id="btnRedo" title="Ripristina modifica (Ctrl+Y)" class="p-1.5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 rounded-md transition">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 7v6h-6M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
+        </button>
+      </div>
+
+      <!-- Quick Tweak: A/B Compare -->
+      <button id="btnAbToggle" title="Confronto rapido A/B (Alt+A)" class="px-2.5 py-1 text-xs font-mono font-bold rounded-lg border border-zinc-800 bg-zinc-900 text-amber-400 hover:border-amber-500/40 hover:bg-zinc-800 transition">
+        A/B
       </button>
 
-      <!-- A/B Comparison -->
-      <button class="btn-action" id="btnAbToggle" title="Toggle A/B Tone Comparison (Alt+A)">
-        <span style="font-weight: 800; color: var(--accent-orange);">A/B</span>
+      <!-- Main Audio Utility Buttons (Desktop visible) -->
+      <button id="btnOpenTuner" title="Accordatore Cromatico" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700 transition">
+        <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M3 12h3M18 12h3M12 3v3M12 18v3"/></svg>
+        <span>Tuner</span>
       </button>
 
-      <!-- Undo / Redo -->
-      <button class="btn-action" id="btnUndo" title="Undo parameter tweak (Ctrl+Z)">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M3 7v6h6M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
-        </svg>
-      </button>
-      <button class="btn-action" id="btnRedo" title="Redo parameter tweak (Ctrl+Y)">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 7v6h-6M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>
-        </svg>
+      <button id="btnOpenDrums" title="Drum Machine & Metronomo" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700 transition">
+        <svg class="w-3.5 h-3.5 text-orange-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/><path d="m4.93 4.93 4.24 4.24M14.83 14.83l4.24 4.24M14.83 9.17l4.24-4.24M4.93 19.07l4.24-4.24"/></svg>
+        <span>Drums</span>
       </button>
 
-      <!-- Drum Machine -->
-      <button class="btn-action" id="btnOpenDrums" title="100 Rhythms Drum Machine & Tap Tempo">
-        &#129345; Drums
+      <!-- Tone3000 & Internal Memory Button -->
+      <button id="btnOpenTone3000" title="Gestione 10 Slot Memoria Interna (5 NAM + 5 IR) e Tone3000" class="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 hover:border-rose-500/50 text-zinc-200 hover:text-white transition">
+        <svg class="w-3.5 h-3.5 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <span class="hidden sm:inline">Tone3000 & Memoria</span>
+        <span class="sm:hidden font-mono text-[11px]">Memoria</span>
       </button>
 
-      <!-- Chromatic Tuner -->
-      <button class="btn-action" id="btnOpenTuner" title="Chromatic Guitar & Bass Tuner">
-        &#127926; Tuner
-      </button>
+      <!-- Unified "Strumenti" Dropdown Menu -->
+      <div class="relative" id="toolsDropdownContainer">
+        <button id="btnToolsDropdown" title="Tutti gli strumenti e impostazioni" class="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-200 hover:text-white hover:bg-zinc-800 transition">
+          <svg class="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>
+          </svg>
+          <span class="hidden sm:inline font-mono">Strumenti</span>
+          <svg class="w-3 h-3 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
 
-      <!-- Tone3000 Cloud -->
-      <button class="btn-action btn-tone3000" id="btnOpenTone3000" title="Browse Tone3000 Neural Amp Modeler captures">
-        &#9889; Tone3000
-      </button>
+        <!-- Dropdown Popover Card -->
+        <div id="toolsMenuDropdown" class="hidden absolute right-0 mt-2 w-72 bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-2 z-50 divide-y divide-zinc-800 animate-in fade-in zoom-in-95">
+          <!-- Gruppo 1: Preset & Condivisione -->
+          <div class="py-1">
+            <div class="px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-500">Preset & Condivisione</div>
+            <button id="btnOpenShare" class="w-full flex items-center justify-between px-2.5 py-1.5 text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-lg transition text-left">
+              <span class="flex items-center gap-2">
+                <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                <span>Condividi Preset (Link / Bundle)</span>
+              </span>
+              <kbd class="text-[10px] text-zinc-500 font-mono">Ctrl+Shift+S</kbd>
+            </button>
+            <button id="btnOpenSlotTransfer" class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-lg transition text-left">
+              <svg class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-8-4-4m0 0L8 8m4-4v12"/></svg>
+              <span>Carica su Slot Memoria (U01-U50)</span>
+            </button>
+            <button id="btnOpenExport" class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-lg transition text-left">
+              <svg class="w-3.5 h-3.5 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Scarica Preset (.prst / .json / Backup)</span>
+            </button>
+          </div>
 
-      <!-- Save to Pedal -->
-      <button class="btn-action btn-save" id="btnOpenSave" title="Save preset to hardware slot (Ctrl+S)">
-        &#128190; Save
-      </button>
+          <!-- Gruppo 2: Live & Suono -->
+          <div class="py-1">
+            <div class="px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-500">Live & Suono</div>
+            <button id="btnOpenToneGen" class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-lg transition text-left">
+              <svg class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/></svg>
+              <span>Smart Tone Generator</span>
+            </button>
+            <button id="btnOpenStage" class="w-full flex items-center justify-between px-2.5 py-1.5 text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-lg transition text-left">
+              <span class="flex items-center gap-2">
+                <svg class="w-3.5 h-3.5 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+                <span>Live Stage Mode (Schermo Intero)</span>
+              </span>
+              <kbd class="text-[10px] text-zinc-500 font-mono">F</kbd>
+            </button>
+            <button id="btnOpenTunerMenuMobile" class="md:hidden w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-lg transition text-left">
+              <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M3 12h3M18 12h3M12 3v3M12 18v3"/></svg>
+              <span>Accordatore Cromatico</span>
+            </button>
+            <button id="btnOpenDrumsMenuMobile" class="md:hidden w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-lg transition text-left">
+              <svg class="w-3.5 h-3.5 text-orange-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+              <span>Drum Machine (100 Rhythms)</span>
+            </button>
+          </div>
+
+          <!-- Gruppo 3: Hardware & Aiuto -->
+          <div class="py-1">
+            <div class="px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-wider text-zinc-500">Hardware & Aiuto</div>
+            <button id="btnSyncHardware" class="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-lg transition text-left">
+              <svg class="w-3.5 h-3.5 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+              <span>Sincronizza Hardware con Pedaliera</span>
+            </button>
+            <button id="btnOpenHelp" class="w-full flex items-center justify-between px-2.5 py-1.5 text-xs text-zinc-200 hover:text-white hover:bg-zinc-800 rounded-lg transition text-left">
+              <span class="flex items-center gap-2">
+                <svg class="w-3.5 h-3.5 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                <span>Guida all'Uso & Scorciatoie</span>
+              </span>
+              <kbd class="text-[10px] text-zinc-500 font-mono">?</kbd>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   </header>
 
-  <!-- Main Body Layout -->
-  <main class="app-body">
-    <!-- Left Sidebar: 100 Presets -->
-    <aside class="app-sidebar" id="presetSidebar"></aside>
+  <!-- Main Responsive Workspace -->
+  <main class="flex-1 flex overflow-hidden relative">
+    <!-- Mobile Presets Backdrop Overlay -->
+    <div id="mobilePresetsBackdrop" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 hidden lg:hidden transition-opacity"></div>
 
-    <!-- Center Workspace -->
-    <section class="app-content">
-      <!-- Upper Rack: 9 Modules Signal Chain -->
-      <div class="rack-section" id="signalChainRack"></div>
+    <!-- 100 Presets Sidebar (Desktop fixed / Mobile slide-out drawer) -->
+    <aside id="presetSidebar" class="fixed lg:static inset-y-0 left-0 z-40 lg:z-10 w-72 sm:w-80 max-w-[85vw] bg-zinc-950 border-r border-zinc-800/80 flex flex-col shrink-0 transform -translate-x-full lg:translate-x-0 transition-transform duration-300 ease-in-out shadow-2xl lg:shadow-none"></aside>
 
-      <!-- Lower Editor: Active Module Knob Controls -->
-      <div class="editor-section" id="moduleEditorArea"></div>
+    <!-- Center Working Canvas -->
+    <section class="flex-1 flex flex-col min-w-0 overflow-hidden bg-zinc-900/60">
+      <!-- Upper Rack: 9 Modules Signal Chain with horizontal scroll -->
+      <div class="border-b border-zinc-800/80 bg-zinc-950/70 p-2 sm:p-3 overflow-x-auto shrink-0" id="signalChainRack"></div>
 
-      <!-- Bottom Hardware Log Drawer -->
-      <div class="log-drawer" id="logDrawer">
-        <div class="log-header" id="logToggleHeader">
-          <div class="log-title">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="4 17 10 11 4 5"></polyline>
-              <line x1="12" y1="19" x2="20" y2="19"></line>
-            </svg>
-            Hardware SysEx Console
+      <!-- Lower Editor: Active Module Knob Controls Panel -->
+      <div class="flex-1 overflow-y-auto p-3 sm:p-4 bg-zinc-900/40" id="moduleEditorArea"></div>
+
+      <!-- Bottom Hardware SysEx Console Drawer -->
+      <div class="log-drawer border-t border-zinc-800/80 bg-zinc-950 shrink-0" id="logDrawer">
+        <div class="h-8 px-3 flex items-center justify-between cursor-pointer bg-zinc-950 hover:bg-zinc-900 text-zinc-400 hover:text-zinc-200 transition" id="logToggleHeader">
+          <div class="flex items-center gap-2 text-[10px] font-mono font-bold uppercase tracking-wider">
+            <svg class="w-3 h-3 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span>Console SysEx Hardware</span>
           </div>
-          <svg class="log-toggle-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <polyline points="18 15 12 9 6 15"></polyline>
-          </svg>
+          <svg class="log-toggle-icon w-3.5 h-3.5 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
         </div>
-        <div class="log-content" id="logContainer">
-          <div class="log-line info">[System] Sonicake Smart Box Preset Manager ready.</div>
+        <div class="log-content p-2 sm:p-3 max-h-36 overflow-y-auto font-mono text-[11px] flex flex-col gap-1 bg-zinc-950/90" id="logContainer">
+          <div class="log-line info text-cyan-400/80">[System] Sonicake Smart Box Studio Manager pronto.</div>
         </div>
       </div>
     </section>
   </main>
 
-  <!-- Modals -->
+  <!-- Modals Container -->
   <div class="modal-overlay" id="tone3000ModalOverlay"></div>
   <div class="modal-overlay" id="drumModalOverlay"></div>
   <div class="modal-overlay" id="tunerModalOverlay"></div>
   <div class="modal-overlay" id="saveModalOverlay"></div>
+  <div class="modal-overlay" id="exportModalOverlay"></div>
+  <div class="modal-overlay" id="slotTransferModalOverlay"></div>
+  <div class="modal-overlay" id="stageModalOverlay"></div>
+  <div class="modal-overlay" id="toneGenModalOverlay"></div>
+  <div class="modal-overlay" id="helpModalOverlay"></div>
+  <div class="modal-overlay" id="shareModalOverlay"></div>
+  <div class="modal-overlay" id="importBundleModalOverlay"></div>
 
   <script type="module" src="/src/main.js"></script>
 </body>

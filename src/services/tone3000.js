@@ -53,11 +53,16 @@ export class Tone3000Service {
   }
 
   /**
-   * Fetch specific models / .nam profiles for a tone
+   * Fetch specific models / variations / .nam profiles for a tone
    */
   static async getToneModels(toneId) {
+    const idNum = Number(toneId);
+    if (idNum >= 101 && idNum <= 108) {
+      return this.getCuratedVariations(idNum);
+    }
+
     try {
-      const url = `${BASE_URL}/models?tone_id=eq.${toneId}&select=id,name,tone_id,size,architecture,metadata`;
+      const url = `${BASE_URL}/models?tone_id=eq.${toneId}&select=id,name,tone_id,size,model_url,pack_name,position&order=id.asc`;
       const response = await fetch(url, {
         headers: {
           'apikey': TONE3000_SUPABASE_KEY,
@@ -66,12 +71,101 @@ export class Tone3000Service {
         }
       });
 
-      if (!response.ok) return [];
-      return await response.json();
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const seen = new Set();
+          const unique = [];
+          for (const m of data) {
+            const trimmed = (m.name || '').trim();
+            if (trimmed && !seen.has(trimmed)) {
+              seen.add(trimmed);
+              unique.push({
+                id: m.id,
+                name: trimmed,
+                toneId: m.tone_id,
+                size: m.size || 'standard',
+                url: m.model_url || `https://www.tone3000.com/tones/${m.tone_id}`,
+                packName: m.pack_name
+              });
+            }
+          }
+          if (unique.length > 0) return unique;
+        }
+      }
     } catch (err) {
-      console.error('Failed to fetch tone models:', err);
-      return [];
+      console.warn(`Tone3000 getToneModels for tone ${toneId} failed, falling back to curated variations:`, err);
     }
+
+    // Fallback to curated variations
+    return this.getCuratedVariations(toneId);
+  }
+
+  /**
+   * Curated variations for each curated tone
+   */
+  static getCuratedVariations(toneId) {
+    const variationsMap = {
+      101: [
+        { id: 10101, name: "JCM800 - Lead High Gain (Pre 10, Master 6)", toneId: 101, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/jcm800_lead.nam" },
+        { id: 10102, name: "JCM800 - Classic Crunch (Pre 6, Master 7)", toneId: 101, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/jcm800_crunch.nam" },
+        { id: 10103, name: "JCM800 - Edge of Breakup Clean", toneId: 101, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/jcm800_clean.nam" },
+        { id: 10104, name: "JCM800 - Boosted Lead (SD-1 Front)", toneId: 101, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/jcm800_sd1.nam" }
+      ],
+      102: [
+        { id: 10201, name: "5150 - Lead Channel (Max Saturated)", toneId: 102, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/5150_lead.nam" },
+        { id: 10202, name: "5150 - Rhythm High Gain (Tight Attack)", toneId: 102, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/5150_rhythm.nam" },
+        { id: 10203, name: "5150 - Crunch Channel (Raw Punch)", toneId: 102, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/5150_crunch.nam" },
+        { id: 10204, name: "5150 - Modern Metal Boosted (TS9)", toneId: 102, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/5150_boost.nam" }
+      ],
+      103: [
+        { id: 10301, name: "Twin - Vibrato Channel Clean (Warm)", toneId: 103, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/twin_vib.nam" },
+        { id: 10302, name: "Twin - Normal Channel Bright (Crystal)", toneId: 103, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/twin_norm.nam" },
+        { id: 10303, name: "Twin - Pushed Drive (Vol 8 Natural Tube)", toneId: 103, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/twin_drive.nam" }
+      ],
+      104: [
+        { id: 10401, name: "Klon - Transparent Clean Boost (Gain 9:00)", toneId: 104, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/klon_boost.nam" },
+        { id: 10402, name: "Klon - Warm Overdrive (Gain 12:00)", toneId: 104, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/klon_mid.nam" },
+        { id: 10403, name: "Klon - Saturated Lead Push (Gain Max)", toneId: 104, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/klon_high.nam" }
+      ],
+      105: [
+        { id: 10501, name: "Dual Rec - Red Channel (Modern High Gain)", toneId: 105, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/recto_red.nam" },
+        { id: 10502, name: "Dual Rec - Orange Channel (Vintage Crunch)", toneId: 105, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/recto_orange.nam" },
+        { id: 10503, name: "Dual Rec - Raw Channel (Blues Edge)", toneId: 105, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/recto_raw.nam" }
+      ],
+      106: [
+        { id: 10601, name: "Fortin - Violent Rhythm (Tight Gate)", toneId: 106, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/fortin_rhythm.nam" },
+        { id: 10602, name: "Fortin - Singing Saturated Lead", toneId: 106, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/fortin_lead.nam" },
+        { id: 10603, name: "Fortin - Edge-of-Breakup Crunch", toneId: 106, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/fortin_crunch.nam" }
+      ],
+      107: [
+        { id: 10701, name: "AC30 - Top Boost (Harmonic Chime)", toneId: 107, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/ac30_top.nam" },
+        { id: 10702, name: "AC30 - Normal Channel (Warm Clean)", toneId: 107, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/ac30_norm.nam" },
+        { id: 10703, name: "AC30 - Cranked Brian May Roar", toneId: 107, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/ac30_crank.nam" }
+      ],
+      108: [
+        { id: 10801, name: "Mesa 4x12 - Shure SM57 Cap Edge", toneId: 108, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/mesa_sm57.wav" },
+        { id: 10802, name: "Mesa 4x12 - Royer R121 Cone", toneId: 108, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/mesa_r121.wav" },
+        { id: 10803, name: "Mesa 4x12 - SM57 + R121 Balanced Blend", toneId: 108, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/mesa_blend.wav" },
+        { id: 10804, name: "Mesa 4x12 - Room Ambient Mic", toneId: 108, size: "standard", url: "https://api.tone3000.com/storage/v1/object/public/models/mesa_room.wav" }
+      ]
+    };
+
+    const idNum = Number(toneId);
+    if (variationsMap[idNum]) {
+      return variationsMap[idNum];
+    }
+
+    // Generic fallback single variation
+    return [
+      {
+        id: idNum * 100 + 1,
+        name: `Capture Standard`,
+        toneId: idNum,
+        size: 'standard',
+        url: `https://www.tone3000.com/tones/${idNum}`
+      }
+    ];
   }
 
   /**
@@ -86,7 +180,8 @@ export class Tone3000Service {
         gear: "amp",
         image: "https://api.tone3000.com/storage/v1/object/public/images/f6q1xbcmkq9.jpg",
         createdDate: "2026-02-15",
-        url: "https://www.tone3000.com/tones/marshall-jcm800-2203"
+        url: "https://www.tone3000.com/tones/marshall-jcm800-2203",
+        models: this.getCuratedVariations(101)
       },
       {
         id: 102,
@@ -95,7 +190,8 @@ export class Tone3000Service {
         gear: "amp",
         image: "https://api.tone3000.com/storage/v1/object/public/images/01zkk35h4k0r.jpg",
         createdDate: "2026-03-01",
-        url: "https://www.tone3000.com/tones/peavey-5150-lead"
+        url: "https://www.tone3000.com/tones/peavey-5150-lead",
+        models: this.getCuratedVariations(102)
       },
       {
         id: 103,
@@ -104,7 +200,8 @@ export class Tone3000Service {
         gear: "amp",
         image: "https://api.tone3000.com/storage/v1/object/public/images/fpmzc9lpvmh.jpg",
         createdDate: "2026-01-20",
-        url: "https://www.tone3000.com/tones/fender-twin-reverb"
+        url: "https://www.tone3000.com/tones/fender-twin-reverb",
+        models: this.getCuratedVariations(103)
       },
       {
         id: 104,
@@ -113,7 +210,8 @@ export class Tone3000Service {
         gear: "pedal",
         image: "https://api.tone3000.com/storage/v1/object/public/images/arg3zpo1we.jpg",
         createdDate: "2026-02-28",
-        url: "https://www.tone3000.com/tones/klon-centaur-gold"
+        url: "https://www.tone3000.com/tones/klon-centaur-gold",
+        models: this.getCuratedVariations(104)
       },
       {
         id: 105,
@@ -122,7 +220,8 @@ export class Tone3000Service {
         gear: "amp",
         image: "https://api.tone3000.com/storage/v1/object/public/images/3fchhait1qf.jpg",
         createdDate: "2026-03-10",
-        url: "https://www.tone3000.com/tones/mesa-dual-rectifier"
+        url: "https://www.tone3000.com/tones/mesa-dual-rectifier",
+        models: this.getCuratedVariations(105)
       },
       {
         id: 106,
@@ -131,7 +230,8 @@ export class Tone3000Service {
         gear: "amp",
         image: "https://api.tone3000.com/storage/v1/object/public/images/c4weec8xxmo.jpg",
         createdDate: "2026-03-12",
-        url: "https://www.tone3000.com/tones/fortin-cali"
+        url: "https://www.tone3000.com/tones/fortin-cali",
+        models: this.getCuratedVariations(106)
       },
       {
         id: 107,
@@ -140,7 +240,8 @@ export class Tone3000Service {
         gear: "amp",
         image: "https://api.tone3000.com/storage/v1/object/public/images/7cci7mggtrh.jpg",
         createdDate: "2026-02-05",
-        url: "https://www.tone3000.com/tones/vox-ac30-top-boost"
+        url: "https://www.tone3000.com/tones/vox-ac30-top-boost",
+        models: this.getCuratedVariations(107)
       },
       {
         id: 108,
@@ -149,7 +250,8 @@ export class Tone3000Service {
         gear: "cab",
         image: "https://api.tone3000.com/storage/v1/object/public/images/zjekt0nsasl.jpg",
         createdDate: "2026-01-18",
-        url: "https://www.tone3000.com/tones/mesa-4x12-v30"
+        url: "https://www.tone3000.com/tones/mesa-4x12-v30",
+        models: this.getCuratedVariations(108)
       }
     ];
 

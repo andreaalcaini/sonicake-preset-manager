@@ -84,21 +84,27 @@
   box-shadow: 0 0 8px var(--accent-orange-glow);
 }
 
+.model-select optgroup {
+  background: #181b22;
+  color: var(--accent-orange);
+  font-weight: 700;
+  font-size: 11px;
+  padding: 6px 4px;
+}
+
+.model-select option {
+  background: #12141a;
+  color: #e2e8f0;
+  font-weight: 500;
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
 /* ==========================================================================
    Knobs Grid Panel
    ========================================================================== */
 .controls-panel {
-  flex: 1;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 28px 24px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: 32px;
-  min-height: 220px;
+  min-height: 200px;
 }
 
 /* Individual Knob Component */

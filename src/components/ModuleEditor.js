@@ -16,9 +16,15 @@ export class ModuleEditor {
     this.startY = 0;
     this.startVal = 0;
 
-    // Global mouse event listeners for smooth rotary knob dragging
+    // Global mouse & touch event listeners for smooth rotary knob dragging
     window.addEventListener('mousemove', (e) => this.handleMouseMove(e));
     window.addEventListener('mouseup', () => this.handleMouseUp());
+    window.addEventListener('touchmove', (e) => {
+      if (!this.dragKnob || !e.touches || !e.touches[0]) return;
+      this.handleMouseMove(e.touches[0]);
+    }, { passive: true });
+    window.addEventListener('touchend', () => this.handleMouseUp());
+    window.addEventListener('touchcancel', () => this.handleMouseUp());
 
     // Subscribe to engine state & user slot changes
     presetEngine.onStateChange(() => this.render());
@@ -34,13 +40,19 @@ export class ModuleEditor {
 
   render() {
     const preset = presetEngine.activePreset;
-    const isCloneMode = this.currentModuleId === 3 && preset.ampMode === 'clone';
+    const isAmpModule = this.currentModuleId === 3;
+    const isCloneMode = isAmpModule && preset.ampMode === 'clone';
     const effectiveModuleId = isCloneMode ? 9 : this.currentModuleId;
     const moduleName = isCloneMode ? 'Clone Amp (NAM)' : (MODULE_NAMES[this.currentModuleId] || `Module ${this.currentModuleId}`);
 
     // Get current effect model
-    const currentFxId = preset.selectedEffects[effectiveModuleId] || 
-      (effectiveModuleId === 0 ? 1 : (effectiveModuleId === 9 ? 901 : 101));
+    let currentFxId = preset.selectedEffects[effectiveModuleId];
+    if (!currentFxId) {
+      if (effectiveModuleId === 0) currentFxId = 1;
+      else if (effectiveModuleId === 9) currentFxId = 901;
+      else if (effectiveModuleId === 3) currentFxId = 301;
+      else currentFxId = 101;
+    }
 
     const effectDef = MODULE_LIBRARY_DATA.effectLibrary[currentFxId] || {
       name: 'Unknown',
@@ -50,14 +62,14 @@ export class ModuleEditor {
 
     // Override display name if custom user slot
     let displayFxName = effectDef.name;
-    if (effectiveModuleId === 9 && currentFxId >= 901 && currentFxId <= 905) {
+    if (isCloneMode && currentFxId >= 901 && currentFxId <= 905) {
       displayFxName = presetEngine.cloneSlotNames[currentFxId - 901] || effectDef.name;
     } else if (effectiveModuleId === 4 && currentFxId >= 416 && currentFxId <= 420) {
       displayFxName = presetEngine.irSlotNames[currentFxId - 416] || effectDef.name;
     }
 
     // Get available effect models for this module category
-    const availableEffects = this.getAvailableEffectsForModule(effectiveModuleId);
+    const availableEffects = this.getAvailableEffectsForModule(this.currentModuleId);
 
     // Current parameter values for this module
     const currentParams = preset.parameters[effectiveModuleId] || {};
@@ -65,40 +77,53 @@ export class ModuleEditor {
     const canReplaceWithTone3000 = (this.currentModuleId === 3 || this.currentModuleId === 4);
 
     this.container.innerHTML = `
-      <div class="module-editor-container">
+      <div class="flex flex-col gap-3">
         <!-- Module Header & Model Select -->
-        <div class="module-editor-header">
-          <div class="module-info">
-            <img src="${this.getModuleIconPath(this.currentModuleId, preset.ampMode)}" alt="${moduleName}" class="module-header-icon" onerror="this.style.display='none'">
-            <div class="module-header-details">
-              <span class="module-header-title">${moduleName}: ${displayFxName}</span>
-              <p class="module-header-desc">${effectDef.descriptionEn || 'Audio effect processor module.'}</p>
+        <div class="flex flex-wrap items-center justify-between gap-3 p-3 sm:p-4 rounded-xl bg-zinc-950/90 border border-zinc-800/80 shadow-sm">
+          <div class="flex items-center gap-3 min-w-0">
+            <img src="${this.getModuleIconPath(this.currentModuleId, preset.ampMode)}" alt="${moduleName}" class="w-7 h-7 sm:w-8 sm:h-8 object-contain shrink-0" onerror="this.style.display='none'">
+            <div class="min-w-0">
+              <span class="text-xs sm:text-sm font-bold text-zinc-100 flex items-center gap-2 truncate">
+                <span class="text-zinc-400 font-mono text-[11px]">${moduleName}</span>
+                <span>${displayFxName}</span>
+              </span>
+              <p class="text-[11px] text-zinc-400 truncate max-w-[280px] sm:max-w-md">${effectDef.descriptionEn || 'Processore segnale audio.'}</p>
             </div>
           </div>
 
-          <div class="model-selector-wrap" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
-            <span class="model-selector-label">Model:</span>
-            <select class="model-select" data-module-id="${effectiveModuleId}">
-              ${availableEffects.map(fx => `
-                <option value="${fx.id}" ${fx.id === currentFxId ? 'selected' : ''}>
-                  ${fx.name}
-                </option>
-              `).join('')}
-            </select>
+          <div class="flex items-center gap-2 flex-wrap">
+            ${isAmpModule ? `
+              <div class="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-xs">
+                <button class="amp-mode-btn factory-btn px-2.5 py-1 rounded-md font-semibold transition ${preset.ampMode === 'factory' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-zinc-400 hover:text-zinc-200'}" data-mode="factory">
+                  Factory
+                </button>
+                <button class="amp-mode-btn clone-btn px-2.5 py-1 rounded-md font-semibold transition ${preset.ampMode === 'clone' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'text-zinc-400 hover:text-zinc-200'}" data-mode="clone">
+                  Clone
+                </button>
+              </div>
+            ` : ''}
+
+            <div class="flex items-center gap-1.5">
+              <span class="text-[10px] font-mono font-bold uppercase text-zinc-400">Modello:</span>
+              <select class="model-select bg-zinc-900 border border-zinc-800 focus:border-cyan-500 text-zinc-100 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none cursor-pointer max-w-[200px] sm:max-w-[260px]" data-module-id="${this.currentModuleId}">
+                ${this.renderModelSelectOptions(availableEffects, currentFxId)}
+              </select>
+            </div>
 
             ${canReplaceWithTone3000 ? `
-              <button class="btn-action btn-tone3000 btn-browse-tone3000" style="padding: 6px 14px; font-size: 11px;" title="Cerca e sostituisci questo ${this.currentModuleId === 3 ? 'Amplificatore' : 'Cabinet/IR'} su Tone3000">
-                ⚡ Sostituisci da Tone3000
+              <button class="btn-action btn-browse-tone3000 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 hover:border-rose-500 text-rose-400 hover:text-white transition" title="${isAmpModule ? 'Sostituisci profilo NAM con Tone3000' : 'Sostituisci Cabinet IR con Tone3000'}">
+                <svg class="w-3.5 h-3.5 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                <span>${isAmpModule ? 'Sostituisci Clone' : 'Sostituisci IR'}</span>
               </button>
             ` : ''}
           </div>
         </div>
 
-        <!-- Parameters Controls Grid -->
-        <div class="controls-panel">
+        <!-- Parameters Controls Responsive Grid -->
+        <div class="controls-panel grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
           ${effectDef.alg && effectDef.alg.length > 0 
             ? effectDef.alg.map(param => this.renderParameterControl(effectiveModuleId, param, currentParams[param.algId])).join('')
-            : '<div style="color: var(--text-muted); font-size: 13px;">No adjustable parameters for this module.</div>'
+            : '<div class="text-zinc-500 text-xs py-8 col-span-full text-center">Nessun parametro regolabile per questo modulo.</div>'
           }
         </div>
       </div>
@@ -108,8 +133,79 @@ export class ModuleEditor {
     this.updateAllKnobVisuals();
   }
 
+  renderModelSelectOptions(availableEffects, currentFxId) {
+    const hasCategory = availableEffects.some(e => e.category);
+    if (!hasCategory) {
+      return availableEffects.map(fx => `
+        <option value="${fx.id}" ${fx.id === currentFxId ? 'selected' : ''}>
+          ${fx.name}
+        </option>
+      `).join('');
+    }
+
+    // Group by category
+    const groups = {};
+    availableEffects.forEach(fx => {
+      const cat = fx.category || 'Generale';
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(fx);
+    });
+
+    return Object.entries(groups).map(([groupName, items]) => `
+      <optgroup label="── ${groupName} ──">
+        ${items.map(fx => `
+          <option value="${fx.id}" ${fx.id === currentFxId ? 'selected' : ''}>
+            ${fx.name}
+          </option>
+        `).join('')}
+      </optgroup>
+    `).join('');
+  }
+
   getAvailableEffectsForModule(moduleId) {
     const list = [];
+
+    // AMP Module (3): Include BOTH 22 Factory Amps AND 5 Clone / NAM Profiles!
+    if (moduleId === 3) {
+      // 22 Factory Amps
+      for (let id = 301; id <= 322; id++) {
+        const def = MODULE_LIBRARY_DATA.effectLibrary[id];
+        if (def) {
+          list.push({ id, name: def.name, category: 'Amps Factory (22)' });
+        }
+      }
+      // 5 Clone / NAM Profiles
+      for (let i = 0; i < 5; i++) {
+        const id = 901 + i;
+        const customName = presetEngine.cloneSlotNames[i];
+        list.push({
+          id,
+          name: customName ? `Profile ${i + 1}: ${customName}` : (MODULE_LIBRARY_DATA.effectLibrary[id]?.name || `User Profile ${i + 1}`),
+          category: 'Profili Clone / NAM (5)'
+        });
+      }
+      return list;
+    }
+
+    // IR Module (4): Include BOTH 15 Factory Cabinets AND 5 User IRs!
+    if (moduleId === 4) {
+      // Factory Cabs 401 to 415
+      for (let id = 401; id <= 415; id++) {
+        const def = MODULE_LIBRARY_DATA.effectLibrary[id];
+        if (def) list.push({ id, name: def.name, category: 'Cabinet Factory (15)' });
+      }
+      // User IRs 416 to 420
+      for (let i = 0; i < 5; i++) {
+        const id = 416 + i;
+        const customName = presetEngine.irSlotNames[i];
+        list.push({
+          id,
+          name: customName ? `IR ${i + 1}: ${customName}` : (MODULE_LIBRARY_DATA.effectLibrary[id]?.name || `User IR ${i + 1}`),
+          category: 'User IR (5)'
+        });
+      }
+      return list;
+    }
 
     // Clone Module (9)
     if (moduleId === 9) {
@@ -118,38 +214,21 @@ export class ModuleEditor {
         const customName = presetEngine.cloneSlotNames[i];
         list.push({
           id,
-          name: customName ? `Profile ${i + 1}: ${customName}` : (MODULE_LIBRARY_DATA.effectLibrary[id]?.name || `User Profile ${i + 1}`)
+          name: customName ? `Profile ${i + 1}: ${customName}` : (MODULE_LIBRARY_DATA.effectLibrary[id]?.name || `User Profile ${i + 1}`),
+          category: 'Profili Clone / NAM (5)'
         });
       }
       return list;
     }
 
-    // IR Module (4)
-    if (moduleId === 4) {
-      // Factory Cabs 401 to 415
-      for (let id = 401; id <= 415; id++) {
-        const def = MODULE_LIBRARY_DATA.effectLibrary[id];
-        if (def) list.push({ id, name: def.name });
-      }
-      // User IRs 416 to 420
-      for (let i = 0; i < 5; i++) {
-        const id = 416 + i;
-        const customName = presetEngine.irSlotNames[i];
-        list.push({
-          id,
-          name: customName ? `IR ${i + 1}: ${customName}` : (MODULE_LIBRARY_DATA.effectLibrary[id]?.name || `User IR ${i + 1}`)
-        });
-      }
-      return list;
-    }
-
-    // Standard modules
+    // Standard modules (NR, FX1, DRV, EQ, FX2, DLY, RVB)
     const modConfig = MODULE_LIBRARY_DATA.modules?.find(m => m.moduleId === moduleId);
     if (modConfig && modConfig.effects) {
       modConfig.effects.forEach(fxRef => {
-        const fullDef = MODULE_LIBRARY_DATA.effectLibrary[fxRef.id];
+        const fxId = typeof fxRef === 'object' && fxRef !== null ? fxRef.id : fxRef;
+        const fullDef = MODULE_LIBRARY_DATA.effectLibrary[fxId];
         if (fullDef) {
-          list.push({ id: fxRef.id, name: fullDef.name });
+          list.push({ id: fxId, name: fullDef.name });
         }
       });
     } else {
@@ -158,7 +237,6 @@ export class ModuleEditor {
         if (moduleId === 0 && id === 1) list.push({ id, name: fx.name });
         else if (moduleId === 1 && id >= 101 && id <= 199) list.push({ id, name: fx.name });
         else if (moduleId === 2 && id >= 201 && id <= 299) list.push({ id, name: fx.name });
-        else if (moduleId === 3 && id >= 301 && id <= 399) list.push({ id, name: fx.name });
         else if (moduleId === 5 && id >= 501 && id <= 599) list.push({ id, name: fx.name });
         else if (moduleId === 6 && id >= 601 && id <= 699) list.push({ id, name: fx.name });
         else if (moduleId === 7 && id >= 701 && id <= 799) list.push({ id, name: fx.name });
@@ -252,6 +330,14 @@ export class ModuleEditor {
       });
     }
 
+    // Amp Mode Toggle (Factory vs Clone/NAM)
+    this.container.querySelectorAll('.amp-mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.mode;
+        presetEngine.setAmpMode(mode);
+      });
+    });
+
     // Browse & Replace on Tone3000 button
     const btnTone3000 = this.container.querySelector('.btn-browse-tone3000');
     if (btnTone3000) {
@@ -274,6 +360,13 @@ export class ModuleEditor {
         this.startY = e.clientY;
         this.startVal = parseFloat(knobCtrl.dataset.val);
       });
+
+      knob.addEventListener('touchstart', (e) => {
+        if (!e.touches || !e.touches[0]) return;
+        this.dragKnob = knobCtrl;
+        this.startY = e.touches[0].clientY;
+        this.startVal = parseFloat(knobCtrl.dataset.val);
+      }, { passive: true });
 
       // Mouse Wheel Support
       knobCtrl.addEventListener('wheel', (e) => {

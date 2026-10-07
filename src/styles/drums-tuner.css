@@ -4,11 +4,6 @@
    ========================================================================== */
 
 /* Drum Machine Modal */
-.drum-modal {
-  max-width: 650px;
-  width: 90%;
-}
-
 .drum-machine-container {
   display: flex;
   flex-direction: column;
@@ -182,11 +177,6 @@
 /* ==========================================================================
    Chromatic Tuner Modal Styles
    ========================================================================== */
-.tuner-modal {
-  max-width: 500px;
-  width: 90%;
-}
-
 .tuner-container {
   display: flex;
   flex-direction: column;

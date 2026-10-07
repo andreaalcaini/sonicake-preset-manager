@@ -1,6 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ==========================================================================
    Sonicake Smart Box - Main App Styles
-   Professional Neural DSP / Helix Style Dark Hardware Aesthetic
+   Professional Studio / Neural DSP Style Clean Hardware Aesthetic
    ========================================================================== */
 
 :root {
@@ -560,11 +564,12 @@ body {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.75);
-  backdrop-filter: blur(4px);
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 12px;
   z-index: 1000;
   opacity: 0;
   pointer-events: none;
@@ -633,4 +638,20 @@ body {
   justify-content: flex-end;
   gap: 10px;
   background: var(--bg-inset);
+}
+
+/* Slot Radio Cards in Import / Save Dialogs */
+.slot-radio-card {
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.slot-radio-card:hover {
+  border-color: var(--border-light) !important;
+  background: var(--bg-inset) !important;
+  transform: translateX(2px);
+}
+
+.slot-radio-card.selected {
+  border-color: var(--accent-cyan) !important;
 }

@@ -36,9 +36,11 @@ export class PresetEngine {
     this.isDirty = false;
     this.clipboard = null;
 
-    // User IR & Clone Amp Profile Names
+    // User IR & Clone Amp Profile Names & Tone3000 Metadata
     this.irSlotNames = ['User IR 1', 'User IR 2', 'User IR 3', 'User IR 4', 'User IR 5'];
     this.cloneSlotNames = ['User Profile 1', 'User Profile 2', 'User Profile 3', 'User Profile 4', 'User Profile 5'];
+    this.cloneSlotMetadata = [null, null, null, null, null];
+    this.irSlotMetadata = [null, null, null, null, null];
 
     // Active Preset State
     this.activePreset = this.createDefaultPreset('U01: Init Tone');
@@ -223,16 +225,17 @@ export class PresetEngine {
         connection.log('Received complete USB preset names packet. Decoding...', 'info');
         this.dumpPackets.push(cleanHex);
         this.processNamesDump();
-      } else if (cleanHex === TERMINATOR_PACKET || cleanHex.endsWith('0200000000F7')) {
+      } else if (cleanHex === TERMINATOR_PACKET) {
         connection.log(`Terminator packet received. Decoding ${this.dumpPackets.length} name packets...`, 'info');
         this.processNamesDump();
       } else {
         this.dumpPackets.push(cleanHex);
         this.nameSyncTimeoutId = setTimeout(() => {
           if (this.isSyncingNames) {
+            connection.log(`Name sync timeout reached after ${this.dumpPackets.length} packets. Processing received packets...`, 'info');
             this.processNamesDump();
           }
-        }, 1200);
+        }, 1500);
       }
       return;
     }
@@ -336,17 +339,24 @@ export class PresetEngine {
 
   processNamesDump() {
     this.isSyncingNames = false;
-    const allNames = this.dumpPackets.flatMap(pkt => parsePacketForNames(pkt));
+    clearTimeout(this.nameSyncTimeoutId);
+    this.nameSyncTimeoutId = null;
+
+    const allNames = this.dumpPackets.flatMap(pkt => parsePacketForNames(pkt.slice(6, -2)));
     this.dumpPackets = [];
 
     if (allNames.length > 0) {
       connection.log(`Successfully synced ${allNames.length} preset names from pedal flash!`, 'success');
       for (let i = 0; i < allNames.length && i < this.presetList.length; i++) {
-        if (allNames[i].trim()) {
+        if (allNames[i] && allNames[i].trim()) {
           this.presetList[i].name = allNames[i].trim();
         }
       }
+      if (this.currentSlot >= 1 && this.currentSlot <= this.presetList.length) {
+        this.activePreset.name = this.presetList[this.currentSlot - 1].name;
+      }
       this.emit('presetListChange', this.presetList);
+      this.emit('stateChange', this.activePreset);
     }
 
     // Request currently active slot number
@@ -470,9 +480,10 @@ export class PresetEngine {
       clearTimeout(this.nameSyncTimeoutId);
       this.nameSyncTimeoutId = setTimeout(() => {
         if (this.isSyncingNames) {
+          connection.log('Preset names sync timeout reached (10s). Processing what was received...', 'warning');
           this.processNamesDump();
         }
-      }, 5000);
+      }, 10000);
 
       await connection.writeCommand(REQUEST_PRESET_NAMES_CMD);
     });
@@ -541,6 +552,13 @@ export class PresetEngine {
     if (mode !== 'factory' && mode !== 'clone') return;
     this.pushUndoSnapshot();
     this.activePreset.ampMode = mode;
+    if (mode === 'clone' && (!this.activePreset.selectedEffects[9] || this.activePreset.selectedEffects[9] < 901)) {
+      this.activePreset.selectedEffects[9] = 901;
+      this.activePreset.parameters[9] = this.getDefaultParametersForFx(901);
+    } else if (mode === 'factory' && (!this.activePreset.selectedEffects[3] || this.activePreset.selectedEffects[3] > 399)) {
+      this.activePreset.selectedEffects[3] = 301;
+      this.activePreset.parameters[3] = this.getDefaultParametersForFx(301);
+    }
     this.markDirty();
     this.emit('stateChange', this.activePreset);
 
@@ -549,18 +567,52 @@ export class PresetEngine {
       if (cmd) {
         await connection.writeCommand(cmd);
       }
+      const activeFx = mode === 'clone' 
+        ? (this.activePreset.selectedEffects[9] || 901) 
+        : (this.activePreset.selectedEffects[3] || 301);
+      const fxCmd = COMMAND_LIBRARY_DATA.effectTypes?.[3]?.[activeFx];
+      if (fxCmd) {
+        await connection.writeCommand(fxCmd);
+      }
     }
   }
 
   async setEffectType(moduleId, fxId, syncHardware = true) {
     this.pushUndoSnapshot();
-    this.activePreset.selectedEffects[moduleId] = fxId;
-    this.activePreset.parameters[moduleId] = this.getDefaultParametersForFx(fxId);
+    const numFxId = parseInt(fxId, 10);
+    const numModId = parseInt(moduleId, 10);
+
+    // If setting clone profile (901-905)
+    if (numFxId >= 901 && numFxId <= 905) {
+      this.activePreset.ampMode = 'clone';
+      this.activePreset.selectedEffects[9] = numFxId;
+      this.activePreset.selectedEffects[3] = numFxId;
+      this.activePreset.parameters[9] = this.getDefaultParametersForFx(numFxId);
+    } else if (numFxId >= 301 && numFxId <= 322) {
+      this.activePreset.ampMode = 'factory';
+      this.activePreset.selectedEffects[3] = numFxId;
+      this.activePreset.parameters[3] = this.getDefaultParametersForFx(numFxId);
+    } else {
+      this.activePreset.selectedEffects[numModId] = numFxId;
+      this.activePreset.parameters[numModId] = this.getDefaultParametersForFx(numFxId);
+    }
+
     this.markDirty();
     this.emit('stateChange', this.activePreset);
 
     if (syncHardware && connection.isConnected) {
-      const cmd = COMMAND_LIBRARY_DATA.effectTypes?.[moduleId]?.[fxId];
+      // If amp change, ensure hardware amp mode is synchronized
+      if (numFxId >= 901 && numFxId <= 905) {
+        const modeCmd = COMMAND_LIBRARY_DATA.ampModes?.['clone'];
+        if (modeCmd) await connection.writeCommand(modeCmd);
+      } else if (numFxId >= 301 && numFxId <= 322) {
+        const modeCmd = COMMAND_LIBRARY_DATA.ampModes?.['factory'];
+        if (modeCmd) await connection.writeCommand(modeCmd);
+      }
+
+      const cmd = COMMAND_LIBRARY_DATA.effectTypes?.[numModId]?.[numFxId] || 
+                  (numModId === 9 || numFxId >= 901 ? COMMAND_LIBRARY_DATA.effectTypes?.[3]?.[numFxId] : null) ||
+                  (numModId === 3 ? COMMAND_LIBRARY_DATA.effectTypes?.[3]?.[numFxId] : null);
       if (cmd) {
         await connection.writeCommand(cmd);
       }
@@ -608,27 +660,110 @@ export class PresetEngine {
   }
 
   async savePreset(slotNumber, name) {
-    const slot = slotNumber || this.currentSlot;
-    if (slot < 1 || slot > 50) {
-      throw new Error('Only User presets (1 to 50) can be saved to hardware memory.');
-    }
-    const cleanName = (name || this.activePreset.name).slice(0, 10);
-    this.activePreset.name = cleanName;
-    this.presetList[slot - 1].name = cleanName;
+    return this.savePresetToSlot(slotNumber || this.currentSlot, name, { switchSlot: true });
+  }
+
+  async savePresetToSlot(slotNumber, name, options = { switchSlot: true }) {
+    const targetSlot = Math.min(50, Math.max(1, parseInt(slotNumber, 10)));
+    const cleanName = (name || this.activePreset.name || 'Preset').trim().slice(0, 10);
 
     if (connection.isConnected) {
-      const cmd = buildSavePresetCommand(slot, cleanName);
-      connection.log(`Saving preset "${cleanName}" to slot ${this.getSlotCode(slot)}...`, 'info');
+      const cmd = buildSavePresetCommand(targetSlot, cleanName);
+      connection.log(`Salvataggio nello slot ${this.getSlotCode(targetSlot)} ("${cleanName}")...`, 'info');
       const success = await connection.writeCommand(cmd);
       if (success) {
-        connection.log(`Saved preset "${cleanName}" to ${this.getSlotCode(slot)}!`, 'success');
+        connection.log(`Preset salvato con successo nello slot ${this.getSlotCode(targetSlot)}!`, 'success');
       }
     }
 
-    this.isDirty = false;
-    this.emit('dirtyChange', false);
+    if (this.presetList[targetSlot - 1]) {
+      this.presetList[targetSlot - 1].name = cleanName;
+    }
+
+    if (targetSlot === this.currentSlot || options.switchSlot) {
+      this.currentSlot = targetSlot;
+      this.activePreset.name = cleanName;
+      this.isDirty = false;
+      this.emit('dirtyChange', false);
+      this.emit('slotChange', this.currentSlot);
+      this.emit('stateChange', this.activePreset);
+    } else {
+      connection.log(`Rimani sullo slot attivo di lavoro: ${this.getSlotCode(this.currentSlot)} (${this.activePreset.name})`, 'info');
+    }
+
     this.emit('presetListChange', this.presetList);
-    this.emit('stateChange', this.activePreset);
+  }
+
+  async writePresetDataToSlot(slotNumber, name, presetData, options = { switchSlot: true }) {
+    const targetSlot = Math.min(50, Math.max(1, parseInt(slotNumber, 10)));
+    const cleanName = (name || presetData.name || 'Preset').trim().slice(0, 10);
+
+    // Save previous edit state if user wants to stay on current working slot
+    const previousSnapshot = options.switchSlot ? null : this.takeSnapshot();
+    const previousSlot = this.currentSlot;
+
+    // Apply preset data to engine
+    this.applySnapshot(presetData);
+    this.activePreset.name = cleanName;
+
+    if (connection.isConnected) {
+      await new Promise(r => setTimeout(r, 120));
+      const cmd = buildSavePresetCommand(targetSlot, cleanName);
+      connection.log(`Scrittura del preset nello slot ${this.getSlotCode(targetSlot)} ("${cleanName}")...`, 'info');
+      await connection.writeCommand(cmd);
+      connection.log(`Preset scritto con successo nello slot ${this.getSlotCode(targetSlot)}!`, 'success');
+    }
+
+    if (this.presetList[targetSlot - 1]) {
+      this.presetList[targetSlot - 1].name = cleanName;
+    }
+    this.emit('presetListChange', this.presetList);
+
+    if (options.switchSlot) {
+      this.currentSlot = targetSlot;
+      this.isDirty = false;
+      this.emit('dirtyChange', false);
+      this.emit('slotChange', this.currentSlot);
+      this.emit('stateChange', this.activePreset);
+    } else if (previousSnapshot) {
+      this.applySnapshot(previousSnapshot);
+      this.currentSlot = previousSlot;
+      this.emit('slotChange', this.currentSlot);
+      this.emit('stateChange', this.activePreset);
+      connection.log(`Ripristinato lo slot attivo di lavoro: ${this.getSlotCode(this.currentSlot)}`, 'info');
+    }
+  }
+
+  exportActivePresetJson() {
+    const p = this.activePreset;
+    return {
+      version: "1.0",
+      presetName: p.name,
+      description: "Exported from Sonicake Smart Box Preset Manager",
+      ampMode: p.ampMode === 'clone' ? 'Clone' : 'Normal',
+      presetVolume: p.volume !== undefined ? p.volume : 75,
+      states: p.states,
+      selectedEffects: p.selectedEffects,
+      parameters: p.parameters,
+      order: p.order,
+      metadata: {
+        createdDate: new Date().toISOString(),
+        author: "Sonicake Preset Manager"
+      }
+    };
+  }
+
+  exportAllPresetsBackupJson() {
+    return {
+      version: "1.0",
+      backupType: "user_presets_50",
+      exportDate: new Date().toISOString(),
+      presets: this.presetList.slice(0, 50).map((item, idx) => ({
+        slot: idx + 1,
+        code: this.getSlotCode(idx + 1),
+        name: item.name
+      }))
+    };
   }
 
   // --- A/B Comparison ---
@@ -641,15 +776,30 @@ export class PresetEngine {
     this.activePreset = JSON.parse(JSON.stringify(snapshot));
     this.emit('stateChange', this.activePreset);
     if (connection.isConnected) {
-      for (const [modId, isOn] of Object.entries(this.activePreset.states)) {
+      if (this.activePreset.ampMode) {
+        const modeCmd = COMMAND_LIBRARY_DATA.ampModes?.[this.activePreset.ampMode];
+        if (modeCmd) connection.writeCommand(modeCmd);
+      }
+      if (this.activePreset.volume !== undefined) {
+        const volCmd = COMMAND_LIBRARY_DATA.globalCommands?.presetVolume?.[this.activePreset.volume];
+        if (volCmd) connection.writeCommand(volCmd);
+      }
+      if (Array.isArray(this.activePreset.order) && this.activePreset.order.length === 9) {
+        const key = this.activePreset.order.map(id => MODULE_NAMES[id]).join('-');
+        const chainCmd = COMMAND_LIBRARY_DATA.chainOrderCommands?.[key];
+        if (chainCmd) connection.writeCommand(chainCmd);
+      }
+      for (const [modId, isOn] of Object.entries(this.activePreset.states || {})) {
         const cmd = COMMAND_LIBRARY_DATA.moduleStates?.[modId]?.[isOn ? 'on' : 'off'];
         if (cmd) connection.writeCommand(cmd);
       }
-      for (const [modId, fxId] of Object.entries(this.activePreset.selectedEffects)) {
-        const cmd = COMMAND_LIBRARY_DATA.effectTypes?.[modId]?.[fxId];
+      for (const [modId, fxId] of Object.entries(this.activePreset.selectedEffects || {})) {
+        const numMod = parseInt(modId, 10);
+        const cmd = COMMAND_LIBRARY_DATA.effectTypes?.[modId]?.[fxId] ||
+                    (numMod === 9 || fxId >= 901 ? COMMAND_LIBRARY_DATA.effectTypes?.[3]?.[fxId] : null);
         if (cmd) connection.writeCommand(cmd);
       }
-      for (const [modId, params] of Object.entries(this.activePreset.parameters)) {
+      for (const [modId, params] of Object.entries(this.activePreset.parameters || {})) {
         for (const [algId, val] of Object.entries(params)) {
           const cmd = COMMAND_LIBRARY_DATA.parameters?.[modId]?.[algId]?.[val];
           if (cmd) connection.writeCommand(cmd);
@@ -781,49 +931,208 @@ export class PresetEngine {
     connection.log('Preset backup imported successfully!', 'success');
   }
 
-  // --- Tone3000 Slot Replacement ---
+  // --- Tone3000 & Internal File Memory Slot Replacement ---
 
-  replaceCloneProfile(slotIndex, tone) {
-    const idx = Math.max(0, Math.min(4, slotIndex));
+  replaceCloneProfile(slotIndex, tone, updateActivePreset = false) {
+    const idx = Math.max(0, Math.min(4, parseInt(slotIndex, 10) || 0));
     const fxId = 901 + idx;
-    const cleanName = tone.title.slice(0, 10);
+    const cleanName = (typeof tone === 'string' 
+      ? tone 
+      : (tone.variationName || tone.title || 'Profile')).trim().slice(0, 14);
 
     this.cloneSlotNames[idx] = cleanName;
-    if (MODULE_LIBRARY_DATA.effectLibrary[fxId]) {
-      MODULE_LIBRARY_DATA.effectLibrary[fxId].name = cleanName;
-      MODULE_LIBRARY_DATA.effectLibrary[fxId].descriptionEn = tone.description || `Tone3000 capture: ${tone.title}`;
+    
+    // Store metadata
+    if (typeof tone === 'object' && tone !== null) {
+      this.cloneSlotMetadata[idx] = {
+        type: 'amp',
+        toneId: tone.toneId || tone.id || null,
+        toneTitle: tone.toneTitle || tone.title || cleanName,
+        variationName: tone.variationName || cleanName,
+        modelId: tone.modelId || null,
+        modelUrl: tone.modelUrl || tone.url || null,
+        pageUrl: tone.pageUrl || tone.url || null,
+        gear: tone.gear || 'amp',
+        description: tone.description || ''
+      };
+    } else {
+      this.cloneSlotMetadata[idx] = {
+        type: 'amp',
+        toneTitle: cleanName,
+        variationName: cleanName
+      };
     }
 
-    // Switch amp mode to Clone/NAM & select this profile
-    this.setAmpMode('clone', true);
-    this.setEffectType(9, fxId, true);
+    if (MODULE_LIBRARY_DATA.effectLibrary[fxId]) {
+      MODULE_LIBRARY_DATA.effectLibrary[fxId].name = cleanName;
+      MODULE_LIBRARY_DATA.effectLibrary[fxId].descriptionEn = (typeof tone === 'object' && tone.description) 
+        ? tone.description 
+        : `NAM Profile in Slot ${idx + 1}: ${cleanName}`;
+    }
+
+    // Only touch active preset if explicitly requested by user!
+    if (updateActivePreset) {
+      this.setAmpMode('clone', true);
+      this.setEffectType(9, fxId, true);
+      this.activePreset.tone3000Model = this.cloneSlotMetadata[idx];
+      this.emit('stateChange', this.activePreset);
+    }
 
     this.emit('userSlotsChange', { type: 'Clone', names: this.cloneSlotNames });
-    this.emit('stateChange', this.activePreset);
-    connection.log(`Replaced Clone Profile ${idx + 1} with "${cleanName}" from Tone3000!`, 'success');
+    connection.log(`Aggiornato slot memoria Clone Profile ${idx + 1}: "${cleanName}" (Preset invariati)`, 'success');
   }
 
-  replaceUserIR(slotIndex, tone) {
-    const idx = Math.max(0, Math.min(4, slotIndex));
+  replaceUserIR(slotIndex, tone, updateActivePreset = false) {
+    const idx = Math.max(0, Math.min(4, parseInt(slotIndex, 10) || 0));
     const fxId = 416 + idx;
-    const cleanName = tone.title.slice(0, 10);
+    const cleanName = (typeof tone === 'string' 
+      ? tone 
+      : (tone.variationName || tone.title || 'User IR')).trim().slice(0, 14);
 
     this.irSlotNames[idx] = cleanName;
-    if (MODULE_LIBRARY_DATA.effectLibrary[fxId]) {
-      MODULE_LIBRARY_DATA.effectLibrary[fxId].name = cleanName;
-      MODULE_LIBRARY_DATA.effectLibrary[fxId].descriptionEn = tone.description || `Tone3000 IR: ${tone.title}`;
+
+    // Store metadata
+    if (typeof tone === 'object' && tone !== null) {
+      this.irSlotMetadata[idx] = {
+        type: 'cab',
+        toneId: tone.toneId || tone.id || null,
+        toneTitle: tone.toneTitle || tone.title || cleanName,
+        variationName: tone.variationName || cleanName,
+        modelId: tone.modelId || null,
+        modelUrl: tone.modelUrl || tone.url || null,
+        pageUrl: tone.pageUrl || tone.url || null,
+        gear: tone.gear || 'cab',
+        description: tone.description || ''
+      };
+    } else {
+      this.irSlotMetadata[idx] = {
+        type: 'cab',
+        toneTitle: cleanName,
+        variationName: cleanName
+      };
     }
 
-    // Select this User IR in IR module (module 4)
-    this.setEffectType(4, fxId, true);
+    if (MODULE_LIBRARY_DATA.effectLibrary[fxId]) {
+      MODULE_LIBRARY_DATA.effectLibrary[fxId].name = cleanName;
+      MODULE_LIBRARY_DATA.effectLibrary[fxId].descriptionEn = (typeof tone === 'object' && tone.description)
+        ? tone.description
+        : `User IR in Slot ${idx + 1}: ${cleanName}`;
+    }
+
+    // Only touch active preset if explicitly requested by user!
+    if (updateActivePreset) {
+      this.setEffectType(4, fxId, true);
+      this.activePreset.tone3000Model = this.irSlotMetadata[idx];
+      this.emit('stateChange', this.activePreset);
+    }
 
     this.emit('userSlotsChange', { type: 'IR', names: this.irSlotNames });
-    this.emit('stateChange', this.activePreset);
-    connection.log(`Replaced User IR ${idx + 1} with "${cleanName}" from Tone3000!`, 'success');
+    connection.log(`Aggiornato slot memoria User IR ${idx + 1}: "${cleanName}" (Preset invariati)`, 'success');
   }
 
-  applyTone3000(tone) {
-    this.replaceCloneProfile(0, tone);
+  applyTone3000(tone, targetSlot = 0, updateActivePreset = false) {
+    const isCab = tone && (tone.gear === 'cab' || tone.gear === 'ir');
+    if (isCab) {
+      this.replaceUserIR(targetSlot, tone, updateActivePreset);
+    } else {
+      this.replaceCloneProfile(targetSlot, tone, updateActivePreset);
+    }
+  }
+
+  getPresetBundle() {
+    const p = this.activePreset;
+    const bundle = {
+      format: 'sonicake-bundle',
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      preset: JSON.parse(JSON.stringify(p)),
+      tone3000Model: null
+    };
+
+    // Check if preset uses a Clone Profile (Slot 901-905)
+    const isClone = p.ampMode === 'clone' || (p.selectedEffects && p.selectedEffects[9] >= 901 && p.selectedEffects[9] <= 905);
+    if (isClone) {
+      const slotIdx = (p.selectedEffects && p.selectedEffects[9] ? p.selectedEffects[9] - 901 : 0);
+      const meta = this.cloneSlotMetadata[slotIdx];
+      const slotName = this.cloneSlotNames[slotIdx] || `Clone ${slotIdx + 1}`;
+      bundle.tone3000Model = {
+        type: 'amp',
+        originalSlot: slotIdx,
+        slotName: slotName,
+        toneTitle: (meta && meta.toneTitle) || slotName,
+        variationName: (meta && meta.variationName) || slotName,
+        toneId: (meta && meta.toneId) || null,
+        modelId: (meta && meta.modelId) || null,
+        modelUrl: (meta && meta.modelUrl) || null,
+        pageUrl: (meta && meta.pageUrl) || null,
+        gear: 'amp'
+      };
+    } else if (p.selectedEffects && p.selectedEffects[4] >= 416 && p.selectedEffects[4] <= 420) {
+      // Check if preset uses a User IR (Slot 416-420)
+      const slotIdx = p.selectedEffects[4] - 416;
+      const meta = this.irSlotMetadata[slotIdx];
+      const slotName = this.irSlotNames[slotIdx] || `User IR ${slotIdx + 1}`;
+      bundle.tone3000Model = {
+        type: 'cab',
+        originalSlot: slotIdx,
+        slotName: slotName,
+        toneTitle: (meta && meta.toneTitle) || slotName,
+        variationName: (meta && meta.variationName) || slotName,
+        toneId: (meta && meta.toneId) || null,
+        modelId: (meta && meta.modelId) || null,
+        modelUrl: (meta && meta.modelUrl) || null,
+        pageUrl: (meta && meta.pageUrl) || null,
+        gear: 'cab'
+      };
+    }
+
+    return bundle;
+  }
+
+  applyPresetBundle(bundle, slotChoice = {}) {
+    if (!bundle || !bundle.preset) {
+      throw new Error('Invalid preset bundle structure');
+    }
+
+    this.pushUndoSnapshot();
+
+    // 1. If embedded Tone3000/Clone model exists and user picked a slot
+    if (bundle.tone3000Model) {
+      const model = bundle.tone3000Model;
+      if (model.type === 'amp') {
+        const targetSlot = (slotChoice.ampSlot !== undefined) ? parseInt(slotChoice.ampSlot, 10) : 0;
+        this.replaceCloneProfile(targetSlot, {
+          toneTitle: model.toneTitle,
+          title: model.toneTitle,
+          variationName: model.variationName,
+          id: model.toneId,
+          modelId: model.modelId,
+          url: model.modelUrl || model.pageUrl,
+          gear: 'amp'
+        }, false);
+        // Map preset's Clone effect ID to chosen slot
+        bundle.preset.ampMode = 'clone';
+        bundle.preset.selectedEffects[9] = 901 + targetSlot;
+      } else if (model.type === 'cab') {
+        const targetSlot = (slotChoice.cabSlot !== undefined) ? parseInt(slotChoice.cabSlot, 10) : 0;
+        this.replaceUserIR(targetSlot, {
+          toneTitle: model.toneTitle,
+          title: model.toneTitle,
+          variationName: model.variationName,
+          id: model.toneId,
+          modelId: model.modelId,
+          url: model.modelUrl || model.pageUrl,
+          gear: 'cab'
+        }, false);
+        // Map preset's IR effect ID to chosen slot
+        bundle.preset.selectedEffects[4] = 416 + targetSlot;
+      }
+    }
+
+    // 2. Apply snapshot to active preset and sync
+    this.applySnapshot(bundle.preset);
+    this.markDirty();
+    connection.log(`Preset bundle "${bundle.preset.name}" applicato con successo!`, 'success');
   }
 
   // --- Utilities ---

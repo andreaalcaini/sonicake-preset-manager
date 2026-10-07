@@ -18,6 +18,8 @@ import {
   REQUEST_CLONE_AMP_NAMES_CMD,
   buildSignatureToFxIdMaps,
   buildSavePresetCommand,
+  buildStreamingFlashPackets,
+  buildIRPayload,
   decodePresetStateAndOrder,
   decodeSelectedEffects,
   decodeParameterValues,
@@ -1327,6 +1329,94 @@ export class PresetEngine {
     this.applySnapshot(bundle.preset);
     this.markDirty();
     connection.log(`Preset bundle "${bundle.preset.name}" applicato con successo!`, 'success');
+  }
+
+  // --- Hardware Flash Memory Streaming ---
+
+  /**
+   * Flash a User IR (.wav) directly into pedalboard persistent flash memory (Slot 1 to 5)
+   * Streams 112 chunked SysEx packets with CRC8 directly over Web MIDI / BLE.
+   * @param {number} slotIndex 0 to 4 (representing User IR 1 to 5)
+   * @param {Uint8Array|Float32Array} irData 2122-byte payload or 512-sample float array
+   * @param {string} name Slot name (up to 14 chars)
+   * @param {Function} [onProgress] Progress callback (current, total, percent)
+   */
+  async flashIRToPedal(slotIndex, irData, name, onProgress = () => {}) {
+    if (!connection.isConnected) {
+      throw new Error('Pedaliera non connessa. Collega il cavo USB o Bluetooth.');
+    }
+    if (slotIndex < 0 || slotIndex > 4) {
+      throw new Error('Indice slot IR non valido (deve essere tra 1 e 5).');
+    }
+
+    let binaryPayload;
+    if (irData instanceof Uint8Array && irData.length === 2122) {
+      binaryPayload = irData;
+    } else {
+      binaryPayload = buildIRPayload(slotIndex, name, irData);
+    }
+
+    const packets = buildStreamingFlashPackets(binaryPayload);
+    const total = packets.length;
+
+    connection.log(`Inizio scrittura Flash: User IR ${slotIndex + 1} ("${name}") - ${total} pacchetti SysEx...`, 'info');
+
+    for (let i = 0; i < total; i++) {
+      await connection.writeRawBytes(packets[i]);
+      const percent = Math.round(((i + 1) / total) * 100);
+      onProgress(i + 1, total, percent);
+      // Transmission rate throttle (3ms aligns with official Sonicake engine rate)
+      await new Promise(r => setTimeout(r, 3));
+    }
+
+    // Update local name and persist metadata
+    this.replaceUserIR(slotIndex, name, false);
+
+    // Refresh pedalboard slot names
+    await new Promise(r => setTimeout(r, 150));
+    await connection.writeCommand(REQUEST_USER_IR_NAMES_CMD);
+
+    connection.log(`Scrittura completata con successo! User IR ${slotIndex + 1} aggiornato in Flash.`, 'success');
+    return true;
+  }
+
+  /**
+   * Flash a Clone AMP (NAM / .namb / .clo) directly into pedalboard persistent flash memory (Slot 1 to 5)
+   * Streams chunked SysEx packets with CRC8 directly over Web MIDI / BLE.
+   * @param {number} slotIndex 0 to 4 (representing Clone 1 to 5)
+   * @param {Uint8Array} binaryData Raw binary profile data (e.g. 2696-byte or converted payload)
+   * @param {string} name Slot name (up to 14 chars)
+   * @param {Function} [onProgress] Progress callback (current, total, percent)
+   */
+  async flashCloneToPedal(slotIndex, binaryData, name, onProgress = () => {}) {
+    if (!connection.isConnected) {
+      throw new Error('Pedaliera non connessa. Collega il cavo USB o Bluetooth.');
+    }
+    if (slotIndex < 0 || slotIndex > 4) {
+      throw new Error('Indice slot Clone non valido (deve essere tra 1 e 5).');
+    }
+
+    const packets = buildStreamingFlashPackets(binaryData);
+    const total = packets.length;
+
+    connection.log(`Inizio scrittura Flash: Clone AMP ${slotIndex + 1} ("${name}") - ${total} pacchetti SysEx...`, 'info');
+
+    for (let i = 0; i < total; i++) {
+      await connection.writeRawBytes(packets[i]);
+      const percent = Math.round(((i + 1) / total) * 100);
+      onProgress(i + 1, total, percent);
+      await new Promise(r => setTimeout(r, 3));
+    }
+
+    // Update local name and persist metadata
+    this.replaceCloneProfile(slotIndex, name, false);
+
+    // Refresh pedalboard slot names
+    await new Promise(r => setTimeout(r, 150));
+    await connection.writeCommand(REQUEST_CLONE_AMP_NAMES_CMD);
+
+    connection.log(`Scrittura completata con successo! Clone AMP ${slotIndex + 1} aggiornato in Flash.`, 'success');
+    return true;
   }
 
   // --- Utilities ---

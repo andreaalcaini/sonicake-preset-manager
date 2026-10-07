@@ -268,24 +268,24 @@ export class Tone3000Modal {
           </button>
         </div>
 
-        <!-- 2-Step Option A Workflow explanation -->
+        <!-- Direct Flash Flashing Workflow -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-          <div class="p-3 rounded-lg bg-cyan-950/30 border border-cyan-800/40 flex items-start gap-2.5">
-            <div class="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">1</div>
+          <div class="p-3 rounded-lg bg-emerald-950/30 border border-emerald-800/40 flex items-start gap-2.5">
+            <div class="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">⚡</div>
             <div>
-              <div class="font-bold text-cyan-300">Download & Ascolto Immediato</div>
+              <div class="font-bold text-emerald-300">Scrittura Diretta Flash 100% Automatica</div>
               <p class="text-zinc-300/90 text-[11px] mt-0.5 leading-relaxed">
-                Scaricando da Tone3000 ottieni il file audio originale (<code class="text-cyan-300">.nam</code> o <code class="text-cyan-300">.wav</code>) nei Download e la pedaliera si commuta subito sullo slot per farti ascoltare il suono in tempo reale.
+                I file (.nam o .wav) vengono compilati e scritti <strong>direttamente nella memoria Flash interna</strong> della pedaliera tramite Web MIDI in pochi secondi. Sonicake Manager non serve più!
               </p>
             </div>
           </div>
 
-          <div class="p-3 rounded-lg bg-amber-950/30 border border-amber-800/40 flex items-start gap-2.5">
-            <div class="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">2</div>
+          <div class="p-3 rounded-lg bg-cyan-950/30 border border-cyan-800/40 flex items-start gap-2.5">
+            <div class="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 font-bold text-[11px] mt-0.5">🎵</div>
             <div>
-              <div class="font-bold text-amber-300">Salvataggio Flash Definitivo (DSP)</div>
+              <div class="font-bold text-cyan-300">Ascolto Immediato su Pedaliera</div>
               <p class="text-zinc-300/90 text-[11px] mt-0.5 leading-relaxed">
-                Per salvare il modello nella memoria permanente della pedaliera (così che rimanga anche a pedaliera spenta), carica il file scaricato nello slot tramite Sonicake Manager (che compila le reti neurali nel formato hardware <code class="text-amber-300">.namb</code>).
+                Appena terminata la scrittura dei pacchetti, lo slot si attiva istantaneamente per farti suonare subito con il nuovo profilo cassa o amplificatore.
               </p>
             </div>
           </div>
@@ -367,7 +367,7 @@ export class Tone3000Modal {
                       <label class="px-2 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] font-semibold cursor-pointer transition-colors flex items-center gap-1" title="Carica file .nam dal PC">
                         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                         .nam
-                        <input type="file" accept=".nam" class="slot-file-input hidden" data-type="amp" data-slot="${i}">
+                        <input type="file" accept=".nam,.namb,.clo" class="slot-file-input hidden" data-type="amp" data-slot="${i}">
                       </label>
                       <button class="btn-slot-rename p-1 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 hover:text-white transition-colors" data-type="amp" data-slot="${i}" title="Rinomina">
                         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -510,14 +510,12 @@ export class Tone3000Modal {
       </div>
 
       <!-- Hardware Memory Info Banner -->
-      <div class="p-3 bg-cyan-950/40 border border-cyan-800/40 rounded-xl text-xs text-cyan-200/90 flex items-start gap-2.5">
-        <svg class="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <circle cx="12" cy="12" r="10"></circle>
-          <line x1="12" y1="16" x2="12" y2="12"></line>
-          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+      <div class="p-3 bg-emerald-950/30 border border-emerald-800/40 rounded-xl text-xs text-emerald-200/90 flex items-start gap-2.5">
+        <svg class="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
         </svg>
         <div class="leading-relaxed">
-          <strong>Download & Memoria Hardware:</strong> Cliccando su <em>Scarica & Seleziona</em> viene scaricato il file originale (<code class="text-cyan-300">.nam</code> o <code class="text-cyan-300">.wav</code>) e commutata la pedaliera sul banco scelto. Per scrivere in modo permanente il nuovo file audio nella memoria interna del DSP Sonicake, carica il file scaricato nello slot tramite Sonicake Manager (che compila il formato neurale hardware <code class="text-cyan-300">.namb</code>).
+          <strong>⚡ Scrittura Diretta nella Pedaliera:</strong> Quando clicchi su <em>⚡ Scrivi su Pedaliera</em>, il modello viene compilato e scritto <strong>al 100% in automatico nella memoria Flash interna</strong> della pedaliera tramite Web MIDI in pochi secondi con avanzamento reale. Zero passaggi manuali!
         </div>
       </div>
 
@@ -597,12 +595,18 @@ export class Tone3000Modal {
               </div>
             </div>
 
-            <div class="pt-2 border-t border-zinc-800/60 flex items-center justify-end">
-              <button class="btn-load-tone w-full py-2 px-3 rounded-lg bg-zinc-800 hover:bg-cyan-500 hover:text-zinc-950 text-zinc-200 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shadow-sm" data-id="${tone.id}">
+            <div class="pt-2 border-t border-zinc-800/60 flex flex-col gap-1.5">
+              <button class="btn-flash-tone w-full py-2 px-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-zinc-950 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm" data-id="${tone.id}">
                 <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+                ⚡ Scrivi su Pedaliera
+              </button>
+              <button class="btn-load-tone w-full py-1 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200 text-[11px] font-semibold transition-all flex items-center justify-center gap-1" data-id="${tone.id}">
+                <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-4-4 4m0 0-4-4m4 4V4"/>
                 </svg>
-                Scarica & Seleziona Slot
+                Solo Download su PC
               </button>
             </div>
           </div>
@@ -615,14 +619,75 @@ export class Tone3000Modal {
       this.loadToneVariations(tone);
     });
 
-    // Attach click listeners to Load buttons
+    // Attach click listeners to Flash buttons (Direct Hardware Flash via Web MIDI)
+    gridContainer.querySelectorAll('.btn-flash-tone').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const toneId = btn.dataset.id;
+        const tone = this.tones.find(t => String(t.id) === String(toneId));
+        if (!tone) return;
+
+        if (!connection.isConnected) {
+          alert('Pedaliera non connessa! Connetti prima il dispositivo via USB o Bluetooth in alto a destra.');
+          return;
+        }
+
+        const selectedVar = this.selectedVariations[toneId] || (tone.models && tone.models[0]) || {
+          name: tone.title,
+          id: tone.id,
+          url: tone.url
+        };
+
+        const modelName = selectedVar.name || tone.title;
+        let targetType = this.selectedTargetType;
+        let slotIndex = this.selectedTargetSlot;
+        if (tone.gear === 'cab' || tone.gear === 'ir') {
+          targetType = 'cab';
+        }
+
+        const modelUrl = selectedVar.url || tone.url;
+
+        if (targetType === 'amp') {
+          await this.processAndFlashNam(modelUrl, modelName, slotIndex);
+        } else {
+          try {
+            this.showFlashProgressModal(`Download IR "${modelName}"`, `Scrittura nello slot User IR ${slotIndex + 1}`);
+            const resp = await fetch(modelUrl);
+            const arrayBuffer = await resp.arrayBuffer();
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+            const channelData = audioBuffer.getChannelData(0);
+
+            const samples = new Float32Array(512);
+            const count = Math.min(512, channelData.length);
+            let maxVal = 0;
+            for (let i = 0; i < count; i++) {
+              if (Math.abs(channelData[i]) > maxVal) maxVal = Math.abs(channelData[i]);
+            }
+            const scale = maxVal > 0 ? (0.95 / maxVal) : 1.0;
+            for (let i = 0; i < count; i++) samples[i] = channelData[i] * scale;
+
+            await presetEngine.flashIRToPedal(slotIndex, samples, modelName, (curr, tot, pct) => {
+              this.updateFlashProgress(curr, tot, pct);
+            });
+            await presetEngine.activateIRSlot(slotIndex, true);
+            this.hideFlashProgressModal(`User IR ${slotIndex + 1} ("${modelName}") memorizzato con successo!`);
+            this.render();
+          } catch (err) {
+            console.error('Flash IR failed:', err);
+            alert(`Errore caricamento IR: ${err.message}`);
+            this.hideFlashProgressModal();
+          }
+        }
+      });
+    });
+
+    // Attach click listeners to Download-only buttons
     gridContainer.querySelectorAll('.btn-load-tone').forEach(btn => {
       btn.addEventListener('click', async () => {
         const toneId = btn.dataset.id;
         const tone = this.tones.find(t => String(t.id) === String(toneId));
         if (!tone) return;
 
-        // Retrieve selected variation
         const selectedVar = this.selectedVariations[toneId] || (tone.models && tone.models[0]) || {
           name: tone.title,
           id: tone.id,
@@ -639,80 +704,30 @@ export class Tone3000Modal {
           size: selectedVar.size || 'standard'
         };
 
-        // Determine destination slot & type
         let targetType = this.selectedTargetType;
         let slotIndex = this.selectedTargetSlot;
-
-        // Auto-match if user picked a cab but targetType is amp, or vice-versa
         if (tone.gear === 'cab' || tone.gear === 'ir') {
           targetType = 'cab';
         }
 
         const slotLabel = targetType === 'amp' ? `Clone ${slotIndex + 1}` : `User IR ${slotIndex + 1}`;
-        let compiledSuccess = false;
         let extName = targetType === 'amp' ? '.nam' : '.wav';
 
         btn.disabled = true;
-
-        // If compiler bridge is available and it's a NAM model, compile directly to hardware .namb!
-        if (targetType === 'amp' && this.bridgeStatus?.available) {
-          btn.innerHTML = `
-            <div class="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin"></div>
-            <span>Compilazione hardware (.namb)...</span>
-          `;
-          try {
-            const res = await CompilerBridgeService.convertNam({
-              url: payload.modelUrl,
-              name: payload.variationName
-            });
-            CompilerBridgeService.downloadBlob(res.blob, res.fileName);
-            compiledSuccess = true;
-            extName = '.namb';
-            connection.log(`Compilato e scaricato file hardware "${res.fileName}" (${(res.size / 1024).toFixed(1)} KB) pronto per Sonicake Smart Box!`, 'success');
-          } catch (err) {
-            console.warn('Compilazione microservizio fallita, fallback su .nam standard:', err);
-            connection.log(`Avviso compilazione microservizio: ${err.message}. Procedo con download .nam originale.`, 'warning');
-          }
-        }
-
-        // If not compiled (or fallback), download raw file (.nam or .wav)
-        if (!compiledSuccess) {
-          btn.innerHTML = `
-            <div class="w-3.5 h-3.5 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
-            <span>Download ${extName}...</span>
-          `;
-          await this.downloadModelFile(payload, targetType);
-        }
+        btn.innerHTML = `<div class="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin"></div><span>Download...</span>`;
+        await this.downloadModelFile(payload, targetType);
 
         if (targetType === 'amp') {
           presetEngine.replaceCloneProfile(slotIndex, payload, this.applyToCurrentPreset);
-          if (this.applyToCurrentPreset) {
-            await presetEngine.activateCloneSlot(slotIndex, true);
-          }
+          if (this.applyToCurrentPreset) await presetEngine.activateCloneSlot(slotIndex, true);
         } else {
           presetEngine.replaceUserIR(slotIndex, payload, this.applyToCurrentPreset);
-          if (this.applyToCurrentPreset) {
-            await presetEngine.activateIRSlot(slotIndex, true);
-          }
+          if (this.applyToCurrentPreset) await presetEngine.activateIRSlot(slotIndex, true);
         }
 
-        btn.textContent = `✓ ${compiledSuccess ? 'Compilato (.namb)' : 'Scaricato'} & Selezionato ${slotLabel}!`;
-        btn.className = 'btn-load-tone w-full py-2 px-3 rounded-lg bg-emerald-500 text-zinc-950 text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm';
+        btn.textContent = `✓ Scaricato & Selezionato ${slotLabel}!`;
         btn.disabled = false;
-
-        connection.log(`Impostato ${slotLabel}: "${payload.variationName}" e commutata la pedaliera.`, 'success');
-
-        this.showDownloadNotice(payload.variationName, slotLabel, extName, compiledSuccess);
-
-        setTimeout(() => {
-          btn.innerHTML = `
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-4-4 4m0 0-4-4m4 4V4"/>
-            </svg>
-            ${this.bridgeStatus?.available && targetType === 'amp' ? 'Compila (.namb) & Seleziona' : 'Scarica & Seleziona Slot'}
-          `;
-          btn.className = 'btn-load-tone w-full py-2 px-3 rounded-lg bg-zinc-800 hover:bg-cyan-500 hover:text-zinc-950 text-zinc-200 text-xs font-semibold transition-all flex items-center justify-center gap-1.5 shadow-sm';
-        }, 2500);
+        this.showDownloadNotice(payload.variationName, slotLabel, extName, false);
       });
     });
   }
@@ -791,6 +806,143 @@ export class Tone3000Modal {
     return false;
   }
 
+  showFlashProgressModal(title, targetLabel) {
+    let modal = document.getElementById('flashProgressModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'flashProgressModal';
+      modal.className = 'fixed inset-0 z-[9999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4';
+      document.body.appendChild(modal);
+    }
+    modal.innerHTML = `
+      <div class="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 max-w-md w-full shadow-2xl flex flex-col items-center text-center space-y-4 animate-in fade-in zoom-in-95 duration-150 text-zinc-100">
+        <div class="w-12 h-12 rounded-full bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 animate-pulse">
+          <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-white">${title}</h3>
+          <p class="text-xs text-zinc-400 mt-1">${targetLabel}</p>
+        </div>
+        <div class="w-full space-y-2">
+          <div class="w-full h-3 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800 p-0.5">
+            <div id="flashProgressBar" class="h-full bg-gradient-to-r from-cyan-500 to-emerald-400 rounded-full transition-all duration-75 w-0"></div>
+          </div>
+          <div class="flex justify-between text-[11px] font-mono text-zinc-400">
+            <span id="flashPacketCount">Invio pacchetti SysEx...</span>
+            <span id="flashPercent" class="font-bold text-cyan-400">0%</span>
+          </div>
+        </div>
+        <div class="text-[11px] text-zinc-400 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+          <span>Scrittura Flash hardware via Web MIDI... Non scollegare.</span>
+        </div>
+      </div>
+    `;
+    modal.style.display = 'flex';
+  }
+
+  updateFlashProgress(current, total, percent) {
+    const bar = document.getElementById('flashProgressBar');
+    const count = document.getElementById('flashPacketCount');
+    const pct = document.getElementById('flashPercent');
+    if (bar) bar.style.width = `${percent}%`;
+    if (count) count.textContent = `Pacchetto ${current} di ${total}`;
+    if (pct) pct.textContent = `${percent}%`;
+  }
+
+  hideFlashProgressModal(successMessage) {
+    const modal = document.getElementById('flashProgressModal');
+    if (!modal) return;
+    if (successMessage) {
+      modal.innerHTML = `
+        <div class="bg-zinc-900 border border-emerald-500/50 rounded-2xl p-6 max-w-md w-full shadow-2xl flex flex-col items-center text-center space-y-4 animate-in fade-in zoom-in-95 duration-150 text-zinc-100">
+          <div class="w-12 h-12 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+            <svg class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="20 6 9 17 4 12"></polyline>
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-base font-bold text-white">Scrittura Completata!</h3>
+            <p class="text-xs text-zinc-300 mt-1">${successMessage}</p>
+          </div>
+          <div class="text-[11px] text-emerald-400/90 font-semibold">
+            Il profilo è salvato nella memoria interna ed è subito attivo per suonare!
+          </div>
+        </div>
+      `;
+      setTimeout(() => {
+        modal.style.display = 'none';
+      }, 1600);
+    } else {
+      modal.style.display = 'none';
+    }
+  }
+
+  async processAndFlashWavFile(file, slotIndex) {
+    const cleanName = file.name.replace(/\.[^/.]+$/, '').trim().slice(0, 14);
+    this.showFlashProgressModal(`Caricamento IR "${cleanName}"`, `Scrittura nello slot User IR ${slotIndex + 1}`);
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      const channelData = audioBuffer.getChannelData(0);
+
+      // Extract 512 points and normalize peak
+      const samples = new Float32Array(512);
+      const count = Math.min(512, channelData.length);
+      let maxVal = 0;
+      for (let i = 0; i < count; i++) {
+        if (Math.abs(channelData[i]) > maxVal) maxVal = Math.abs(channelData[i]);
+      }
+      const scale = maxVal > 0 ? (0.95 / maxVal) : 1.0;
+      for (let i = 0; i < count; i++) samples[i] = channelData[i] * scale;
+
+      await presetEngine.flashIRToPedal(slotIndex, samples, cleanName, (curr, tot, pct) => {
+        this.updateFlashProgress(curr, tot, pct);
+      });
+
+      await presetEngine.activateIRSlot(slotIndex, true);
+      this.hideFlashProgressModal(`User IR ${slotIndex + 1} ("${cleanName}") memorizzato con successo!`);
+      this.render();
+    } catch (err) {
+      console.error('Flash IR failed:', err);
+      alert(`Errore caricamento IR: ${err.message}`);
+      this.hideFlashProgressModal();
+    }
+  }
+
+  async processAndFlashNam(namFileOrUrl, name, slotIndex) {
+    const cleanName = (name || 'Model').trim().slice(0, 14);
+    this.showFlashProgressModal(`Compilazione & Scrittura "${cleanName}"`, `Scrittura nello slot Clone AMP ${slotIndex + 1}`);
+
+    try {
+      let res;
+      if (typeof namFileOrUrl === 'string') {
+        res = await CompilerBridgeService.convertNam({ url: namFileOrUrl, name: cleanName });
+      } else {
+        res = await CompilerBridgeService.convertNam({ file: namFileOrUrl, name: cleanName });
+      }
+
+      const arrayBuffer = await res.blob.arrayBuffer();
+      const binaryData = new Uint8Array(arrayBuffer);
+
+      await presetEngine.flashCloneToPedal(slotIndex, binaryData, cleanName, (curr, tot, pct) => {
+        this.updateFlashProgress(curr, tot, pct);
+      });
+
+      await presetEngine.activateCloneSlot(slotIndex, true);
+      this.hideFlashProgressModal(`Clone AMP ${slotIndex + 1} ("${cleanName}") memorizzato con successo!`);
+      this.render();
+    } catch (err) {
+      console.error('Flash Clone failed:', err);
+      alert(`Errore scrittura NAM: ${err.message}`);
+      this.hideFlashProgressModal();
+    }
+  }
+
   attachEventListeners() {
     this.attachBridgeListeners();
 
@@ -864,7 +1016,7 @@ export class Tone3000Modal {
       });
     });
 
-    // Memory Tab: slot local file inputs (.nam / .wav)
+    // Memory Tab: slot local file inputs (.nam / .wav / .namb / .clo)
     this.overlay.querySelectorAll('.slot-file-input').forEach(input => {
       input.addEventListener('change', async (e) => {
         const file = e.target.files?.[0];
@@ -873,32 +1025,53 @@ export class Tone3000Modal {
         const type = input.dataset.type;
         const slot = parseInt(input.dataset.slot, 10);
         const cleanName = file.name.replace(/\.[^/.]+$/, '').trim().slice(0, 14);
-        let extName = type === 'amp' ? '.nam' : '.wav';
-        let compiledSuccess = false;
+        const lower = file.name.toLowerCase();
 
-        // Auto-compile to .namb if user picked a .nam file and bridge microservice is online
-        if (type === 'amp' && this.bridgeStatus?.available && file.name.toLowerCase().endsWith('.nam')) {
-          try {
-            connection.log(`Compilazione microservizio file locale "${file.name}" in .namb hardware...`, 'info');
-            const res = await CompilerBridgeService.convertNam({ file, name: cleanName });
-            CompilerBridgeService.downloadBlob(res.blob, res.fileName);
-            extName = '.namb';
-            compiledSuccess = true;
-            connection.log(`Compilato e scaricato ${res.fileName} pronto per il caricamento hardware!`, 'success');
-          } catch (err) {
-            console.warn('Compilazione locale fallita:', err);
+        // 1. Cabinet IR (.wav)
+        if (type === 'cab' || lower.endsWith('.wav')) {
+          if (connection.isConnected) {
+            await this.processAndFlashWavFile(file, slot);
+          } else {
+            presetEngine.replaceUserIR(slot, cleanName, true);
+            this.render();
+            alert('File IR impostato in memoria! Per memorizzarlo fisicamente nel chip Flash permanente, connetti la pedaliera via USB o Bluetooth in alto a destra.');
           }
+          input.value = '';
+          return;
         }
 
+        // 2. Clone AMP (.nam / .namb / .clo)
         if (type === 'amp') {
-          presetEngine.replaceCloneProfile(slot, cleanName, true);
-          await presetEngine.activateCloneSlot(slot, true);
-        } else {
-          presetEngine.replaceUserIR(slot, cleanName, true);
-          await presetEngine.activateIRSlot(slot, true);
+          if (connection.isConnected) {
+            if (lower.endsWith('.nam')) {
+              await this.processAndFlashNam(file, cleanName, slot);
+            } else if (lower.endsWith('.namb') || lower.endsWith('.clo')) {
+              this.showFlashProgressModal(`Scrittura Flash "${cleanName}"`, `Scrittura nello slot Clone AMP ${slot + 1}`);
+              try {
+                const arrayBuffer = await file.arrayBuffer();
+                const binaryData = new Uint8Array(arrayBuffer);
+                await presetEngine.flashCloneToPedal(slot, binaryData, cleanName, (curr, tot, pct) => {
+                  this.updateFlashProgress(curr, tot, pct);
+                });
+                await presetEngine.activateCloneSlot(slot, true);
+                this.hideFlashProgressModal(`Clone AMP ${slot + 1} ("${cleanName}") memorizzato con successo!`);
+                this.render();
+              } catch (err) {
+                console.error('Flash Clone failed:', err);
+                alert(`Errore scrittura NAM: ${err.message}`);
+                this.hideFlashProgressModal();
+              }
+            } else {
+              alert('Formato file non supportato. Seleziona un file .nam, .namb o .clo.');
+            }
+          } else {
+            presetEngine.replaceCloneProfile(slot, cleanName, true);
+            this.render();
+            alert('Profilo Clone impostato in memoria! Per memorizzarlo fisicamente nel chip Flash permanente, connetti la pedaliera via USB o Bluetooth in alto a destra.');
+          }
+          input.value = '';
+          return;
         }
-        this.render();
-        this.showDownloadNotice(cleanName, type === 'amp' ? `Clone NAM ${slot + 1}` : `User IR ${slot + 1}`, extName, compiledSuccess);
       });
     });
 

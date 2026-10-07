@@ -3,6 +3,8 @@ title Sonicake Auto-Sync Converter Server
 echo ==================================================
 echo   Avvio Sonicake Auto-Sync Converter Microservice
 echo ==================================================
-cd /d "%~dp0"
+pushd "%~dp0"
 python server.py
+popd
 pause
+

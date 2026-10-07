@@ -353,6 +353,41 @@ export class SonicakeConnection {
   }
 
   /**
+   * Send a raw Uint8Array packet directly to the pedal (Web MIDI or BLE)
+   * Essential for high-speed streaming chunk uploads to flash memory.
+   * @param {Uint8Array} bytes
+   * @returns {Promise<boolean>}
+   */
+  async writeRawBytes(bytes) {
+    if (!this.isConnected) return false;
+
+    try {
+      if (this.connectionType === 'usb' && this.midiOutput) {
+        let payload = bytes;
+        if (payload[0] === 0x80 && payload[1] === 0x80) {
+          payload = payload.slice(2);
+        }
+        this.midiOutput.send(payload);
+        return true;
+      } else if (this.connectionType === 'ble' && this.bleCharacteristic) {
+        let payload = bytes;
+        if (payload[0] !== 0x80 || payload[1] !== 0x80) {
+          const blePacket = new Uint8Array(bytes.length + 2);
+          blePacket[0] = 0x80;
+          blePacket[1] = 0x80;
+          blePacket.set(bytes, 2);
+          payload = blePacket;
+        }
+        await this.bleCharacteristic.writeValueWithoutResponse(payload);
+        return true;
+      }
+    } catch (err) {
+      this.log(`writeRawBytes failed: ${err.message}`, 'error');
+    }
+    return false;
+  }
+
+  /**
    * Disconnect current active device
    */
   disconnect() {

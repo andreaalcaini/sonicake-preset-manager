@@ -224,11 +224,25 @@ export class SignalChain {
 
     // Preset volume slider
     const volSlider = this.container.querySelector('.preset-volume-slider');
+    const volVal = this.container.querySelector('.preset-volume-val');
     if (volSlider) {
       volSlider.addEventListener('input', (e) => {
         const val = parseInt(e.target.value, 10);
-        this.container.querySelector('.preset-volume-val').textContent = val;
+        if (volVal) volVal.textContent = val;
         presetEngine.setPresetVolume(val);
+      });
+
+      // DAW behavior: Double-click or Alt+Click resets preset volume to default (75)
+      const resetVol = (e) => {
+        e.preventDefault();
+        volSlider.value = 75;
+        if (volVal) volVal.textContent = 75;
+        presetEngine.setPresetVolume(75);
+      };
+      volSlider.addEventListener('dblclick', resetVol);
+      if (volVal) volVal.addEventListener('dblclick', resetVol);
+      volSlider.addEventListener('mousedown', (e) => {
+        if (e.altKey) resetVol(e);
       });
     }
   }

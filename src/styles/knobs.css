@@ -271,3 +271,13 @@
 .toggle-switch-btn.active .toggle-switch-thumb {
   transform: translateX(20px);
 }
+
+/* Quick tactile spring snap animation when resetting to center (DAW feel) */
+.rotary-knob.knob-resetting .knob-cap {
+  transition: transform 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.25) !important;
+}
+
+.rotary-knob.knob-resetting .knob-track-fill {
+  transition: stroke-dashoffset 0.18s cubic-bezier(0.2, 0.9, 0.3, 1.25) !important;
+}
+

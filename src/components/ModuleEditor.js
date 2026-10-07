@@ -39,6 +39,7 @@ export class ModuleEditor {
   }
 
   render() {
+    if (this.dragKnob) return;
     const preset = presetEngine.activePreset;
     const isAmpModule = this.currentModuleId === 3;
     const isCloneMode = isAmpModule && preset.ampMode === 'clone';
@@ -300,12 +301,13 @@ export class ModuleEditor {
     // Default: Skeuomorphic Rotary Knob
     const radius = 28;
     const circumference = 2 * Math.PI * radius; // ~175.93
+    const defaultVal = param.defaultValue !== undefined ? param.defaultValue : (Number.isInteger(min) && Number.isInteger(max) ? Math.round((min + max) / 2) : parseFloat(((min + max) / 2).toFixed(1)));
 
     return `
-      <div class="knob-control" data-module-id="${moduleId}" data-alg-id="${param.algId}" data-min="${min}" data-max="${max}" data-val="${val}">
-        <span class="knob-label">${param.name}</span>
+      <div class="knob-control" data-module-id="${moduleId}" data-alg-id="${param.algId}" data-min="${min}" data-max="${max}" data-default="${defaultVal}" data-val="${val}">
+        <span class="knob-label" title="Doppio clic o Alt+Clic per ripristinare al centro (ore 12)">${param.name}</span>
         
-        <div class="rotary-knob" data-alg-id="${param.algId}">
+        <div class="rotary-knob" data-alg-id="${param.algId}" title="Doppio clic o Alt+Clic per ripristinare al centro (ore 12)">
           <svg class="knob-arc-svg" viewBox="0 0 64 64">
             <circle class="knob-track-bg" cx="32" cy="32" r="${radius}" 
                     stroke-dasharray="${circumference}" stroke-dashoffset="${circumference * 0.25}"/>
@@ -317,7 +319,7 @@ export class ModuleEditor {
           </div>
         </div>
 
-        <div class="knob-value-display" title="Double click to edit">${val}${param.unit ? ' ' + param.unit : ''}</div>
+        <div class="knob-value-display" title="Doppio clic per modificare valore, Alt+Clic per centrare">${val}${param.unit ? ' ' + param.unit : ''}</div>
       </div>
     `;
   }
@@ -352,16 +354,43 @@ export class ModuleEditor {
       });
     }
 
-    // Rotary Knobs Mouse Drag & Wheel
+    // Rotary Knobs Mouse Drag, Wheel & DAW-Style Reset to Center (Double-Click / Alt+Click)
     this.container.querySelectorAll('.knob-control').forEach(knobCtrl => {
       const knob = knobCtrl.querySelector('.rotary-knob');
       const valDisplay = knobCtrl.querySelector('.knob-value-display');
 
+      // DAW behavior: Alt + Click on knob resets to center immediately
       knob.addEventListener('mousedown', (e) => {
+        if (e.altKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.dragKnob = null;
+          this.resetKnobToCenter(knobCtrl);
+          return;
+        }
         e.preventDefault();
         this.dragKnob = knobCtrl;
         this.startY = e.clientY;
         this.startVal = parseFloat(knobCtrl.dataset.val);
+      });
+
+      // DAW behavior: Double-click on knob resets to center (12 o'clock position)
+      knob.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.dragKnob = null;
+        this.resetKnobToCenter(knobCtrl);
+      });
+
+      // Also reset on double-click of knob-control container (excluding value display)
+      knobCtrl.addEventListener('dblclick', (e) => {
+        if (e.target.closest('.knob-value-display') || e.target.closest('.knob-value-input')) {
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        this.dragKnob = null;
+        this.resetKnobToCenter(knobCtrl);
       });
 
       knob.addEventListener('touchstart', (e) => {
@@ -370,6 +399,18 @@ export class ModuleEditor {
         this.startY = e.touches[0].clientY;
         this.startVal = parseFloat(knobCtrl.dataset.val);
       }, { passive: true });
+
+      // Touch double-tap reset to center
+      let lastTap = 0;
+      knob.addEventListener('touchend', (e) => {
+        const now = Date.now();
+        if (now - lastTap < 350) {
+          e.preventDefault();
+          this.dragKnob = null;
+          this.resetKnobToCenter(knobCtrl);
+        }
+        lastTap = now;
+      });
 
       // Mouse Wheel Support
       knobCtrl.addEventListener('wheel', (e) => {
@@ -384,8 +425,18 @@ export class ModuleEditor {
         this.updateKnobValue(knobCtrl, val);
       });
 
-      // Double-click to type exact value
-      valDisplay.addEventListener('dblclick', () => {
+      // Alt+Click on value display resets to center
+      valDisplay.addEventListener('click', (e) => {
+        if (e.altKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          this.resetKnobToCenter(knobCtrl);
+        }
+      });
+
+      // Double-click on value readout to type exact value
+      valDisplay.addEventListener('dblclick', (e) => {
+        e.stopPropagation();
         const currentVal = knobCtrl.dataset.val;
         valDisplay.innerHTML = `<input type="number" class="knob-value-input" value="${currentVal}">`;
         const input = valDisplay.querySelector('input');
@@ -460,14 +511,54 @@ export class ModuleEditor {
       };
 
       handle.addEventListener('mousedown', (e) => {
+        if (e.altKey) {
+          e.preventDefault();
+          e.stopPropagation();
+          presetEngine.setParameter(5, algId, 0);
+          return;
+        }
         e.preventDefault();
         startDrag(e.clientY);
       });
+
+      // DAW behavior: Double-click EQ node resets band gain to flat center (0 dB)
+      handle.addEventListener('dblclick', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        presetEngine.setParameter(5, algId, 0);
+      });
+
       handle.addEventListener('touchstart', (e) => {
         if (!e.touches || !e.touches[0]) return;
         startDrag(e.touches[0].clientY);
       }, { passive: true });
     });
+  }
+
+  resetKnobToCenter(knobCtrl) {
+    if (!knobCtrl) return;
+    const min = parseFloat(knobCtrl.dataset.min);
+    const max = parseFloat(knobCtrl.dataset.max);
+    
+    // In any DAW (Ableton, FL Studio, Logic Pro, Cubase, Reaper, Neural DSP),
+    // double-clicking a knob restores it to its center / 12 o'clock position
+    let centerVal = (min + max) / 2;
+    if (Number.isInteger(min) && Number.isInteger(max)) {
+      centerVal = Math.round(centerVal);
+    } else {
+      centerVal = parseFloat(centerVal.toFixed(1));
+    }
+
+    centerVal = Math.max(min, Math.min(max, centerVal));
+
+    // Tactile spring snap animation
+    const knob = knobCtrl.querySelector('.rotary-knob');
+    if (knob) {
+      knob.classList.add('knob-resetting');
+      setTimeout(() => knob.classList.remove('knob-resetting'), 220);
+    }
+
+    this.updateKnobValue(knobCtrl, centerVal);
   }
 
   handleMouseMove(e) {

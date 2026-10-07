@@ -1,0 +1,20 @@
+{
+  "name": "Sonicake Studio Preset Manager",
+  "short_name": "Sonicake Studio",
+  "description": "Studio Preset Manager and Visual Signal Chain Editor for Sonicake multi-effects pedals",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "theme_color": "#09090b",
+  "background_color": "#09090b",
+  "categories": ["music", "utilities"],
+  "icons": [
+    {
+      "src": "/assets/images/logo_sonicake.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

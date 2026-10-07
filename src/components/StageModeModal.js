@@ -9,9 +9,10 @@ import { presetEngine } from '../core/preset-engine.js';
 import { MODULE_NAMES } from '../core/protocol.js';
 
 export class StageModeModal {
-  constructor(overlayElement, tunerModal) {
+  constructor(overlayElement, tunerModal, setlistModal = null) {
     this.overlay = overlayElement;
     this.tunerModal = tunerModal;
+    this.setlistModal = setlistModal;
     this.isFullscreen = false;
 
     // Listen to preset engine updates
@@ -59,6 +60,7 @@ export class StageModeModal {
     const presetName = activePreset.name || 'Init Tone';
     const states = activePreset.states || {};
     const ampMode = activePreset.ampMode === 'clone' ? 'NAM Clone' : 'Factory Amp';
+    const activeSong = this.setlistModal ? this.setlistModal.getCurrentSong() : null;
 
     this.overlay.innerHTML = `
       <div class="w-[96vw] max-w-7xl h-[92vh] max-h-[96vh] bg-zinc-950 border border-zinc-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 flex flex-col justify-between shadow-2xl overflow-y-auto animate-in fade-in zoom-in-95 duration-150 select-none">
@@ -82,7 +84,7 @@ export class StageModeModal {
               </svg>
               Accordatore
             </button>
-            <button class="px-3 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold transition-colors" id="stageBtnFullscreen">
+            <button class="px-3.5 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold transition-colors" id="stageBtnFullscreen">
               ${document.fullscreenElement ? 'Riduci' : 'Schermo Intero'}
             </button>
             <button class="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white text-xs font-semibold transition-colors" id="stageBtnClose">
@@ -90,6 +92,31 @@ export class StageModeModal {
             </button>
           </div>
         </div>
+
+        <!-- Optional Setlist Active Song Banner -->
+        ${activeSong ? `
+          <div class="my-2 p-3 rounded-2xl bg-indigo-950/40 border border-indigo-900/60 flex items-center justify-between gap-3 shadow-inner">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-mono font-bold text-xs shrink-0 uppercase tracking-wide">
+                Scaletta Live
+              </span>
+              <div class="truncate">
+                <span class="text-sm sm:text-base font-bold text-white">${activeSong.title}</span>
+                ${activeSong.artist ? `<span class="text-xs text-zinc-400 ml-1.5">(${activeSong.artist})</span>` : ''}
+                ${activeSong.key ? `<span class="ml-2 px-2 py-0.5 rounded text-[11px] font-mono bg-zinc-900 text-indigo-300 border border-indigo-800/60">${activeSong.key}</span>` : ''}
+                ${activeSong.bpm ? `<span class="ml-1 px-2 py-0.5 rounded text-[11px] font-mono bg-zinc-900 text-indigo-300 border border-indigo-800/60">${activeSong.bpm} BPM</span>` : ''}
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button id="stageBtnPrevSong" class="px-3 py-1.5 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs font-mono font-semibold transition">
+                ◀ Brano Prec
+              </button>
+              <button id="stageBtnNextSong" class="px-3 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-semibold transition shadow-md">
+                Brano Succ ▶
+              </button>
+            </div>
+          </div>
+        ` : ''}
 
         <!-- Center: Giant Slot Code & Preset Name -->
         <div class="flex flex-col items-center justify-center text-center my-auto py-4">
@@ -196,6 +223,16 @@ export class StageModeModal {
       });
     }
 
+    // Song Navigation in Stage Mode
+    this.overlay.querySelector('#stageBtnPrevSong')?.addEventListener('click', () => {
+      this.setlistModal?.prevSong();
+      this.render();
+    });
+    this.overlay.querySelector('#stageBtnNextSong')?.addEventListener('click', () => {
+      this.setlistModal?.nextSong();
+      this.render();
+    });
+
     // Keyboard navigation while Stage Mode is open
     const keyHandler = (e) => {
       if (!this.isOpen()) {
@@ -212,6 +249,12 @@ export class StageModeModal {
         const current = presetEngine.currentSlot;
         const target = current > 1 ? current - 1 : 100;
         presetEngine.selectPreset(target);
+      } else if (e.key === 'PageDown' || e.key === 'n') {
+        this.setlistModal?.nextSong();
+        this.render();
+      } else if (e.key === 'PageUp' || e.key === 'p') {
+        this.setlistModal?.prevSong();
+        this.render();
       }
     };
 

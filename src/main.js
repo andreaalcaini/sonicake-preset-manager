@@ -20,6 +20,8 @@ import { ToneGeneratorModal } from './components/ToneGeneratorModal.js';
 import { HelpModal } from './components/HelpModal.js';
 import { SharePresetModal } from './components/SharePresetModal.js';
 import { ImportBundleModal } from './components/ImportBundleModal.js';
+import { SetlistModal } from './components/SetlistModal.js';
+import { BackingTrackModal } from './components/BackingTrackModal.js';
 import { decodePresetBundle } from './utils/bundle-encoder.js';
 
 class App {
@@ -47,7 +49,9 @@ class App {
     const saveModal = new SaveModal(document.getElementById('saveModalOverlay'));
     const exportModal = new ExportModal(document.getElementById('exportModalOverlay'));
     const slotTransferModal = new SlotTransferModal(document.getElementById('slotTransferModalOverlay'));
-    const stageModeModal = new StageModeModal(document.getElementById('stageModalOverlay'), tunerModal);
+    const setlistModal = new SetlistModal(document.getElementById('setlistModalOverlay'));
+    const backingTrackModal = new BackingTrackModal(document.getElementById('backingTrackModalOverlay'));
+    const stageModeModal = new StageModeModal(document.getElementById('stageModalOverlay'), tunerModal, setlistModal);
     const toneGenModal = new ToneGeneratorModal(document.getElementById('toneGenModalOverlay'));
     const helpModal = new HelpModal(document.getElementById('helpModalOverlay'));
     const importBundleModal = new ImportBundleModal(document.getElementById('importBundleModalOverlay'));
@@ -64,6 +68,8 @@ class App {
     this.exportModal = exportModal;
     this.slotTransferModal = slotTransferModal;
     this.stageModeModal = stageModeModal;
+    this.setlistModal = setlistModal;
+    this.backingTrackModal = backingTrackModal;
     this.toneGenModal = toneGenModal;
     this.helpModal = helpModal;
     this.importBundleModal = importBundleModal;
@@ -237,6 +243,42 @@ class App {
       drumModal.open();
     });
 
+    // Setlist Manager & Backing Track Player
+    document.getElementById('btnOpenSetlist')?.addEventListener('click', () => {
+      setlistModal.open();
+    });
+    document.getElementById('btnOpenBackingTrack')?.addEventListener('click', () => {
+      backingTrackModal.open();
+    });
+
+    // PWA Install Prompt Handling
+    let deferredInstallPrompt = null;
+    const btnInstallPwa = document.getElementById('btnInstallPwa');
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+    });
+
+    btnInstallPwa?.addEventListener('click', async () => {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        const { outcome } = await deferredInstallPrompt.userChoice;
+        if (outcome === 'accepted') {
+          connection.log('Sonicake Studio installato come App nativa!', 'success');
+        }
+        deferredInstallPrompt = null;
+      } else {
+        alert("Per installare Sonicake Studio come App nativa:\n\n• Su Chrome / Edge PC: Clicca sull'icona di installazione nella barra degli indirizzi del browser.\n• Su Android / iOS: Apri il menu del browser e seleziona 'Aggiungi a schermata Home' / 'Installa app'.");
+      }
+    });
+
+    // Register Service Worker for offline PWA operation
+    if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+      navigator.serviceWorker.register('/sw.js').catch(err => {
+        console.warn('Service worker registration failed:', err);
+      });
+    }
+
     // Mobile Presets Sidebar Drawer Toggle
     const btnTogglePresetsMobile = document.getElementById('btnTogglePresetsMobile');
     const presetSidebar = document.getElementById('presetSidebar');
@@ -315,6 +357,13 @@ class App {
       if (e.altKey && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         presetEngine.toggleAB();
+        return;
+      }
+
+      // Alt + S: Open Setlist / Scaletta Live
+      if (e.altKey && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        this.setlistModal.open();
         return;
       }
 

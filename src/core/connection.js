@@ -27,11 +27,17 @@ export class SonicakeConnection {
     this.messageHandlers = new Set();
     this.statusHandlers = new Set();
     this.logHandlers = new Set();
+    this.programChangeHandlers = new Set();
   }
 
   onMessage(callback) {
     this.messageHandlers.add(callback);
     return () => this.messageHandlers.delete(callback);
+  }
+
+  onProgramChange(callback) {
+    this.programChangeHandlers.add(callback);
+    return () => this.programChangeHandlers.delete(callback);
   }
 
   onStatusChange(callback) {
@@ -140,6 +146,19 @@ export class SonicakeConnection {
   handleUsbMidiMessage(event) {
     let data = event.data;
     if (!data || data.length === 0) return;
+
+    // Check for standard MIDI Program Change (0xC0 - 0xCF)
+    if ((data[0] & 0xF0) === 0xC0 && data.length >= 2) {
+      const pcSlot = data[1] + 1; // 1-based (1 to 100)
+      this.log(`Received MIDI Program Change from hardware: slot ${pcSlot}`, 'info');
+      this.programChangeHandlers.forEach(handler => handler(pcSlot));
+      return;
+    }
+
+    // Ignore non-SysEx MIDI packets if not in the middle of reassembling a SysEx buffer
+    if (this.usbMidiBuffer === null && data[0] !== 0xF0) {
+      return;
+    }
 
     // Check for SysEx (starts with F0, ends with F7)
     if (data.length < 4 || data[0] !== 0xF0 || data[data.length - 1] !== 0xF7) {

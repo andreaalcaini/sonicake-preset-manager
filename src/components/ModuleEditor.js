@@ -119,6 +119,9 @@ export class ModuleEditor {
           </div>
         </div>
 
+        <!-- Interactive EQ Visualizer Curve (Module 5 EQ) -->
+        ${effectiveModuleId === 5 ? this.renderEqVisualizer(currentFxId, currentParams, effectDef) : ''}
+
         <!-- Parameters Controls Responsive Grid -->
         <div class="controls-panel grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
           ${effectDef.alg && effectDef.alg.length > 0 
@@ -421,6 +424,50 @@ export class ModuleEditor {
         presetEngine.setParameter(modId, algId, nextVal);
       });
     });
+
+    // EQ Visualizer Interactive Curve Node Dragging (Module 5 EQ)
+    const eqHandles = this.container.querySelectorAll('.eq-node-handle');
+    eqHandles.forEach(handle => {
+      const algId = parseInt(handle.dataset.algId, 10);
+      const startDrag = (clientY) => {
+        const currentParams = presetEngine.activePreset.parameters[5] || {};
+        const startGain = currentParams[algId] !== undefined ? currentParams[algId] : 0;
+
+        const onMove = (moveY) => {
+          const deltaY = clientY - moveY;
+          let nextGain = Math.round(startGain + (deltaY / 60) * 50);
+          nextGain = Math.max(-50, Math.min(50, nextGain));
+          presetEngine.setParameter(5, algId, nextGain);
+        };
+
+        const onMouseMove = (e) => onMove(e.clientY);
+        const onTouchMove = (e) => {
+          if (e.touches && e.touches[0]) onMove(e.touches[0].clientY);
+        };
+        const onUp = () => {
+          window.removeEventListener('mousemove', onMouseMove);
+          window.removeEventListener('mouseup', onUp);
+          window.removeEventListener('touchmove', onTouchMove);
+          window.removeEventListener('touchend', onUp);
+          window.removeEventListener('touchcancel', onUp);
+        };
+
+        window.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onUp);
+        window.addEventListener('touchmove', onTouchMove, { passive: true });
+        window.addEventListener('touchend', onUp);
+        window.addEventListener('touchcancel', onUp);
+      };
+
+      handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        startDrag(e.clientY);
+      });
+      handle.addEventListener('touchstart', (e) => {
+        if (!e.touches || !e.touches[0]) return;
+        startDrag(e.touches[0].clientY);
+      }, { passive: true });
+    });
   }
 
   handleMouseMove(e) {
@@ -485,5 +532,146 @@ export class ModuleEditor {
     if (valDisplay && !valDisplay.querySelector('input')) {
       valDisplay.textContent = Math.round(value);
     }
+  }
+
+  renderEqVisualizer(currentFxId, currentParams, effectDef) {
+    let bands = [];
+    if (currentFxId === 503) {
+      // Bass EQ (503)
+      bands = [
+        { name: '50Hz', freq: 50, algId: 0 },
+        { name: '120Hz', freq: 120, algId: 1 },
+        { name: '400Hz', freq: 400, algId: 2 },
+        { name: '800Hz', freq: 800, algId: 3 },
+        { name: '4.5kHz', freq: 4500, algId: 4 }
+      ];
+    } else if (currentFxId === 502) {
+      // GT EQ 2 (502)
+      bands = [
+        { name: '100Hz', freq: 100, algId: 0 },
+        { name: '500Hz', freq: 500, algId: 1 },
+        { name: '1kHz', freq: 1000, algId: 2 },
+        { name: '3kHz', freq: 3000, algId: 3 },
+        { name: '6kHz', freq: 6000, algId: 4 }
+      ];
+    } else {
+      // GT EQ 1 (501 / Default)
+      bands = [
+        { name: '125Hz', freq: 125, algId: 0 },
+        { name: '400Hz', freq: 400, algId: 1 },
+        { name: '800Hz', freq: 800, algId: 2 },
+        { name: '1.6kHz', freq: 1600, algId: 3 },
+        { name: '4kHz', freq: 4000, algId: 4 }
+      ];
+    }
+
+    const width = 760;
+    const height = 180;
+    const padX = 42;
+    const padY = 22;
+    const plotW = width - padX * 2;
+    const plotH = height - padY * 2;
+    const centerY = padY + plotH / 2;
+
+    const minFreq = 20;
+    const maxFreq = 20000;
+    const logMin = Math.log10(minFreq);
+    const logMax = Math.log10(maxFreq);
+
+    const freqToX = (f) => padX + ((Math.log10(f) - logMin) / (logMax - logMin)) * plotW;
+    const gainToY = (g) => centerY - (g / 50) * (plotH / 2);
+
+    // Compute curve path with 120 interpolated sample points
+    const pointsCount = 120;
+    const pathPoints = [];
+    for (let i = 0; i <= pointsCount; i++) {
+      const frac = i / pointsCount;
+      const f = Math.pow(10, logMin + frac * (logMax - logMin));
+      let totalGain = 0;
+
+      bands.forEach(b => {
+        const bandGain = (currentParams[b.algId] !== undefined ? currentParams[b.algId] : 0);
+        const dist = Math.log10(f) - Math.log10(b.freq);
+        const weight = Math.exp(- (dist * dist) / (2 * 0.17 * 0.17));
+        totalGain += bandGain * weight;
+      });
+
+      const x = padX + frac * plotW;
+      const y = Math.max(padY, Math.min(height - padY, centerY - (totalGain / 50) * (plotH / 2)));
+      pathPoints.push({ x, y });
+    }
+
+    const dPath = pathPoints.map((p, idx) => `${idx === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+    const dArea = `${dPath} L ${pathPoints[pathPoints.length - 1].x.toFixed(1)} ${centerY} L ${pathPoints[0].x.toFixed(1)} ${centerY} Z`;
+
+    const gridFreqs = [50, 100, 250, 500, 1000, 2000, 4000, 8000, 16000];
+    const gridDbs = [12, 6, 0, -6, -12];
+
+    return `
+      <div class="eq-visualizer-card p-3 rounded-xl bg-zinc-950 border border-zinc-800 shadow-inner flex flex-col gap-2">
+        <div class="flex items-center justify-between text-xs px-1">
+          <span class="font-mono font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M7 16l4-8 4 6 4-10"/></svg>
+            <span>Curva di Risposta in Frequenza (EQ Studio)</span>
+          </span>
+          <span class="text-[11px] text-zinc-500 font-mono">Trascina i nodi per regolare il guadagno (-50..+50 dB)</span>
+        </div>
+
+        <div class="relative w-full overflow-hidden select-none">
+          <svg viewBox="0 0 ${width} ${height}" class="w-full h-auto max-h-48 rounded-lg bg-zinc-900/90 border border-zinc-800/80">
+            <defs>
+              <linearGradient id="eqFillGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#06b6d4" stop-opacity="0.3"/>
+                <stop offset="50%" stop-color="#06b6d4" stop-opacity="0.05"/>
+                <stop offset="100%" stop-color="#06b6d4" stop-opacity="0.25"/>
+              </linearGradient>
+            </defs>
+
+            <!-- Horizontal dB Grid Lines -->
+            ${gridDbs.map(db => {
+              const y = centerY - (db / 15) * (plotH / 2);
+              const isZero = db === 0;
+              return `
+                <line x1="${padX}" y1="${y}" x2="${width - padX}" y2="${y}" stroke="${isZero ? '#52525b' : '#27272a'}" stroke-width="${isZero ? '1.5' : '1'}" stroke-dasharray="${isZero ? '' : '3,3'}"/>
+                <text x="${padX - 8}" y="${y + 3}" text-anchor="end" class="text-[9px] fill-zinc-500 font-mono">${db > 0 ? '+' : ''}${db}dB</text>
+              `;
+            }).join('')}
+
+            <!-- Vertical Freq Grid Lines -->
+            ${gridFreqs.map(f => {
+              const x = freqToX(f);
+              const label = f >= 1000 ? `${f / 1000}k` : `${f}`;
+              return `
+                <line x1="${x}" y1="${padY}" x2="${x}" y2="${height - padY}" stroke="#27272a" stroke-width="1" stroke-dasharray="3,3"/>
+                <text x="${x}" y="${height - padY + 14}" text-anchor="middle" class="text-[9px] fill-zinc-500 font-mono">${label}</text>
+              `;
+            }).join('')}
+
+            <!-- Area Fill -->
+            <path d="${dArea}" fill="url(#eqFillGrad)"/>
+
+            <!-- Response Curve Line -->
+            <path d="${dPath}" fill="none" stroke="#22d3ee" stroke-width="2.5" stroke-linecap="round"/>
+
+            <!-- Interactive Band Nodes -->
+            ${bands.map(b => {
+              const gain = (currentParams[b.algId] !== undefined ? currentParams[b.algId] : 0);
+              const cx = freqToX(b.freq);
+              const cy = gainToY(gain);
+              return `
+                <g class="eq-node-handle cursor-grab active:cursor-grabbing" data-alg-id="${b.algId}" data-band-name="${b.name}" data-cx="${cx}" data-freq="${b.freq}">
+                  <circle cx="${cx}" cy="${cy}" r="12" fill="transparent" class="hover:fill-cyan-500/20 transition-all"/>
+                  <circle cx="${cx}" cy="${cy}" r="6" fill="#06b6d4" stroke="#ecfeff" stroke-width="2" class="filter drop-shadow"/>
+                  <rect x="${cx - 24}" y="${cy < centerY ? cy - 24 : cy + 10}" width="48" height="15" rx="3" fill="#09090b" fill-opacity="0.8" stroke="#3f3f46" stroke-width="0.5"/>
+                  <text x="${cx}" y="${cy < centerY ? cy - 13 : cy + 21}" text-anchor="middle" class="text-[9px] font-bold font-mono fill-cyan-300">
+                    ${gain > 0 ? '+' : ''}${gain}
+                  </text>
+                </g>
+              `;
+            }).join('')}
+          </svg>
+        </div>
+      </div>
+    `;
   }
 }

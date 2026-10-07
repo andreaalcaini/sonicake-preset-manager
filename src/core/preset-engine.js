@@ -42,8 +42,23 @@ export class PresetEngine {
     this.cloneSlotMetadata = [null, null, null, null, null];
     this.irSlotMetadata = [null, null, null, null, null];
 
+    try {
+      const savedCloneMeta = localStorage.getItem('sonicake_clone_metadata');
+      if (savedCloneMeta) this.cloneSlotMetadata = JSON.parse(savedCloneMeta);
+      const savedIrMeta = localStorage.getItem('sonicake_ir_metadata');
+      if (savedIrMeta) this.irSlotMetadata = JSON.parse(savedIrMeta);
+      const savedCloneNames = localStorage.getItem('sonicake_clone_names');
+      if (savedCloneNames) this.cloneSlotNames = JSON.parse(savedCloneNames);
+      const savedIrNames = localStorage.getItem('sonicake_ir_names');
+      if (savedIrNames) this.irSlotNames = JSON.parse(savedIrNames);
+    } catch (e) {
+      console.warn('Could not restore slot metadata from localStorage:', e);
+    }
+
     // Active Preset State
     this.activePreset = this.createDefaultPreset('U01: Init Tone');
+    this.presetCache = new Map();
+    this.presetCache.set(1, JSON.parse(JSON.stringify(this.activePreset)));
 
     // A/B Comparison States
     this.abState = {
@@ -173,6 +188,70 @@ export class PresetEngine {
     return preset;
   }
 
+  createDefaultPresetForSlot(slotNumber, name) {
+    const slotCode = this.getSlotCode(slotNumber);
+    const cleanName = (name || `Preset ${slotCode}`).slice(0, 10);
+
+    const ampCycle = [
+      301, 308, 303, 304, 311, 315, 305, 306, 312, 317, 307, 318, 302, 319, 320, 314
+    ];
+    const cabCycle = [
+      405, 410, 406, 404, 411, 414, 408, 409, 412, 415, 407, 413, 402, 414, 415, 410
+    ];
+    const drvCycle = [
+      201, 202, 203, 204, 205, 206, 207, 208
+    ];
+    const modCycle = [
+      609, 611, 612, 615, 601, 607, 610, 614
+    ];
+
+    const idx = (slotNumber - 1);
+    const ampId = ampCycle[idx % ampCycle.length];
+    const cabId = cabCycle[idx % cabCycle.length];
+    const drvId = drvCycle[idx % drvCycle.length];
+    const modId = modCycle[idx % modCycle.length];
+
+    const isLeadOrCrunch = (idx % 2 === 1);
+    const hasMod = (idx % 3 === 0);
+    const hasDelay = (idx % 2 === 0);
+
+    const preset = {
+      name: cleanName,
+      volume: 75,
+      states: {
+        0: true,                  // NR on
+        1: false,                 // FX1
+        2: isLeadOrCrunch,        // DRV on for crunch/lead
+        3: true,                  // AMP on
+        4: true,                  // IR on
+        5: (idx % 4 === 2),       // EQ on sometimes
+        6: hasMod,                // MOD on sometimes
+        7: hasDelay,              // DLY on
+        8: true                   // RVB on
+      },
+      order: [0, 1, 2, 3, 4, 5, 6, 7, 8],
+      ampMode: 'factory',
+      selectedEffects: {
+        0: 1,                     // Gate
+        1: 101,                   // COMP 1
+        2: drvId,                 // Varied Overdrive / Distortion
+        3: ampId,                 // Varied Amp
+        4: cabId,                 // Varied Cabinet
+        5: 501,                   // GT EQ 1
+        6: modId,                 // Varied Modulation
+        7: 701 + (idx % 8),       // Varied Delay
+        8: 801 + (idx % 10),      // Varied Reverb
+        9: 901                    // Clone Profile 1
+      },
+      parameters: {}
+    };
+
+    for (const [mod, fxId] of Object.entries(preset.selectedEffects)) {
+      preset.parameters[mod] = this.getDefaultParametersForFx(fxId);
+    }
+    return preset;
+  }
+
   getDefaultParametersForFx(fxId) {
     const params = {};
     const effectDef = MODULE_LIBRARY_DATA.effectLibrary[fxId];
@@ -189,6 +268,9 @@ export class PresetEngine {
   setupHardwareListeners() {
     connection.onMessage((hexString) => {
       this.handleIncomingSysEx(hexString);
+    });
+    connection.onProgramChange((slot) => {
+      this.selectPreset(slot, false);
     });
   }
 
@@ -269,9 +351,10 @@ export class PresetEngine {
     }
 
     // 5. Preset Number Response (extract 2 nibbles at chars 30..34)
-    if (this.isWaitingForPresetNumber) {
+    if (this.isWaitingForPresetNumber || (cleanHex.indexOf('0201020403') >= 0 && cleanHex.length >= 34)) {
       this.parseActivePresetSlotResponse(cleanHex);
       this.isWaitingForPresetNumber = false;
+      return;
     }
   }
 
@@ -322,12 +405,41 @@ export class PresetEngine {
       const slot = presetIndex + 1; // 1 to 100
 
       if (slot >= 1 && slot <= 100) {
-        this.currentSlot = slot;
-        const presetItem = this.presetList[slot - 1];
-        if (presetItem) {
-          this.activePreset.name = presetItem.name;
+        if (slot !== this.currentSlot) {
+          // 1. Cache previous preset if valid
+          if (this.currentSlot >= 1 && this.currentSlot <= 100 && this.activePreset) {
+            this.presetCache.set(this.currentSlot, JSON.parse(JSON.stringify(this.activePreset)));
+          }
+
+          this.currentSlot = slot;
+          const presetItem = this.presetList[slot - 1];
+          const targetName = presetItem ? presetItem.name : this.getSlotCode(slot);
+
+          if (this.presetCache.has(slot)) {
+            this.activePreset = JSON.parse(JSON.stringify(this.presetCache.get(slot)));
+            if (presetItem && presetItem.name) {
+              this.activePreset.name = presetItem.name;
+            }
+          } else {
+            this.activePreset = this.createDefaultPresetForSlot(slot, targetName);
+            this.presetCache.set(slot, JSON.parse(JSON.stringify(this.activePreset)));
+          }
+
+          this.isDirty = false;
+          this.undoStack = [];
+          this.redoStack = [];
+
+          this.emit('slotChange', this.currentSlot);
+          this.emit('dirtyChange', false);
+          this.emit('stateChange', this.activePreset);
+        } else {
+          const presetItem = this.presetList[slot - 1];
+          if (presetItem) {
+            this.activePreset.name = presetItem.name;
+          }
+          this.emit('slotChange', this.currentSlot);
         }
-        this.emit('slotChange', this.currentSlot);
+
         connection.log(`Active Hardware Preset: ${this.getSlotCode(slot)} - ${this.activePreset.name}`, 'success');
         // Fetch preset parameters for this active slot
         setTimeout(() => this.syncCurrentPresetState(), 100);
@@ -386,7 +498,9 @@ export class PresetEngine {
 
       // Update active preset
       this.activePreset.volume = stateOrder.presetVolume || 75;
-      this.activePreset.states = { ...this.activePreset.states, ...stateOrder.states };
+      if (stateOrder.states && Object.keys(stateOrder.states).length > 0) {
+        this.activePreset.states = stateOrder.states;
+      }
       this.activePreset.order = stateOrder.order || [0, 1, 2, 3, 4, 5, 6, 7, 8];
       this.activePreset.ampMode = stateOrder.ampMode || 'factory';
       this.activePreset.selectedEffects = { ...this.activePreset.selectedEffects, ...effects.selectedEffects };
@@ -400,6 +514,9 @@ export class PresetEngine {
           ...parameters[modId]
         };
       }
+
+      // Update presetCache with the genuine hardware settings
+      this.presetCache.set(this.currentSlot, JSON.parse(JSON.stringify(this.activePreset)));
 
       this.isDirty = false;
       this.emit('dirtyChange', false);
@@ -506,30 +623,70 @@ export class PresetEngine {
     await connection.writeCommand(REQUEST_PRESET_STATE_CMD);
   }
 
-  // --- Preset Manipulation & Commands ---
+  getPresetSwitchCommand(slotNumber) {
+    if (slotNumber < 1 || slotNumber > 100) return null;
+    if (slotNumber <= 50) {
+      const pCode = `P${String(slotNumber).padStart(2, '0')}`;
+      return COMMAND_LIBRARY_DATA.presetCommands?.user?.[pCode] || null;
+    } else {
+      const fCode = `F${String(slotNumber - 50).padStart(2, '0')}`;
+      return COMMAND_LIBRARY_DATA.presetCommands?.factory?.[fCode] || null;
+    }
+  }
 
   async selectPreset(slotNumber, syncHardware = true) {
     if (slotNumber < 1 || slotNumber > 100) return;
+
+    // 1. Save currently edited preset into cache before switching away
+    if (this.currentSlot >= 1 && this.currentSlot <= 100 && this.activePreset) {
+      this.presetCache.set(this.currentSlot, JSON.parse(JSON.stringify(this.activePreset)));
+    }
+
+    // 2. Set active slot index
     this.currentSlot = slotNumber;
     const presetItem = this.presetList[slotNumber - 1];
-    if (presetItem) {
-      this.activePreset.name = presetItem.name;
+    const targetName = presetItem ? presetItem.name : this.getSlotCode(slotNumber);
+
+    // 3. Load target preset from cache or generate preset template
+    if (this.presetCache.has(slotNumber)) {
+      this.activePreset = JSON.parse(JSON.stringify(this.presetCache.get(slotNumber)));
+      if (presetItem && presetItem.name) {
+        this.activePreset.name = presetItem.name;
+      }
+    } else {
+      this.activePreset = this.createDefaultPresetForSlot(slotNumber, targetName);
+      this.presetCache.set(slotNumber, JSON.parse(JSON.stringify(this.activePreset)));
     }
+
     this.isDirty = false;
     this.undoStack = [];
     this.redoStack = [];
 
+    // 4. Immediately notify UI listeners (Header, SignalChain, ModuleEditor)
     this.emit('slotChange', this.currentSlot);
     this.emit('dirtyChange', false);
     this.emit('stateChange', this.activePreset);
 
+    // 5. Hardware Synchronization: Transmit preset change to physical pedalboard
     if (syncHardware && connection.isConnected) {
-      const commandIndex = slotNumber - 1;
-      const cmd = COMMAND_LIBRARY_DATA.presetCommands?.[commandIndex];
+      const cmd = this.getPresetSwitchCommand(slotNumber);
       if (cmd) {
         await connection.writeCommand(cmd);
         connection.log(`Switched to preset ${this.getSlotCode(slotNumber)}: ${this.activePreset.name}`, 'info');
+
+        // Optional standard MIDI Program Change on USB
+        if (connection.connectionType === 'usb' && connection.midiOutput) {
+          try {
+            connection.midiOutput.send([0xC0, (slotNumber - 1) & 0x7F]);
+          } catch (e) {
+            // Ignore optional PC error
+          }
+        }
+
+        // Give the DSP 100ms to switch to the new patch, then fetch its real parameters
         setTimeout(() => this.syncCurrentPresetState(), 100);
+      } else {
+        connection.log(`No hardware command mapped for slot ${slotNumber}`, 'warning');
       }
     }
   }
@@ -680,6 +837,11 @@ export class PresetEngine {
       this.presetList[targetSlot - 1].name = cleanName;
     }
 
+    // Cache the saved preset for this slot
+    const savedPresetData = JSON.parse(JSON.stringify(this.activePreset));
+    savedPresetData.name = cleanName;
+    this.presetCache.set(targetSlot, savedPresetData);
+
     if (targetSlot === this.currentSlot || options.switchSlot) {
       this.currentSlot = targetSlot;
       this.activePreset.name = cleanName;
@@ -705,6 +867,9 @@ export class PresetEngine {
     // Apply preset data to engine
     this.applySnapshot(presetData);
     this.activePreset.name = cleanName;
+
+    // Cache the written preset for targetSlot
+    this.presetCache.set(targetSlot, JSON.parse(JSON.stringify(this.activePreset)));
 
     if (connection.isConnected) {
       await new Promise(r => setTimeout(r, 120));
@@ -978,6 +1143,11 @@ export class PresetEngine {
       this.emit('stateChange', this.activePreset);
     }
 
+    try {
+      localStorage.setItem('sonicake_clone_metadata', JSON.stringify(this.cloneSlotMetadata));
+      localStorage.setItem('sonicake_clone_names', JSON.stringify(this.cloneSlotNames));
+    } catch (e) {}
+
     this.emit('userSlotsChange', { type: 'Clone', names: this.cloneSlotNames });
     connection.log(`Aggiornato slot memoria Clone Profile ${idx + 1}: "${cleanName}" (Preset invariati)`, 'success');
   }
@@ -1026,8 +1196,32 @@ export class PresetEngine {
       this.emit('stateChange', this.activePreset);
     }
 
+    try {
+      localStorage.setItem('sonicake_ir_metadata', JSON.stringify(this.irSlotMetadata));
+      localStorage.setItem('sonicake_ir_names', JSON.stringify(this.irSlotNames));
+    } catch (e) {}
+
     this.emit('userSlotsChange', { type: 'IR', names: this.irSlotNames });
     connection.log(`Aggiornato slot memoria User IR ${idx + 1}: "${cleanName}" (Preset invariati)`, 'success');
+  }
+
+  async activateCloneSlot(slotIndex, syncHardware = true) {
+    const idx = Math.max(0, Math.min(4, parseInt(slotIndex, 10) || 0));
+    const fxId = 901 + idx;
+    await this.setAmpMode('clone', syncHardware);
+    await this.setEffectType(9, fxId, syncHardware);
+    this.activePreset.tone3000Model = this.cloneSlotMetadata[idx];
+    this.emit('stateChange', this.activePreset);
+    connection.log(`Sintonizzata pedaliera su Slot Clone NAM ${idx + 1}: "${this.cloneSlotNames[idx]}"`, 'info');
+  }
+
+  async activateIRSlot(slotIndex, syncHardware = true) {
+    const idx = Math.max(0, Math.min(4, parseInt(slotIndex, 10) || 0));
+    const fxId = 416 + idx;
+    await this.setEffectType(4, fxId, syncHardware);
+    this.activePreset.tone3000Model = this.irSlotMetadata[idx];
+    this.emit('stateChange', this.activePreset);
+    connection.log(`Sintonizzata pedaliera su Slot User IR ${idx + 1}: "${this.irSlotNames[idx]}"`, 'info');
   }
 
   applyTone3000(tone, targetSlot = 0, updateActivePreset = false) {

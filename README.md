@@ -1,133 +1,172 @@
-# 🎸 Sonicake Smart Box & Pocket Master — PC Preset Manager
+<div align="center">
 
-[![Vite](https://img.shields.io/badge/Vite-6.0-646CFF?logo=vite&logoColor=white)](https://vitejs.dev/)
-[![Web MIDI API](https://img.shields.io/badge/Web_MIDI-Supported-00E5FF?logo=midi&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/Web_MIDI_API)
-[![Web Bluetooth](https://img.shields.io/badge/Web_Bluetooth-BLE_GATT-0082FC?logo=bluetooth&logoColor=white)](https://developer.mozilla.org/en-US/docs/Web/API/Web_Bluetooth_API)
-[![Tone3000 API](https://img.shields.io/badge/Tone3000-Neural_Amp_Modeler-FF0080)](https://tone3000.com)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+# 🎛️ Sonicake Studio Preset Manager
 
-Applicazione desktop professionale per **Sonicake Smart Box (QME-20)** e **Pocket Master (QME-10)**.
+**Editor visivo e Preset Manager moderno, gratuito e open-source per pedaliere Sonicake.**  
+*Gestisci la catena degli effetti, sfoglia la libreria Tone3000 con le variazioni dei modelli NAM/IR e controlla la tua pedaliera via USB o Bluetooth BLE da PC, Mac, tablet e smartphone.*
 
-Sviluppata per sostituire e superare l'app mobile **SonicLink**, offre un'interfaccia skeuomorfica stile Neural DSP Cortex / Helix, connettività bidirezionale sia **USB MIDI** che **Bluetooth BLE wireless**, gestione separata della **memoria interna file (5 profili Clone NAM + 5 User Cabinet IR)**, integrazione con **Tone3000**, accordatore cromatico in tempo reale, drum machine con tap tempo, e la modalità **Stage Mode** ad alta visibilità per suonare dal vivo.
+[![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20PWA%20%7C%20Touch-cyan.svg)](#)
+[![Web MIDI](https://img.shields.io/badge/Web%20MIDI-Supported-emerald.svg)](#)
+[![Web Bluetooth](https://img.shields.io/badge/Web%20Bluetooth-BLE%20Wireless-blue.svg)](#)
+[![Tailwind CSS](https://img.shields.io/badge/TailwindCSS-v3.4-38bdf8.svg)](https://tailwindcss.com/)
+[![Vite](https://img.shields.io/badge/Vite-6.0-646CFF.svg)](https://vitejs.dev/)
 
----
-
-## ⚡ Caratteristiche Principali
-
-### 1. Connettività Doppia: USB MIDI & Bluetooth BLE
-* **USB MIDI Diretto:** Rilevamento istantaneo su Windows, macOS e Linux tramite standard Web MIDI API.
-* **Bluetooth BLE Wireless:** Connessione al servizio GATT proprietario Sonicake (`03b80e5a-ede8-4b33-a751-6ce34ec4c700`) senza bisogno di dongle o driver proprietari.
-* **Sincronizzazione Bidirezionale:** Ogni rotazione di potenziometro o cambio di effetto viene trasmesso alla pedaliera in tempo reale via SysEx con calcolo automatico del checksum **SMBus PEC CRC8**.
-
-### 2. Gestione Completa dei 100 Preset Hardware
-* **50 Slot Utente (U01–U50):** Modificabili, rinominabili e salvabili con protezione contro la sovrascrittura accidentale.
-* **50 Slot Factory (F01–F50):** Banchi sonori ufficiali di fabbrica sempre a portata di mano.
-* **Preferiti con Stella (⭐):** Filtro rapido per salvare i tuoi preset preferiti nei segnalibri.
-* **Scambio di Posizione (Swap 🔁):** Riordina la tua scaletta per i concerti scambiando di posto due preset con un click.
-* **Import / Export Multi-Formato:**
-  * **`.prst` nativo:** file binario ufficiale da 527 byte compatibile con l'app mobile SonicLink.
-  * **`.json` completo:** formato human-readable compatibile con PocketEdit ed editor web.
-  * **Backup completo:** salva tutti i 50 preset utente in un unico file per ripristinarli quando vuoi.
-
-### 3. Gestione Memoria File Interni (5 Clone NAM + 5 User IR) & Variazioni Tone3000
-* **Pulsante dedicato `⚡ Tone3000 & Memoria`:**
-  * Permette di gestire i **10 slot della memoria file interna** della Smart Box:
-    * **5 Slot Clone AMP / NAM (901–905):** Modelli Neural Amp Modeler proprietari.
-    * **5 Slot User Cabinet IR (416–420):** Risposte all'impulso `.wav` per le casse.
-  * **Zero interferenze con i preset:** Salvare o sostituire un file nella memoria interna lavora unicamente sui 10 slot hardware, **senza intaccare o sovrascrivere i tuoi 50 preset utente**!
-  * **Caricamento file da PC:** Puoi caricare direttamente file locali `.nam` e `.wav` dal tuo computer.
-  * **Libreria Online Tone3000 & Selettore Variazioni del Creatore:** Cerca tra migliaia di catture NAM e cabinet IR sul cloud. Quando selezioni un tone, puoi **scegliere tra tutte le variazioni caricate dal creatore** (es. Clean, Crunch, Lead, canali differenti o microfonazioni SM57/R121) e salvare la variazione desiderata direttamente nello slot di memoria interna scelto!
-
-### 4. Condivisione Preset 1-Click (Link Web & File Bundle `.sonicbundle`)
-* **Pulsante `🔗 Condividi` (Ctrl+Shift+S):**
-  * **Link Diretto di Condivisione (1-Click URL):** Genera un link web sicuro che racchiude tutta la catena degli effetti, i parametri e le informazioni del modello Tone3000. Puoi incollarlo ovunque (WhatsApp, Discord, forum).
-  * **File Bundle `.sonicbundle`:** Scarica un pacchetto completo per archiviare o scambiare preset con altri chitarristi.
-  * **Richiesta Slot di Destinazione su Apertura:** Quando un utente apre un link o importa un file bundle contenente un modello Tone3000 (Clone NAM o IR), l'applicazione mostra un dialogo interattivo chiedendo **in quale dei 5 slot della memoria interna hardware** si desidera salvare il modello scaricato, applicando poi la catena all'istante senza toccare gli altri preset!
-
-### 5. Rack Effetti Interattivo & Manopole Rotary 270°
-* **9 Moduli del segnale:** `NR` (Noise Gate), `FX1` (Comp/Wah), `DRV` (Overdrive/Dist/Fuzz), `AMP` (Amplificatori/NAM), `IR` (Cabinet), `EQ` (Equalizzatore), `FX2` (Modulazioni/Pitch), `DLY` (Delay), `RVB` (Riverberi).
-* **Riordinamento del segnale:** Sposta qualsiasi modulo avanti o indietro per creare catene personalizzate (es. Delay prima del Riverbero, Chorus prima del Drive, ecc.).
-* **Potenziometri Skeuomorfici:** Controllo a trascinamento verticale fluido, supporto alla rotellina del mouse e doppio click per digitare il valore esatto.
-
-### 5. Modalità Palco ad Alta Visibilità (🎤 Stage Mode)
-* Schermata a tutto schermo ad alto contrasto per concerti e prove:
-  * Codice e nome preset giganti visibili a metri di distanza.
-  * Mattonelle LED grandi dei 9 moduli con stato On/Bypass cliccabile al volo.
-  * Pulsanti di navigazione `◀ PREV` e `NEXT ▶` azionabili con i tasti freccia della tastiera o pedaliere footswitch esterne.
-  * Accesso istantaneo all'accordatore.
-
-### 6. Accordatore Cromatico in Tempo Reale
-* Analisi audio in tempo reale ad alta precisione tramite algoritmo di autocorrelazione Web Audio.
-* **Selettore sorgente audio:** Puoi selezionare direttamente l'ingresso USB della Sonicake Smart Box o la tua scheda audio.
-* Ago dei centesimi calibrato (-50 a +50 cents) e luce verde neon quando la corda è intonata a 440 Hz.
-
-### 7. Drum Machine Integrata & Tap Tempo
-* 100 ritmi di batteria suddivisi in 8 generi (Rock, Pop, Blues, Jazz, Funk, Elettronica, World, Metronomo).
-* Slider BPM (40–250) con pulsante Tap Tempo e sintetizzatore audio integrato.
-
-### 8. Generatore Intelligente di Suoni (✨ Smart Tone)
-* Genera istantaneamente preset bilanciati per stili iconici: *Texas Blues, Dream Clean & Ambient, 80s Sunset Strip, Djent Modern Metal, Funk Rhythm, Psych Rock Fuzz*.
+</div>
 
 ---
 
-## 🚀 Installazione e Avvio Rapido
+## 📖 Panoramica del Progetto
 
-### Requisiti
-* [Node.js](https://nodejs.org/) (versione 18 o superiore consigliata)
-* Browser con supporto a Web MIDI e Web Bluetooth (**Google Chrome**, **Microsoft Edge**, **Brave** o **Opera**)
+Le pedaliere **Sonicake** (come la Smart Box e la serie compatibile) offrono timbriche eccellenti con supporto ai profili **Neural Amp Modeler (.nam)** e risposte all'impulso **IR (.wav)**. Tuttavia, non dispongono di un editor desktop ufficiale completo e multipiattaforma.
 
-### Avvio su PC:
-1. Scarica o clona il repository:
-   ```bash
-   git clone https://github.com/your-username/sonicake-preset-manager.git
-   cd sonicake-preset-manager
-   ```
-2. Installa le dipendenze:
-   ```bash
-   npm install
-   ```
-3. Avvia il server di sviluppo:
-   ```bash
-   npm run dev
-   ```
-4. Apri il browser all'indirizzo: `http://localhost:5173` (oppure fai doppio click su `start.bat` su Windows).
+**Sonicake Studio Preset Manager** nasce per colmare questa esigenza: un'applicazione web nativa, velocissima, con estetica studio hardware (ispirata a *Quad Cortex*, *UAD* e *Ableton*), senza pubblicità e **100% gratuita**. 
+
+Funziona direttamente dal browser sfruttando gli standard moderni **Web MIDI** e **Web Bluetooth**, senza dover installare driver o software di terze parti.
 
 ---
 
-## ⌨️ Scorciatoie da Tastiera
+## ✨ Funzionalità Principali
 
-| Tasto | Azione |
+### 🎛️ 1. Editor Visivo della Catena Effetti
+- **9 Blocchi Modellati in Tempo Reale:** NR (Noise Gate), WAH/FX1, COMP/DRV, PRE/AMP, CAB/IR, EQ, MOD/FX2, DLY, REV.
+- **Riconfigurazione del Segnale:** Attiva, disattiva in bypass e riordina i blocchi con un tocco.
+- **Supporto Touch Nativo per Tablet & Smartphone:** Le manopole rotative graduate (rotary knobs) rispondono al trascinamento touch su iPad, tablet Android e telefoni.
+- **Confronto Istantaneo A/B:** Ascolta istantaneamente la differenza tra il suono originale e le modifiche con un solo clic o con la scorciatoia `Alt + A`.
+- **Annulla / Ripristina (Undo/Redo):** Storico illimitato delle modifiche con `Ctrl + Z` e `Ctrl + Y`.
+
+### 🌐 2. Tone3000 Cloud Explorer & Variazioni del Modello
+- **Ricerca Diretta nel Cloud:** Sfoglia migliaia di amplificatori NAM e casse IR della community di Tone3000.
+- **Selettore Variazioni del Creatore:** Quando selezioni un tone, visualizzi il menu con tutte le variazioni caricate dall'autore (es. *Clean, Crunch, Lead, High Gain, SM57, R121*) per scaricare esattamente il timbro che desideri.
+- **Gestione Memoria File Interni (5 NAM + 5 IR):** I file scaricati vengono scritti negli slot hardware dedicati (Slot NAM 1–5 e Slot IR 1–5), **senza rischiare di sovrascrivere o alterare i tuoi 50 preset utente**.
+- **Caricamento Locale:** Trascina o carica direttamente i tuoi file `.nam` o `.wav` dal computer negli slot interni.
+
+### 🔗 3. Condivisione Preset 1-Click (Web Link & File Bundle)
+- **Condivisione Istantanea via Link:** Genera con un clic un URL compatto e condivisibile contenente l'intera catena e tutti i parametri.
+- **File `.sonicbundle`:** Pacchetto completo che include la catena degli effetti e i metadati del profilo Tone3000 utilizzato.
+- **Scelta Slot all'Importazione:** Chi apre il link o importa il bundle viene guidato nella scelta dello slot della memoria interna (NAM o IR) in cui salvare il file, applicando la catena in modo sicuro.
+
+### 📶 4. Doppia Connettività (USB MIDI & Wireless Bluetooth BLE)
+- **USB MIDI Diretto:** Connessione stabile via cavo USB Type-C con rilevamento automatico della pedaliera.
+- **Bluetooth BLE Wireless:** Connettiti al modulo Bluetooth nativo della pedaliera per modificare i suoni comodamente senza fili.
+- **Sincronizzazione Bidirezionale:** Ogni rotazione hardware o modifica software viene scambiata istantaneamente con calcolo del checksum di controllo (*SMBus PEC CRC8*).
+
+### 💾 5. Gestione Completa dei 100 Preset Hardware
+- **50 Slot Utente (U01–U50):** Rinomina, modifica e salva i tuoi suoni con protezione da sovrascritture accidentali.
+- **50 Slot Factory (F01–F50):** Banchi di fabbrica originali sempre consultabili e richiamabili.
+- **Carica su Slot Libero:** Invia il preset attivo a qualsiasi slot (da U01 a U50) con anteprima e conferma.
+- **Backup & Ripristino:** Esporta e importa l'intero banco da 50/100 preset in formato nativo `.prst` o `.json`.
+
+### 🧰 6. Toolkit Integrato per Musicisti
+- **Curva Grafica Interattiva per l'Equalizzatore (EQ Visualizer):** Grafico studio della risposta in frequenza (20 Hz - 20 kHz, -15 a +15 dB) con nodi interattivi trascinabili per scolpire il suono visivamente in tempo reale.
+- **Scaletta Live / Setlist Manager (<kbd>Alt + S</kbd>):** Organizza scalette per concerti e prove band. Associa i preset della pedaliera ai brani con note, tonalità e BPM, e scorri la scaletta direttamente in Live Stage Mode.
+- **Player Basi (Backing Track Practice Studio):** Carica basi MP3/WAV, rallenta il tempo senza alterare l'intonazione (0.5x–1.5x) e sfrutta il loop A–B per perfezionare gli assoli.
+- **Progressive Web App (PWA & Offline):** Installabile direttamente come applicazione nativa standalone su Windows, macOS, Android e iOS; funziona anche offline senza rete internet.
+- **Accordatore Cromatico a Schermo:** Riconoscimento accurato della frequenza, ago dei centesimi (-50 a +50 cent) e LED verde di intonazione a 440 Hz con selezione della sorgente audio.
+- **Drum Machine con 100 Ritmi:** Batterie campionate divise per genere (Rock, Blues, Funk, Jazz, Metal, Pop, Elettronica, Metronomo) con Tap Tempo e regolazione BPM da 40 a 250.
+- **Modalità Live Stage:** Interfaccia a pieno schermo ad altissimo contrasto per palchi e sale prove, con navigazione a pedale (Footswitch A/B/C) azionabile anche con i tasti freccia.
+- **Smart Tone Generator:** Generatore guidato di suoni basato su stili musicali celebri (*Texas Blues, Ambient Clean, Modern Djent, 80s Rock*).
+
+---
+
+## 🖥️ Compatibilità Browser
+
+L'applicazione utilizza le API native del W3C **Web MIDI** e **Web Bluetooth**.
+
+| Piattaforma | Browser Supportati | Connessione |
+| :--- | :--- | :--- |
+| **Windows / macOS / Linux** | Google Chrome, Microsoft Edge, Brave, Opera | USB MIDI & Bluetooth BLE |
+| **Android (Tablet / Smartphone)** | Google Chrome, Edge, Brave | USB OTG & Bluetooth BLE |
+| **iPadOS / iOS** | Bluefy Browser, WebBLE Browser | Bluetooth BLE |
+
+> [!NOTE]  
+> Firefox e Safari (su desktop) non integrano nativamente la Web MIDI API senza plugin esterni. Si consiglia l'uso di un browser basato su Chromium.
+
+---
+
+## 🚀 Avvio Rapido & Sviluppo Locale
+
+### Prerequisiti
+- [Node.js](https://nodejs.org/) (versione 18 o superiore consigliata)
+- `npm`
+
+### Installazione ed Esecuzione
+```bash
+# 1. Clona il repository
+git clone https://github.com/TUO-USERNAME/sonicake-preset-manager.git
+
+# 2. Entra nella cartella di progetto
+cd sonicake-preset-manager
+
+# 3. Installa le dipendenze
+npm install
+
+# 4. Avvia il server di sviluppo locale
+npm run dev
+```
+
+Apri `http://localhost:5173` nel tuo browser.
+
+### Build per la Produzione
+```bash
+npm run build
+```
+La cartella `dist/` conterrà i file pronti per essere distribuiti su GitHub Pages, Vercel, Netlify o qualsiasi server web statico.
+
+---
+
+## ⌨️ Scorciatoie da Tastiera Studio
+
+| Scorciatoia | Descrizione |
 | :--- | :--- |
-| `Ctrl + Shift + S` | Condividi preset (Genera Link web 1-click o file bundle con Tone3000) |
-| `Ctrl + S` | Salva preset nello slot di memoria scelto |
-| `Ctrl + Z` | Annulla modifica parametro (Undo) |
-| `Ctrl + Y` | Ripristina modifica (Redo) |
-| `Alt + A` | Alterna confronto sonoro A / B |
-| `F` | Attiva / Disattiva Live Stage Mode a schermo intero |
-| `Freccia Su / Giù` | Seleziona preset precedente o successivo |
-| `?` | Mostra la guida completa e scorciatoie |
-| `Spazio` | Tap Tempo nella Drum Machine |
+| <kbd>Ctrl</kbd> + <kbd>S</kbd> | Salva il preset attivo sulla pedaliera |
+| <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>S</kbd> | Condividi preset (Crea Link o Bundle con NAM/IR) |
+| <kbd>Ctrl</kbd> + <kbd>Z</kbd> | Annulla ultima modifica (Undo) |
+| <kbd>Ctrl</kbd> + <kbd>Y</kbd> | Ripristina modifica (Redo) |
+| <kbd>Alt</kbd> + <kbd>A</kbd> | Confronto sonoro rapido A / B |
+| <kbd>Alt</kbd> + <kbd>S</kbd> | Apri Scaletta Live / Setlist Manager |
+| <kbd>↓</kbd> / <kbd>↑</kbd> | Passa al preset successivo o precedente |
+| <kbd>F</kbd> | Attiva la modalità Live Stage a pieno schermo |
+| <kbd>?</kbd> | Mostra la finestra Guida e scorciatoie |
+| <kbd>Spazio</kbd> | Tap Tempo (quando la Drum Machine è aperta) |
 
 ---
 
 ## 📦 Come Pubblicare il Progetto su GitHub
 
-Se desideri caricare il progetto sul tuo account GitHub per renderlo open-source:
+Per caricare il codice sul tuo account GitHub personale o dell'organizzazione:
 
-1. Crea un nuovo repository vuoto su [GitHub](https://github.com/new) (es. `sonicake-preset-manager`).
-2. Apri il terminale nella cartella del progetto ed esegui:
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit: Sonicake Smart Box PC Preset Manager v1.0"
-   git branch -M main
-   git remote add origin https://github.com/TUO-USERNAME/sonicake-preset-manager.git
-   git push -u origin main
-   ```
+```bash
+# 1. Inizializza git (se non già presente) e aggiungi i file
+git init
+git add .
+git commit -m "feat: Sonicake Studio Preset Manager v1.0"
+
+# 2. Imposta il branch principale
+git branch -M main
+
+# 3. Collega il tuo repository remoto su GitHub
+git remote add origin https://github.com/TUO-USERNAME/sonicake-preset-manager.git
+
+# 4. Effettua il push
+git push -u origin main
+```
 
 ---
 
-## 📄 Licenza
+## 🤝 Contributi
 
-Distribuito sotto licenza **MIT**. Consulta il file [`LICENSE`](LICENSE) per ulteriori dettagli.
-Creato con passione per la community di chitarristi e bassisti Sonicake! 🎸
+I contributi da parte della community di musicisti e sviluppatori sono i benvenuti!
+1. Fai un **Fork** del progetto.
+2. Crea un branch per la tua funzionalità (`git checkout -b feature/NuovoModulo`).
+3. Fai il commit delle tue modifiche (`git commit -m "Aggiunto supporto a nuovo parametro"`).
+4. Esegui il push sul tuo branch (`git push origin feature/NuovoModulo`).
+5. Apri una **Pull Request**.
+
+---
+
+## ⚖️ Disclaimer & Licenza
+
+* Questo software è un progetto open source sviluppato in modo indipendente dalla community e **non è affiliato, sponsorizzato o supportato da Sonicake Technology**.
+* Tutti i marchi, i loghi e i nomi di prodotto registrati appartengono ai rispettivi proprietari.
+* Rilasciato sotto licenza [MIT](LICENSE). Realizzato con passione per la community di chitarristi e bassisti! 🎸

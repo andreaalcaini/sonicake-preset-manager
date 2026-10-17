@@ -64,7 +64,10 @@ export class ModuleEditor {
     // Override display name if custom user slot
     let displayFxName = effectDef.name;
     if (isCloneMode && currentFxId >= 901 && currentFxId <= 905) {
-      displayFxName = presetEngine.cloneSlotNames[currentFxId - 901] || effectDef.name;
+      let customName = presetEngine.cloneSlotNames[currentFxId - 901] || effectDef.name;
+      if (customName === 'Audio Assa') customName = 'Audio Assault Slow30';
+      if (customName === 'Petersburg') customName = 'Petersburg Thunder';
+      displayFxName = customName;
     } else if (effectiveModuleId === 4 && currentFxId >= 416 && currentFxId <= 420) {
       displayFxName = presetEngine.irSlotNames[currentFxId - 416] || effectDef.name;
     }
@@ -78,43 +81,43 @@ export class ModuleEditor {
     const canReplaceWithTone3000 = (this.currentModuleId === 3 || this.currentModuleId === 4);
 
     this.container.innerHTML = `
-      <div class="flex flex-col gap-3">
+      <div class="flex flex-col gap-2.5 sm:gap-3">
         <!-- Module Header & Model Select -->
-        <div class="flex flex-wrap items-center justify-between gap-3 p-3 sm:p-4 rounded-xl bg-zinc-950/90 border border-zinc-800/80 shadow-sm">
-          <div class="flex items-center gap-3 min-w-0">
-            <img src="${this.getModuleIconPath(this.currentModuleId, preset.ampMode)}" alt="${moduleName}" class="w-7 h-7 sm:w-8 sm:h-8 object-contain shrink-0" onerror="this.style.display='none'">
-            <div class="min-w-0">
-              <span class="text-xs sm:text-sm font-bold text-zinc-100 flex items-center gap-2 truncate">
-                <span class="text-zinc-400 font-mono text-[11px]">${moduleName}</span>
-                <span>${displayFxName}</span>
+        <div class="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 p-2.5 sm:p-4 rounded-xl bg-zinc-950/90 border border-zinc-800/80 shadow-sm">
+          <div class="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+            <img src="${this.getModuleIconPath(this.currentModuleId, preset.ampMode)}" alt="${moduleName}" class="w-6 h-6 sm:w-8 sm:h-8 object-contain shrink-0" onerror="this.style.display='none'">
+            <div class="min-w-0 flex-1">
+              <span class="text-xs sm:text-sm font-bold text-zinc-100 flex items-center gap-1.5 truncate">
+                <span class="text-zinc-400 font-mono text-[10px] sm:text-[11px] shrink-0">${moduleName}</span>
+                <span class="truncate">${displayFxName}</span>
               </span>
-              <p class="text-[11px] text-zinc-400 truncate max-w-[280px] sm:max-w-md">${effectDef.descriptionEn || 'Processore segnale audio.'}</p>
+              <p class="text-[10px] sm:text-[11px] text-zinc-400 truncate max-w-full sm:max-w-md">${effectDef.descriptionEn || 'Processore segnale audio.'}</p>
             </div>
           </div>
 
-          <div class="flex items-center gap-2 flex-wrap">
+          <div class="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 flex-wrap">
             ${isAmpModule ? `
-              <div class="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-xs">
-                <button class="amp-mode-btn factory-btn px-2.5 py-1 rounded-md font-semibold transition ${preset.ampMode === 'factory' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-zinc-400 hover:text-zinc-200'}" data-mode="factory">
+              <div class="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-xs shrink-0">
+                <button class="amp-mode-btn factory-btn px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md font-semibold text-[11px] transition ${preset.ampMode === 'factory' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-zinc-400 hover:text-zinc-200'}" data-mode="factory">
                   Factory
                 </button>
-                <button class="amp-mode-btn clone-btn px-2.5 py-1 rounded-md font-semibold transition ${preset.ampMode === 'clone' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'text-zinc-400 hover:text-zinc-200'}" data-mode="clone">
+                <button class="amp-mode-btn clone-btn px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md font-semibold text-[11px] transition ${preset.ampMode === 'clone' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'text-zinc-400 hover:text-zinc-200'}" data-mode="clone">
                   Clone
                 </button>
               </div>
             ` : ''}
 
-            <div class="flex items-center gap-1.5">
-              <span class="text-[10px] font-mono font-bold uppercase text-zinc-400">Modello:</span>
-              <select class="model-select bg-zinc-900 border border-zinc-800 focus:border-cyan-500 text-zinc-100 rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none cursor-pointer max-w-[200px] sm:max-w-[260px]" data-module-id="${this.currentModuleId}">
+            <div class="flex items-center gap-1.5 flex-1 sm:flex-initial min-w-[130px]">
+              <select class="model-select bg-zinc-900 border border-zinc-800 focus:border-cyan-500 text-zinc-100 rounded-lg px-2 sm:px-2.5 py-1 sm:py-1.5 text-xs font-semibold outline-none cursor-pointer w-full sm:w-auto max-w-full sm:max-w-[260px]" data-module-id="${this.currentModuleId}">
                 ${this.renderModelSelectOptions(availableEffects, currentFxId)}
               </select>
             </div>
 
             ${canReplaceWithTone3000 ? `
-              <button class="btn-action btn-browse-tone3000 flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 hover:border-rose-500 text-rose-400 hover:text-white transition" title="${isAmpModule ? 'Sostituisci profilo NAM con Tone3000' : 'Sostituisci Cabinet IR con Tone3000'}">
+              <button class="btn-action btn-browse-tone3000 flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 hover:border-rose-500 text-rose-400 hover:text-white transition shrink-0" title="${isAmpModule ? 'Sostituisci profilo NAM con Tone3000' : 'Sostituisci Cabinet IR con Tone3000'}">
                 <svg class="w-3.5 h-3.5 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                <span>${isAmpModule ? 'Sostituisci Clone' : 'Sostituisci IR'}</span>
+                <span class="hidden xs:inline">${isAmpModule ? 'Sostituisci Clone' : 'Sostituisci IR'}</span>
+                <span class="xs:hidden">Tone3000</span>
               </button>
             ` : ''}
           </div>
@@ -123,8 +126,8 @@ export class ModuleEditor {
         <!-- Interactive EQ Visualizer Curve (Module 5 EQ) -->
         ${effectiveModuleId === 5 ? this.renderEqVisualizer(currentFxId, currentParams, effectDef) : ''}
 
-        <!-- Parameters Controls Responsive Grid -->
-        <div class="controls-panel grid grid-cols-2 xs:grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80">
+        <!-- Parameters Controls Responsive Grid (3 columns on mobile, 4-7 on tablet/desktop) -->
+        <div class="controls-panel grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2 sm:gap-4 p-2 sm:p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80 justify-items-center">
           ${effectDef.alg && effectDef.alg.length > 0 
             ? effectDef.alg.map(param => this.renderParameterControl(effectiveModuleId, param, currentParams[param.algId])).join('')
             : '<div class="text-zinc-500 text-xs py-8 col-span-full text-center">Nessun parametro regolabile per questo modulo.</div>'
@@ -167,32 +170,40 @@ export class ModuleEditor {
   }
 
   getAvailableEffectsForModule(moduleId) {
-    const list = [];
-
     // AMP Module (3): Include BOTH 22 Factory Amps AND 5 Clone / NAM Profiles!
     if (moduleId === 3) {
-      // 22 Factory Amps
-      for (let id = 301; id <= 322; id++) {
-        const def = MODULE_LIBRARY_DATA.effectLibrary[id];
-        if (def) {
-          list.push({ id, name: def.name, category: 'Amps Factory (22)' });
-        }
-      }
-      // 5 Clone / NAM Profiles
+      const cloneList = [];
       for (let i = 0; i < 5; i++) {
         const id = 901 + i;
-        const customName = presetEngine.cloneSlotNames[i];
-        list.push({
+        let customName = presetEngine.cloneSlotNames[i];
+        if (customName === 'Audio Assa') customName = 'Audio Assault Slow30';
+        if (customName === 'Petersburg') customName = 'Petersburg Thunder';
+        if (!customName || customName === 'Empty') customName = `Slot ${i + 1} (Libero)`;
+        cloneList.push({
           id,
-          name: customName ? `Profile ${i + 1}: ${customName}` : (MODULE_LIBRARY_DATA.effectLibrary[id]?.name || `User Profile ${i + 1}`),
+          name: `NAM ${i + 1}: ${customName}`,
           category: 'Profili Clone / NAM (5)'
         });
       }
-      return list;
+
+      const factoryList = [];
+      for (let id = 301; id <= 322; id++) {
+        const def = MODULE_LIBRARY_DATA.effectLibrary[id];
+        if (def) {
+          factoryList.push({ id, name: def.name, category: 'Amps Factory (22)' });
+        }
+      }
+
+      const preset = presetEngine.activePreset;
+      if (preset && preset.ampMode === 'clone') {
+        return [...cloneList, ...factoryList];
+      }
+      return [...factoryList, ...cloneList];
     }
 
     // IR Module (4): Include BOTH 15 Factory Cabinets AND 5 User IRs!
     if (moduleId === 4) {
+      const list = [];
       // Factory Cabs 401 to 415
       for (let id = 401; id <= 415; id++) {
         const def = MODULE_LIBRARY_DATA.effectLibrary[id];
@@ -201,10 +212,11 @@ export class ModuleEditor {
       // User IRs 416 to 420
       for (let i = 0; i < 5; i++) {
         const id = 416 + i;
-        const customName = presetEngine.irSlotNames[i];
+        let customName = presetEngine.irSlotNames[i];
+        if (!customName || customName === 'Empty') customName = `User IR ${i + 1}`;
         list.push({
           id,
-          name: customName ? `IR ${i + 1}: ${customName}` : (MODULE_LIBRARY_DATA.effectLibrary[id]?.name || `User IR ${i + 1}`),
+          name: `IR ${i + 1}: ${customName}`,
           category: 'User IR (5)'
         });
       }
@@ -213,12 +225,16 @@ export class ModuleEditor {
 
     // Clone Module (9)
     if (moduleId === 9) {
+      const list = [];
       for (let i = 0; i < 5; i++) {
         const id = 901 + i;
-        const customName = presetEngine.cloneSlotNames[i];
+        let customName = presetEngine.cloneSlotNames[i];
+        if (customName === 'Audio Assa') customName = 'Audio Assault Slow30';
+        if (customName === 'Petersburg') customName = 'Petersburg Thunder';
+        if (!customName || customName === 'Empty') customName = `Slot ${i + 1} (Libero)`;
         list.push({
           id,
-          name: customName ? `Profile ${i + 1}: ${customName}` : (MODULE_LIBRARY_DATA.effectLibrary[id]?.name || `User Profile ${i + 1}`),
+          name: `NAM ${i + 1}: ${customName}`,
           category: 'Profili Clone / NAM (5)'
         });
       }

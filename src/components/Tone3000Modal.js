@@ -11,6 +11,7 @@ import { Tone3000Service } from '../services/tone3000.js';
 import { presetEngine } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
 import { CompilerBridgeService } from '../services/compiler-bridge.js';
+import { convertCLOToLowModel } from '../core/protocol.js';
 
 export class Tone3000Modal {
   constructor(overlayElement) {
@@ -34,6 +35,24 @@ export class Tone3000Modal {
 
   async checkBridgeStatus() {
     this.bridgeStatus = await CompilerBridgeService.checkHealth();
+    if (this.bridgeStatus.available) {
+      const hwSlots = await CompilerBridgeService.getHardwareSlots();
+      if (hwSlots && hwSlots.cloneSlots) {
+        let changed = false;
+        hwSlots.cloneSlots.forEach((name, i) => {
+          if (name && (!presetEngine.cloneSlotNames[i] || presetEngine.cloneSlotNames[i].includes('User Profile') || presetEngine.cloneSlotNames[i] === 'Empty')) {
+            presetEngine.cloneSlotNames[i] = name;
+            changed = true;
+          }
+        });
+        if (changed) {
+          try {
+            localStorage.setItem('sonicake_clone_names', JSON.stringify(presetEngine.cloneSlotNames));
+          } catch (_) {}
+          presetEngine.emit('userSlotsChange', { type: 'Clone', names: presetEngine.cloneSlotNames });
+        }
+      }
+    }
     const container = this.overlay.querySelector('#bridgeStatusContainer');
     if (container) {
       container.innerHTML = this.renderBridgeBadge();
@@ -292,6 +311,84 @@ export class Tone3000Modal {
         </div>
       </div>
 
+      <!-- Hardware Verified Models & Official Importer Banner -->
+      <div class="p-4 bg-gradient-to-r from-amber-950/20 via-zinc-950 to-emerald-950/20 border border-amber-500/30 rounded-xl space-y-3">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-zinc-800">
+          <div>
+            <div class="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+              Profili Clone AMP Verificati al 100% (Zero Freeze Hardware)
+            </div>
+            <p class="text-[11px] text-zinc-400 mt-0.5">
+              Profili pre-compilati nel formato nativo Low Model (2.696 byte) testati direttamente su Smart Box.
+            </p>
+          </div>
+          <button id="btnImportLatestClo" class="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm whitespace-nowrap">
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Importa Ultimo CLO da Sonicake Manager
+          </button>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+          <div class="p-3 bg-zinc-900/70 border border-zinc-800 rounded-lg flex flex-col justify-between gap-2">
+            <div>
+              <div class="text-xs font-bold text-amber-300">Petersburg Thunder</div>
+              <div class="text-[10px] text-zinc-400 mt-0.5">High Gain / Crunch boutique russo (2.696 bytes Low Model)</div>
+            </div>
+            <div class="flex items-center gap-2 pt-1 border-t border-zinc-800/60">
+              <select id="slotPetersburg" class="px-2 py-1 bg-zinc-950 border border-zinc-700 rounded text-[11px] text-zinc-200 outline-none">
+                <option value="0">Slot 1</option>
+                <option value="1">Slot 2</option>
+                <option value="2">Slot 3</option>
+                <option value="3">Slot 4</option>
+                <option value="4">Slot 5</option>
+              </select>
+              <button class="btn-flash-verified flex-1 py-1 px-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all text-center" data-model="petersburg_thunder.clo" data-name="Petersburg" data-select="slotPetersburg">
+                ⚡ Scrivi
+              </button>
+            </div>
+          </div>
+
+          <div class="p-3 bg-zinc-900/70 border border-zinc-800 rounded-lg flex flex-col justify-between gap-2">
+            <div>
+              <div class="text-xs font-bold text-amber-300">Audio Assault Slow30</div>
+              <div class="text-[10px] text-zinc-400 mt-0.5">High Gain Moderno + 99 pedal (2.696 bytes Low Model)</div>
+            </div>
+            <div class="flex items-center gap-2 pt-1 border-t border-zinc-800/60">
+              <select id="slotSlow30" class="px-2 py-1 bg-zinc-950 border border-zinc-700 rounded text-[11px] text-zinc-200 outline-none">
+                <option value="0">Slot 1</option>
+                <option value="1" selected>Slot 2</option>
+                <option value="2">Slot 3</option>
+                <option value="3">Slot 4</option>
+                <option value="4">Slot 5</option>
+              </select>
+              <button class="btn-flash-verified flex-1 py-1 px-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all text-center" data-model="slow30_high_gain.clo" data-name="Audio Assa" data-select="slotSlow30">
+                ⚡ Scrivi
+              </button>
+            </div>
+          </div>
+
+          <div class="p-3 bg-zinc-900/70 border border-zinc-800 rounded-lg flex flex-col justify-between gap-2">
+            <div>
+              <div class="text-xs font-bold text-amber-300">Marshall 1959 Super Bowl</div>
+              <div class="text-[10px] text-zinc-400 mt-0.5">Classic Plexi Super Lead Crunch (2.696 bytes Low Model)</div>
+            </div>
+            <div class="flex items-center gap-2 pt-1 border-t border-zinc-800/60">
+              <select id="slotMarshall" class="px-2 py-1 bg-zinc-950 border border-zinc-700 rounded text-[11px] text-zinc-200 outline-none">
+                <option value="0">Slot 1</option>
+                <option value="1">Slot 2</option>
+                <option value="2" selected>Slot 3</option>
+                <option value="3">Slot 4</option>
+                <option value="4">Slot 5</option>
+              </select>
+              <button class="btn-flash-verified flex-1 py-1 px-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[11px] font-bold transition-all text-center" data-model="marshall_1959.clo" data-name="Marshall 1" data-select="slotMarshall">
+                ⚡ Scrivi
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Dual column container -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
         <!-- Left Column: 5 Clone NAM slots -->
@@ -305,10 +402,14 @@ export class Tone3000Modal {
           </div>
 
           <div class="space-y-2.5">
-            ${cloneNames.map((name, i) => {
+            ${cloneNames.map((rawName, i) => {
               const meta = presetEngine.cloneSlotMetadata[i];
               const isCurrentActive = isAmpCloneActive && (activeAmpFx === 901 + i);
               const hasFileUrl = meta && (meta.modelUrl || meta.url);
+              let name = rawName;
+              if (name === 'Audio Assa') name = 'Audio Assault Slow30';
+              if (name === 'Petersburg') name = 'Petersburg Thunder';
+              if (!name || name === 'Empty') name = `Slot ${i + 1} (Libero)`;
 
               return `
                 <div class="p-3.5 bg-zinc-950/50 border ${isCurrentActive ? 'border-amber-500/50 bg-amber-950/10 shadow-sm' : 'border-zinc-800 hover:border-zinc-700'} rounded-xl flex flex-col gap-2.5 transition-all">
@@ -644,11 +745,19 @@ export class Tone3000Modal {
           targetType = 'cab';
         }
 
-        const modelUrl = selectedVar.url || tone.url;
+        const modelUrl = selectedVar.url;
 
         if (targetType === 'amp') {
+          if (!modelUrl || (!modelUrl.toLowerCase().includes('.nam') && !modelUrl.toLowerCase().includes('/models/'))) {
+            alert(`Il modello selezionato ("${modelName}") non dispone di un file .nam con download diretto pubblico su Tone3000.\n\nSuggerimento: Puoi scaricarlo manualmente dalla pagina web o caricare un file .nam dal tuo computer tramite il pulsante ".nam" nella scheda "Memoria".`);
+            return;
+          }
           await this.processAndFlashNam(modelUrl, modelName, slotIndex);
         } else {
+          if (!modelUrl || (!modelUrl.toLowerCase().includes('.wav') && !modelUrl.toLowerCase().includes('/ir/') && !modelUrl.toLowerCase().includes('/models/'))) {
+            alert(`Il profilo cassa IR selezionato ("${modelName}") non dispone di un file .wav con download diretto pubblico su Tone3000.\n\nPuoi caricare un file .wav dal tuo computer tramite la scheda "Memoria".`);
+            return;
+          }
           try {
             this.showFlashProgressModal(`Download IR "${modelName}"`, `Scrittura nello slot User IR ${slotIndex + 1}`);
             const resp = await fetch(modelUrl);
@@ -914,9 +1023,107 @@ export class Tone3000Modal {
     }
   }
 
+  showNamToCloInstructionModal(name, slotIndex) {
+    let modal = document.getElementById('namToCloModal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'namToCloModal';
+      modal.className = 'fixed inset-0 z-[10000] bg-black/85 backdrop-blur-sm flex items-center justify-center p-4';
+      document.body.appendChild(modal);
+    }
+    const cleanName = (name || 'Modello NAM').trim();
+    const targetSlot = (typeof slotIndex === 'number' ? slotIndex : 0) + 1;
+
+    modal.innerHTML = `
+      <div class="bg-zinc-900 border border-amber-500/50 rounded-2xl p-6 max-w-lg w-full shadow-2xl flex flex-col space-y-4 animate-in fade-in zoom-in-95 duration-150 text-zinc-100">
+        <!-- Header -->
+        <div class="flex items-start gap-3">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0 text-xl font-bold">
+            ⚡
+          </div>
+          <div class="flex-1">
+            <h3 class="text-base font-bold text-white leading-tight">Formato Modelli Smart Box (QME-20)</h3>
+            <p class="text-xs text-amber-400 font-medium mt-0.5">Protezione Hardware Zero-Freeze Attiva</p>
+          </div>
+          <button class="btn-close-nam-modal text-zinc-400 hover:text-white p-1 rounded-lg">✕</button>
+        </div>
+
+        <!-- Explanation -->
+        <div class="p-3.5 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs space-y-2 text-zinc-300 leading-relaxed">
+          <p>
+            La <strong>Smart Box QME-20</strong> accetta nella memoria Flash esclusivamente il formato a basso carico <strong>Low Model .clo (2.696 byte)</strong>.
+          </p>
+          <p class="text-zinc-400 text-[11px]">
+            I file <code>.nam</code> grezzi pesano circa <strong>7.980 byte</strong>: inviarli via SysEx saturerebbe il buffer DMA provocando il blocco e la disconnessione della pedaliera.
+          </p>
+        </div>
+
+        <!-- Action Options -->
+        <div class="space-y-2.5 pt-1">
+          <div class="text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Come procedere subito in 1 click:</div>
+
+          <!-- Option 1: Import latest CLO from Sonicake Manager -->
+          <button id="btnModalImportLatestClo" class="w-full p-3 rounded-xl bg-gradient-to-r from-cyan-600/30 to-cyan-500/10 hover:from-cyan-600/50 hover:to-cyan-500/20 border border-cyan-500/40 text-left transition-all flex items-center justify-between group">
+            <div class="flex items-center gap-2.5">
+              <span class="w-7 h-7 rounded-lg bg-cyan-500/20 border border-cyan-500/30 flex items-center justify-center text-cyan-300 font-bold text-xs shrink-0">1</span>
+              <div>
+                <div class="text-xs font-bold text-cyan-200 group-hover:text-white">Importa da Sonicake Manager (Ultimo Profilo)</div>
+                <div class="text-[10px] text-zinc-400">Hai appena importato "${cleanName}" in Sonicake Manager? Scrivilo subito nello Slot ${targetSlot}!</div>
+              </div>
+            </div>
+            <span class="text-xs text-cyan-400 font-bold group-hover:translate-x-0.5 transition-transform">⚡ Scrivi →</span>
+          </button>
+
+          <!-- Option 2: 1-Click Verified Zero-Freeze Models -->
+          <button id="btnModalUseVerified" class="w-full p-3 rounded-xl bg-gradient-to-r from-emerald-600/20 to-emerald-500/5 hover:from-emerald-600/30 hover:to-emerald-500/15 border border-emerald-500/30 text-left transition-all flex items-center justify-between group">
+            <div class="flex items-center gap-2.5">
+              <span class="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-300 font-bold text-xs shrink-0">2</span>
+              <div>
+                <div class="text-xs font-bold text-emerald-200 group-hover:text-white">Usa Modelli Verificati al 100% (Zero-Freeze)</div>
+                <div class="text-[10px] text-zinc-400">Petersburg Thunder, Slow30 High Gain, Marshall 1959 Plexi (2.696 bytes esatti)</div>
+              </div>
+            </div>
+            <span class="text-xs text-emerald-400 font-bold">Vedi →</span>
+          </button>
+        </div>
+
+        <!-- Footer -->
+        <div class="pt-2 border-t border-zinc-800 flex justify-end">
+          <button class="btn-close-nam-modal px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-300 hover:text-white transition-colors">
+            Chiudi
+          </button>
+        </div>
+      </div>
+    `;
+
+    modal.style.display = 'flex';
+
+    modal.querySelectorAll('.btn-close-nam-modal').forEach(b => {
+      b.addEventListener('click', () => { modal.style.display = 'none'; });
+    });
+
+    const btnImport = modal.querySelector('#btnModalImportLatestClo');
+    if (btnImport) {
+      btnImport.addEventListener('click', () => {
+        modal.style.display = 'none';
+        const btnMainImport = this.overlay.querySelector('#btnImportLatestClo');
+        if (btnMainImport) btnMainImport.click();
+      });
+    }
+
+    const btnVerified = modal.querySelector('#btnModalUseVerified');
+    if (btnVerified) {
+      btnVerified.addEventListener('click', () => {
+        modal.style.display = 'none';
+        this.activeTab = 'memory';
+        this.render();
+      });
+    }
+  }
+
   async processAndFlashNam(namFileOrUrl, name, slotIndex) {
     const cleanName = (name || 'Model').trim().slice(0, 14);
-    this.showFlashProgressModal(`Compilazione & Scrittura "${cleanName}"`, `Scrittura nello slot Clone AMP ${slotIndex + 1}`);
+    this.showFlashProgressModal(`Preparazione "${cleanName}"`, `Controllo formato per Clone AMP ${slotIndex + 1}`);
 
     try {
       let res;
@@ -929,6 +1136,13 @@ export class Tone3000Modal {
       const arrayBuffer = await res.blob.arrayBuffer();
       const binaryData = new Uint8Array(arrayBuffer);
 
+      // Check if it's an oversized .namb or non-CLO model (7,980 bytes or unexpected size)
+      if (binaryData.length === 7980 || (binaryData.length !== 2696 && binaryData.length !== 8840 && binaryData.length !== 2770)) {
+        this.hideFlashProgressModal();
+        this.showNamToCloInstructionModal(cleanName, slotIndex);
+        return;
+      }
+
       await presetEngine.flashCloneToPedal(slotIndex, binaryData, cleanName, (curr, tot, pct) => {
         this.updateFlashProgress(curr, tot, pct);
       });
@@ -938,8 +1152,12 @@ export class Tone3000Modal {
       this.render();
     } catch (err) {
       console.error('Flash Clone failed:', err);
-      alert(`Errore scrittura NAM: ${err.message}`);
       this.hideFlashProgressModal();
+      if (err.message && (err.message.includes('7980') || err.message.includes('Dimensione binario'))) {
+        this.showNamToCloInstructionModal(cleanName, slotIndex);
+      } else {
+        alert(`Errore scrittura NAM: ${err.message}`);
+      }
     }
   }
 
@@ -1016,7 +1234,96 @@ export class Tone3000Modal {
       });
     });
 
-    // Memory Tab: slot local file inputs (.nam / .wav / .namb / .clo)
+    // Hardware Verified Models: 1-click Direct Flash
+    this.overlay.querySelectorAll('.btn-flash-verified').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!connection.isConnected) {
+          alert('Pedaliera non connessa! Connetti prima il dispositivo via USB o Bluetooth in alto a destra.');
+          return;
+        }
+        const modelFile = btn.dataset.model;
+        const defaultName = btn.dataset.name;
+        const selectId = btn.dataset.select;
+        const selectEl = this.overlay.querySelector(`#${selectId}`);
+        const slot = selectEl ? parseInt(selectEl.value, 10) : 0;
+
+        btn.disabled = true;
+        const origText = btn.textContent;
+        btn.textContent = '...';
+
+        try {
+          this.showFlashProgressModal(`Scrittura "${defaultName}"`, `Scrittura nello slot Clone AMP ${slot + 1}`);
+          const blob = await CompilerBridgeService.getVerifiedModelBlob(modelFile);
+          const arrayBuffer = await blob.arrayBuffer();
+          const binaryData = new Uint8Array(arrayBuffer);
+
+          await presetEngine.flashCloneToPedal(slot, binaryData, defaultName, (curr, tot, pct) => {
+            this.updateFlashProgress(curr, tot, pct);
+          });
+          await presetEngine.activateCloneSlot(slot, true);
+          this.hideFlashProgressModal(`Clone AMP ${slot + 1} ("${defaultName}") memorizzato con successo!`);
+          this.render();
+        } catch (err) {
+          console.error('Flash verified model failed:', err);
+          alert(`Errore scrittura modello verificato: ${err.message}`);
+          this.hideFlashProgressModal();
+        } finally {
+          btn.disabled = false;
+          btn.textContent = origText;
+        }
+      });
+    });
+
+    // Import latest converted CLO from Sonicake Manager
+    const btnImportLatest = this.overlay.querySelector('#btnImportLatestClo');
+    if (btnImportLatest) {
+      btnImportLatest.addEventListener('click', async () => {
+        if (!connection.isConnected) {
+          alert('Pedaliera non connessa! Connetti prima il dispositivo via USB o Bluetooth in alto a destra.');
+          return;
+        }
+
+        btnImportLatest.disabled = true;
+        const origHtml = btnImportLatest.innerHTML;
+        btnImportLatest.innerHTML = `<div class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Controllo...`;
+
+        try {
+          const info = await CompilerBridgeService.getLatestCloInfo();
+          if (!info || !info.available) {
+            alert('Nessun file CLO trovato nella cartella Sonicake Manager. Effettua prima un\'importazione in Sonicake Manager.');
+            return;
+          }
+          const modelTitle = info.toneName || (info.filename ? info.filename.replace(/\.clo$/i, '') : 'Clone');
+          const promptMsg = `Trovato modello "${modelTitle}" in Sonicake Manager.\n\nIn quale slot Clone desideri scriverlo? (1 - 5):`;
+          const chosen = prompt(promptMsg, '1');
+          if (!chosen) return;
+          const targetSlot = parseInt(chosen, 10) - 1;
+          if (targetSlot < 0 || targetSlot > 4) return;
+
+          this.showFlashProgressModal(`Scrittura "${modelTitle}"`, `Scrittura nello slot Clone AMP ${targetSlot + 1}`);
+          const blob = await CompilerBridgeService.getLatestCloBlob();
+          const arrayBuffer = await blob.arrayBuffer();
+          const binaryData = new Uint8Array(arrayBuffer);
+
+          const cleanName = modelTitle.slice(0, 14);
+          await presetEngine.flashCloneToPedal(targetSlot, binaryData, cleanName, (curr, tot, pct) => {
+            this.updateFlashProgress(curr, tot, pct);
+          });
+          await presetEngine.activateCloneSlot(targetSlot, true);
+          this.hideFlashProgressModal(`Clone AMP ${targetSlot + 1} ("${cleanName}") memorizzato con successo!`);
+          this.render();
+        } catch (err) {
+          console.error('Import latest CLO failed:', err);
+          alert(`Errore importazione CLO: ${err.message}`);
+          this.hideFlashProgressModal();
+        } finally {
+          btnImportLatest.disabled = false;
+          btnImportLatest.innerHTML = origHtml;
+        }
+      });
+    }
+
+    // Memory Tab: slot local file inputs (.nam / .wav / .clo)
     this.overlay.querySelectorAll('.slot-file-input').forEach(input => {
       input.addEventListener('change', async (e) => {
         const file = e.target.files?.[0];
@@ -1040,29 +1347,32 @@ export class Tone3000Modal {
           return;
         }
 
-        // 2. Clone AMP (.nam / .namb / .clo)
+        // 2. Clone AMP (.clo / .nam)
         if (type === 'amp') {
           if (connection.isConnected) {
-            if (lower.endsWith('.nam')) {
-              await this.processAndFlashNam(file, cleanName, slot);
-            } else if (lower.endsWith('.namb') || lower.endsWith('.clo')) {
-              this.showFlashProgressModal(`Scrittura Flash "${cleanName}"`, `Scrittura nello slot Clone AMP ${slot + 1}`);
+            if (lower.endsWith('.clo')) {
+              this.showFlashProgressModal(`Scrittura CLO "${cleanName}"`, `Scrittura nello slot Clone AMP ${slot + 1}`);
               try {
                 const arrayBuffer = await file.arrayBuffer();
-                const binaryData = new Uint8Array(arrayBuffer);
-                await presetEngine.flashCloneToPedal(slot, binaryData, cleanName, (curr, tot, pct) => {
+                const rawBytes = new Uint8Array(arrayBuffer);
+                const lowModel = convertCLOToLowModel(rawBytes);
+                await presetEngine.flashCloneToPedal(slot, lowModel, cleanName, (curr, tot, pct) => {
                   this.updateFlashProgress(curr, tot, pct);
                 });
                 await presetEngine.activateCloneSlot(slot, true);
                 this.hideFlashProgressModal(`Clone AMP ${slot + 1} ("${cleanName}") memorizzato con successo!`);
                 this.render();
               } catch (err) {
-                console.error('Flash Clone failed:', err);
-                alert(`Errore scrittura NAM: ${err.message}`);
+                console.error('Flash CLO failed:', err);
+                alert(`Errore scrittura CLO: ${err.message}`);
                 this.hideFlashProgressModal();
               }
+            } else if (lower.endsWith('.nam')) {
+              await this.processAndFlashNam(file, cleanName, slot);
+            } else if (lower.endsWith('.namb')) {
+              this.showNamToCloInstructionModal(cleanName, slot);
             } else {
-              alert('Formato file non supportato. Seleziona un file .nam, .namb o .clo.');
+              alert('Formato file non supportato. Seleziona un file .clo o .nam.');
             }
           } else {
             presetEngine.replaceCloneProfile(slot, cleanName, true);

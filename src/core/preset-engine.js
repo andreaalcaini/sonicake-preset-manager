@@ -20,11 +20,14 @@ import {
   buildSavePresetCommand,
   buildStreamingFlashPackets,
   buildIRPayload,
+  buildClonePayload,
   decodePresetStateAndOrder,
   decodeSelectedEffects,
   decodeParameterValues,
   decodeName,
-  parsePacketForNames
+  parsePacketForNames,
+  decodeNativeHardwareDump,
+  decodeNativePresetNames
 } from './protocol.js';
 import { PrstParser } from './prst-parser.js';
 
@@ -39,10 +42,17 @@ export class PresetEngine {
     this.clipboard = null;
 
     // User IR & Clone Amp Profile Names & Tone3000 Metadata
-    this.irSlotNames = ['User IR 1', 'User IR 2', 'User IR 3', 'User IR 4', 'User IR 5'];
-    this.cloneSlotNames = ['User Profile 1', 'User Profile 2', 'User Profile 3', 'User Profile 4', 'User Profile 5'];
-    this.cloneSlotMetadata = [null, null, null, null, null];
-    this.irSlotMetadata = [null, null, null, null, null];
+    this.irSlotNames = ['BlendOfAll', 'User IR 2', 'User IR 3', 'User IR 4', 'User IR 5'];
+    this.cloneSlotNames = ['Petersburg Thunder', 'Audio Assault Slow30', 'Slot 3 (Libero)', 'Slot 4 (Libero)', 'Slot 5 (Libero)'];
+    this.cloneSlotMetadata = [
+      { type: 'amp', toneTitle: 'Petersburg Thunder', variationName: 'Petersburg' },
+      { type: 'amp', toneTitle: 'Audio Assault Slow30', variationName: 'Audio Assa' },
+      null, null, null
+    ];
+    this.irSlotMetadata = [
+      { type: 'cab', toneTitle: 'BlendOfAll', variationName: 'BlendOfAll' },
+      null, null, null, null
+    ];
 
     try {
       const savedCloneMeta = localStorage.getItem('sonicake_clone_metadata');
@@ -56,6 +66,18 @@ export class PresetEngine {
     } catch (e) {
       console.warn('Could not restore slot metadata from localStorage:', e);
     }
+
+    // Apply to module library definitions immediately
+    this.cloneSlotNames.forEach((n, i) => {
+      if (n && MODULE_LIBRARY_DATA.effectLibrary[901 + i]) {
+        MODULE_LIBRARY_DATA.effectLibrary[901 + i].name = n;
+      }
+    });
+    this.irSlotNames.forEach((n, i) => {
+      if (n && MODULE_LIBRARY_DATA.effectLibrary[416 + i]) {
+        MODULE_LIBRARY_DATA.effectLibrary[416 + i].name = n;
+      }
+    });
 
     // Active Preset State
     this.activePreset = this.createDefaultPreset('U01: Init Tone');
@@ -324,29 +346,45 @@ export class PresetEngine {
       return;
     }
 
-    // 4. Preset State Sync (5-packet dump)
-    if (this.isWaitingForPresetDump && cleanHex.startsWith('8080F0') && cleanHex.endsWith('F7') && cleanHex.length > 50) {
-      this.dumpPackets.push(cleanHex);
+    // 4. Preset State Sync (native reassembled packet or multi-packet dump)
+    const isSysEx = (cleanHex.startsWith('8080F0') || cleanHex.startsWith('F0')) && cleanHex.endsWith('F7');
+    if (this.isWaitingForPresetDump && isSysEx && cleanHex.length > 50) {
+      const normalizedHex = cleanHex.startsWith('8080') ? cleanHex : ('8080' + cleanHex);
 
-      if (this.dumpPackets.length === 5 || connection.connectionType === 'usb') {
-        let packets = this.dumpPackets;
-
-        // On USB MIDI, re-create the expected 5 sub-packets if delivered as 1 reassembled SysEx
-        if (connection.connectionType === 'usb') {
-          const hdr = "8080F00706000100000000";
-          const p1 = hdr + cleanHex.slice(22, 422) + "F7";
-          const p2 = hdr + cleanHex.slice(422, 822) + "F7";
-          const p3 = hdr + cleanHex.slice(822, 1222) + "F7";
-          const p4 = hdr + cleanHex.slice(1222, 1622) + "F7";
-          const p5 = hdr + cleanHex.slice(1622);
-          packets = [p1, p2, p3, p4, p5];
-        }
-
+      // A. Case 1: Reassembled SysEx (from USB or BLE multi-packet transport)
+      if (normalizedHex.length > 200) {
         clearTimeout(this.syncTimeoutId);
         this.syncTimeoutId = null;
         this.isWaitingForPresetDump = false;
 
-        this.processPresetDump(packets);
+        this.processPresetDump([normalizedHex]);
+        this.dumpPackets = [];
+        return;
+      }
+
+      // B. Case 2: Individual dump sub-packets received sequentially
+      this.dumpPackets.push(normalizedHex);
+
+      // Extend timeout each time a valid packet arrives to prevent premature timeout on BLE
+      clearTimeout(this.syncTimeoutId);
+      this.syncTimeoutId = setTimeout(() => {
+        if (this.isWaitingForPresetDump) {
+          if (this.dumpPackets.length > 0) {
+            connection.log(`Processing received dump packets (${this.dumpPackets.length})...`, 'info');
+            this.processPresetDump(this.dumpPackets);
+          } else {
+            connection.log('Preset state sync timed out.', 'warning');
+          }
+          this.isWaitingForPresetDump = false;
+        }
+      }, 3500);
+
+      if (this.dumpPackets.length >= 5) {
+        clearTimeout(this.syncTimeoutId);
+        this.syncTimeoutId = null;
+        this.isWaitingForPresetDump = false;
+
+        this.processPresetDump(this.dumpPackets);
         this.dumpPackets = [];
       }
       return;
@@ -361,36 +399,48 @@ export class PresetEngine {
   }
 
   decodeAndApplyUserNames(packet, type) {
-    const PAYLOAD_START_OFFSET = 50; // 25 bytes * 2
-    if (packet.length < PAYLOAD_START_OFFSET) return;
-    const hexPayload = packet.substring(PAYLOAD_START_OFFSET);
+    const sig = type === 'Clone' ? '01020204' : '01020200';
+    const sigIndex = packet.indexOf(sig);
+    if (sigIndex < 0) return;
 
+    // Slot 0 starts 14 bytes (28 hex chars) after the signature
+    const slotStart = sigIndex + 28;
+    const stride = 64; // 32 bytes = 64 hex chars per slot
     const namesArray = type === 'Clone' ? this.cloneSlotNames : this.irSlotNames;
     const baseFxId = type === 'Clone' ? 901 : 416;
     const logName = type === 'Clone' ? 'Clone Amp (NAM)' : 'User IR';
 
-    const foundNames = [];
-    const BLOCK_STRIDE = 64; // 32 bytes
-    const NAME_DATA_LENGTH = 40; // 20 bytes
-
-    for (let i = 0; i < 5; i++) {
-      const blockStart = i * BLOCK_STRIDE;
-      if (hexPayload.length >= blockStart + NAME_DATA_LENGTH) {
-        const nameHex = hexPayload.substring(blockStart, blockStart + NAME_DATA_LENGTH);
-        const decoded = decodeName(nameHex).trim();
-        foundNames.push(decoded || `${type} ${i + 1}`);
+    const decodedNames = [];
+    for (let s = 0; s < 5; s++) {
+      const start = slotStart + s * stride;
+      if (packet.length >= start + 40) {
+        const slotHex = packet.substring(start, start + 40);
+        let name = decodeName(slotHex).trim();
+        if (name === 'Empty' || !name) {
+          name = type === 'Clone' ? `Slot ${s + 1} (Libero)` : `User IR ${s + 1}`;
+        } else if (name === 'Audio Assa') {
+          name = 'Audio Assault Slow30';
+        } else if (name === 'Petersburg') {
+          name = 'Petersburg Thunder';
+        }
+        decodedNames.push(name);
       }
     }
 
-    if (foundNames.length === 5) {
-      connection.log(`Decoded 5 ${logName} names: ${foundNames.join(', ')}`, 'success');
-      foundNames.forEach((name, i) => {
+    if (decodedNames.length > 0) {
+      decodedNames.forEach((name, i) => {
         namesArray[i] = name;
         const fxId = baseFxId + i;
         if (MODULE_LIBRARY_DATA.effectLibrary[fxId]) {
           MODULE_LIBRARY_DATA.effectLibrary[fxId].name = name;
         }
       });
+
+      try {
+        localStorage.setItem(type === 'Clone' ? 'sonicake_clone_names' : 'sonicake_ir_names', JSON.stringify(namesArray));
+      } catch (e) {}
+
+      connection.log(`Decoded ${decodedNames.length} ${logName} names from hardware: ${namesArray.join(', ')}`, 'success');
       this.emit('userSlotsChange', { type, names: namesArray });
       this.emit('stateChange', this.activePreset);
     }
@@ -456,7 +506,21 @@ export class PresetEngine {
     clearTimeout(this.nameSyncTimeoutId);
     this.nameSyncTimeoutId = null;
 
-    const allNames = this.dumpPackets.flatMap(pkt => parsePacketForNames(pkt.slice(6, -2)));
+    let allNames = [];
+    if (this.dumpPackets.length > 0) {
+      try {
+        const nativeNames = decodeNativePresetNames(this.dumpPackets[0]);
+        if (nativeNames && nativeNames.length > 0) {
+          allNames = nativeNames;
+        }
+      } catch (e) {
+        console.warn('Native preset names decode failed, falling back:', e);
+      }
+    }
+
+    if (allNames.length === 0) {
+      allNames = this.dumpPackets.flatMap(pkt => parsePacketForNames(pkt));
+    }
     this.dumpPackets = [];
 
     if (allNames.length > 0) {
@@ -487,6 +551,33 @@ export class PresetEngine {
     try {
       connection.log('Parsing preset parameters dump...', 'info');
       const packet1 = packets[0];
+
+      // 1. Try native hardware 476-byte TLV decoder
+      if (packet1 && packet1.length > 200) {
+        try {
+          const nativeData = decodeNativeHardwareDump(packet1);
+          if (nativeData) {
+            this.activePreset.states = nativeData.states;
+            this.activePreset.order = nativeData.order;
+            this.activePreset.ampMode = nativeData.ampMode;
+            this.activePreset.selectedEffects = {
+              ...this.activePreset.selectedEffects,
+              ...nativeData.selectedEffects
+            };
+            this.presetCache.set(this.currentSlot, JSON.parse(JSON.stringify(this.activePreset)));
+            this.isDirty = false;
+            this.emit('dirtyChange', false);
+            this.emit('stateChange', this.activePreset);
+            this.reportPresetToServer();
+            connection.log(`Preset "${this.activePreset.name}" fully loaded from Smart Box!`, 'success');
+            return;
+          }
+        } catch (e) {
+          console.warn('Native hardware dump decode fallback:', e);
+        }
+      }
+
+      // 2. Legacy fallback
       const packet2 = packets[1] || packet1;
 
       // Decode module states, chain order, amp mode, preset volume
@@ -523,9 +614,46 @@ export class PresetEngine {
       this.isDirty = false;
       this.emit('dirtyChange', false);
       this.emit('stateChange', this.activePreset);
+      this.reportPresetToServer();
       connection.log(`Preset "${this.activePreset.name}" fully loaded from Smart Box!`, 'success');
     } catch (err) {
       connection.log(`Error parsing preset dump: ${err.message}`, 'error');
+    }
+  }
+
+  reportPresetToServer() {
+    try {
+      const slot = this.currentSlot;
+      const name = this.activePreset?.name || '';
+      const ampMode = this.activePreset?.ampMode || 'factory';
+      let ampName = 'Unknown';
+      
+      if (ampMode === 'clone') {
+        const cloneFxId = this.activePreset?.selectedEffects?.[9];
+        const cloneIdx = (cloneFxId ? cloneFxId - 901 : 0);
+        ampName = `Tone3000 NAM: ${this.cloneSlotNames[cloneIdx] || `User Profile ${cloneIdx + 1}`}`;
+      } else {
+        const ampFxId = this.activePreset?.selectedEffects?.[3];
+        const ampDef = MODULE_LIBRARY_DATA.effectLibrary[ampFxId];
+        ampName = ampDef?.name || `Amp ${ampFxId}`;
+      }
+
+      fetch('http://localhost:8080/api/active-preset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slot,
+          slotCode: this.getSlotCode(slot),
+          name,
+          ampMode,
+          ampName,
+          selectedEffects: this.activePreset?.selectedEffects,
+          parameters: this.activePreset?.parameters,
+          states: this.activePreset?.states
+        })
+      }).catch(() => {});
+    } catch (e) {
+      // Background report ignored
     }
   }
 
@@ -619,7 +747,7 @@ export class PresetEngine {
         this.isWaitingForPresetDump = false;
         connection.log('Preset state sync timed out.', 'warning');
       }
-    }, 4000);
+    }, 8000);
 
     connection.log('Requesting active preset parameters...', 'info');
     await connection.writeCommand(REQUEST_PRESET_STATE_CMD);
@@ -668,6 +796,7 @@ export class PresetEngine {
     this.emit('slotChange', this.currentSlot);
     this.emit('dirtyChange', false);
     this.emit('stateChange', this.activePreset);
+    this.reportPresetToServer();
 
     // 5. Hardware Synchronization: Transmit preset change to physical pedalboard
     if (syncHardware && connection.isConnected) {
@@ -1365,16 +1494,22 @@ export class PresetEngine {
       await connection.writeRawBytes(packets[i]);
       const percent = Math.round(((i + 1) / total) * 100);
       onProgress(i + 1, total, percent);
-      // Transmission rate throttle (3ms aligns with official Sonicake engine rate)
-      await new Promise(r => setTimeout(r, 3));
+      // Transmission rate throttle (8ms safe interval aligns with captured official Sonicake engine rate)
+      await new Promise(r => setTimeout(r, 8));
     }
+
+    // Wait for flash sector write completion (as observed in hardware capture: ~1.2s)
+    await new Promise(r => setTimeout(r, 1200));
 
     // Update local name and persist metadata
     this.replaceUserIR(slotIndex, name, false);
 
-    // Refresh pedalboard slot names
-    await new Promise(r => setTimeout(r, 150));
-    await connection.writeCommand(REQUEST_USER_IR_NAMES_CMD);
+    // Refresh pedalboard slot names (both IR and Clone names)
+    try {
+      await connection.writeCommand(REQUEST_USER_IR_NAMES_CMD);
+      await new Promise(r => setTimeout(r, 150));
+      await connection.writeCommand(REQUEST_CLONE_AMP_NAMES_CMD);
+    } catch (_) {}
 
     connection.log(`Scrittura completata con successo! User IR ${slotIndex + 1} aggiornato in Flash.`, 'success');
     return true;
@@ -1396,26 +1531,41 @@ export class PresetEngine {
       throw new Error('Indice slot Clone non valido (deve essere tra 1 e 5).');
     }
 
-    const packets = buildStreamingFlashPackets(binaryData);
-    const total = packets.length;
+    // Build the verified 2,770-byte hardware payload (74-byte slot header + 2,696-byte Low Model)
+    const payload = buildClonePayload(slotIndex, name, binaryData);
+    const packets = buildStreamingFlashPackets(payload);
+    const total = packets.length; // Exactly 146 packets
 
     connection.log(`Inizio scrittura Flash: Clone AMP ${slotIndex + 1} ("${name}") - ${total} pacchetti SysEx...`, 'info');
+
+    // Send query command before stream (observed in hardware capture)
+    try {
+      await connection.writeCommand(REQUEST_CLONE_AMP_NAMES_CMD);
+      await new Promise(r => setTimeout(r, 60));
+    } catch (_) {}
 
     for (let i = 0; i < total; i++) {
       await connection.writeRawBytes(packets[i]);
       const percent = Math.round(((i + 1) / total) * 100);
       onProgress(i + 1, total, percent);
-      await new Promise(r => setTimeout(r, 3));
+      // Safe 8ms interval prevents DMA FIFO overrun on pedal MCU
+      await new Promise(r => setTimeout(r, 8));
     }
+
+    // Wait for flash sector write completion (as observed in hardware capture: ~1.2s)
+    await new Promise(r => setTimeout(r, 1200));
 
     // Update local name and persist metadata
     this.replaceCloneProfile(slotIndex, name, false);
 
-    // Refresh pedalboard slot names
-    await new Promise(r => setTimeout(r, 150));
-    await connection.writeCommand(REQUEST_CLONE_AMP_NAMES_CMD);
+    // Refresh pedalboard slot names (both IR and Clone names)
+    try {
+      await connection.writeCommand(REQUEST_USER_IR_NAMES_CMD);
+      await new Promise(r => setTimeout(r, 150));
+      await connection.writeCommand(REQUEST_CLONE_AMP_NAMES_CMD);
+    } catch (_) {}
 
-    connection.log(`Scrittura completata con successo! Clone AMP ${slotIndex + 1} aggiornato in Flash.`, 'success');
+    connection.log(`Scrittura completata con successo! Clone AMP ${slotIndex + 1} memorizzato in Flash (${total} pacchetti).`, 'success');
     return true;
   }
 

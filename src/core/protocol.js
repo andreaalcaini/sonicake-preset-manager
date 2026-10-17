@@ -591,15 +591,17 @@ export function buildIRPayload(slotIndexOrName, nameOrData, maybeData) {
 
   const payload = new Uint8Array(2122);
   
-  // Header: 74 bytes (Sonicake Cabinet IR specification)
-  // Byte 0: 0x11, Byte 1: 0x21 (Slot 1), 0x22 (Slot 2), 0x23 (Slot 3), 0x24 (Slot 4), 0x25 (Slot 5)
+  // Header: 74 bytes (Sonicake Cabinet IR specification - verified against hardware capture)
+  // Byte 0: 0x11 (Flash Write Prefix)
+  // Byte 1: 0x21 (User IR Type Identifier)
   payload[0] = 0x11;
-  payload[1] = 0x21 + slotIndex;
+  payload[1] = 0x21;
   payload[2] = 0x00;
   payload[3] = 0x00;
   payload[4] = 0x00;
   payload[5] = 0x00;
-  payload[6] = 0x00;
+  // Byte 6: 0-based Slot Index (0 = Slot 1, 1 = Slot 2, ..., 4 = Slot 5)
+  payload[6] = slotIndex;
   payload[7] = 0x00;
   payload[8] = 0x10;
   payload[9] = 0x0A; // length marker
@@ -624,5 +626,396 @@ export function buildIRPayload(slotIndexOrName, nameOrData, maybeData) {
 
   return payload;
 }
+
+// --- Sonicake CRC16 & Clone AMP Hardware Support ---
+
+export const SONICAKE_CRC16_TABLE1 = new Uint8Array([
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+  0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+  0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+  0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+  0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+  0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+  0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+  0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+  0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40, 0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41,
+  0x00, 0xC1, 0x81, 0x40, 0x01, 0xC0, 0x80, 0x41, 0x01, 0xC0, 0x80, 0x41, 0x00, 0xC1, 0x81, 0x40,
+]);
+
+export const SONICAKE_CRC16_TABLE2 = new Uint8Array([
+  0x00, 0xC0, 0xC1, 0x01, 0xC3, 0x03, 0x02, 0xC2, 0xC6, 0x06, 0x07, 0xC7, 0x05, 0xC5, 0xC4, 0x04,
+  0xCC, 0x0C, 0x0D, 0xCD, 0x0F, 0xCF, 0xCE, 0x0E, 0x0A, 0xCA, 0xCB, 0x0B, 0xC9, 0x09, 0x08, 0xC8,
+  0xD8, 0x18, 0x19, 0xD9, 0x1B, 0xDB, 0xDA, 0x1A, 0x1E, 0xDE, 0xDF, 0x1F, 0xDD, 0x1D, 0x1C, 0xDC,
+  0x14, 0xD4, 0xD5, 0x15, 0xD7, 0x17, 0x16, 0xD6, 0xD2, 0x12, 0x13, 0xD3, 0x11, 0xD1, 0xD0, 0x10,
+  0xF0, 0x30, 0x31, 0xF1, 0x33, 0xF3, 0xF2, 0x32, 0x36, 0xF6, 0xF7, 0x37, 0xF5, 0x35, 0x34, 0xF4,
+  0x3C, 0xFC, 0xFD, 0x3D, 0xFF, 0x3F, 0x3E, 0xFE, 0xFA, 0x3A, 0x3B, 0xFB, 0x39, 0xF9, 0xF8, 0x38,
+  0x28, 0xE8, 0xE9, 0x29, 0xEB, 0x2B, 0x2A, 0xEA, 0xEE, 0x2E, 0x2F, 0xEF, 0x2D, 0xED, 0xEC, 0x2C,
+  0xE4, 0x24, 0x25, 0xE5, 0x27, 0xE7, 0xE6, 0x26, 0x22, 0xE2, 0xE3, 0x23, 0xE1, 0x21, 0x20, 0xE0,
+  0xA0, 0x60, 0x61, 0xA1, 0x63, 0xA3, 0xA2, 0x62, 0x66, 0xA6, 0xA7, 0x67, 0xA5, 0x65, 0x64, 0xA4,
+  0x6C, 0xAC, 0xAD, 0x6D, 0xAF, 0x6F, 0x6E, 0xAE, 0xAA, 0x6A, 0x6B, 0xAB, 0x69, 0xA9, 0xA8, 0x68,
+  0x78, 0xB8, 0xB9, 0x79, 0xBB, 0x7B, 0x7A, 0xBA, 0xBE, 0x7E, 0x7F, 0xBF, 0x7D, 0xBD, 0xBC, 0x7C,
+  0xB4, 0x74, 0x75, 0xB5, 0x77, 0xB7, 0xB6, 0x76, 0x72, 0xB2, 0xB3, 0x73, 0xB1, 0x71, 0x70, 0xB0,
+  0x50, 0x90, 0x91, 0x51, 0x93, 0x53, 0x52, 0x92, 0x96, 0x56, 0x57, 0x97, 0x55, 0x95, 0x94, 0x54,
+  0x9C, 0x5C, 0x5D, 0x9D, 0x5F, 0x9F, 0x9E, 0x5E, 0x5A, 0x9A, 0x9B, 0x5B, 0x99, 0x59, 0x58, 0x98,
+  0x88, 0x48, 0x49, 0x89, 0x4B, 0x8B, 0x8A, 0x4A, 0x4E, 0x8E, 0x8F, 0x4F, 0x8D, 0x4D, 0x4C, 0x8C,
+  0x44, 0x84, 0x85, 0x45, 0x87, 0x47, 0x46, 0x86, 0x82, 0x42, 0x43, 0x83, 0x41, 0x81, 0x80, 0x40,
+]);
+
+/**
+ * Sonicake CRC16 calculation (used for CLO neural network model headers)
+ * Uses SMBus/Modbus-style high and low lookup tables, starting at byte 12 of the model.
+ * Verified 100% byte-for-byte against official Sonicake Manager DLL and live hardware dumps.
+ * @param {Uint8Array} dataBytes Slice from offset 12 to end of model data
+ * @returns {number} 16-bit CRC value
+ */
+export function calculateSonicakeCRC16(dataBytes) {
+  let cl = 0xFF;
+  let r10 = 0xFF;
+  for (let i = 0; i < dataBytes.length; i++) {
+    const edx = dataBytes[i] ^ cl;
+    cl = SONICAKE_CRC16_TABLE1[edx] ^ r10;
+    r10 = SONICAKE_CRC16_TABLE2[edx];
+  }
+  return ((cl << 8) | r10) & 0xFFFF;
+}
+
+/**
+ * Convert a standard 8,840-byte CLO neural model into a 2,696-byte Low Model accepted by Smart Box hardware
+ * Sets total length to 2696, extendSize to 2560, layer size to 512, copies first 2560 bytes of weights,
+ * and calculates exact CRC16.
+ * @param {Uint8Array} cloBytes 8840-byte or 2696-byte CLO data
+ * @returns {Uint8Array} 2,696-byte Low Model binary
+ */
+export function convertCLOToLowModel(cloBytes) {
+  if (cloBytes.length === 2696) {
+    return cloBytes; // Already a low model
+  }
+  if (cloBytes.length !== 8840) {
+    throw new Error(`Dimensione file CLO non valida (${cloBytes.length} byte). Attesi 8840 o 2696 byte.`);
+  }
+
+  const low = new Uint8Array(2696);
+  low.set(cloBytes.subarray(0, 2696));
+
+  // Magic 'VTSI' (0x56, 0x54, 0x53, 0x49)
+  // Total size: 2696 (0x0A88)
+  low[4] = 0x88; low[5] = 0x0A; low[6] = 0x00; low[7] = 0x00;
+
+  // extendSize: 2560 (0x0A00)
+  low[0x14] = 0x00; low[0x15] = 0x0A; low[0x16] = 0x00; low[0x17] = 0x00;
+
+  // Layer size at offset 0x84: 512 (0x0200) instead of 2048 (0x0800)
+  low[0x84] = 0x00; low[0x85] = 0x02; low[0x86] = 0x00; low[0x87] = 0x00;
+
+  // Clear CRC bytes before calculating
+  low[8] = 0x00; low[9] = 0x00;
+  low[10] = 0x00; low[11] = 0x00;
+
+  // Calculate CRC16 on data starting at offset 12
+  const crc = calculateSonicakeCRC16(low.subarray(12));
+  low[8] = crc & 0xFF;
+  low[9] = (crc >> 8) & 0xFF;
+
+  return low;
+}
+
+/**
+ * Build 2,770-byte Clone AMP hardware payload for Smart Box / Pocket Master persistent Flash memory
+ * Verified 100% byte-for-byte against Sonicake Manager hardware stream.
+ * @param {number} slotIndex 0 to 4 (representing Clone AMP 1 to 5)
+ * @param {string} name Slot name (up to 14 chars)
+ * @param {Uint8Array} binaryData 8,840-byte CLO, 2,696-byte Low Model, or 2,770-byte payload
+ * @returns {Uint8Array} 2,770-byte binary payload ready for buildStreamingFlashPackets
+ */
+export function buildClonePayload(slotIndex, name, binaryData) {
+  const safeSlot = Math.max(0, Math.min(4, slotIndex));
+  const cleanName = (name || `Clone ${safeSlot + 1}`).trim().slice(0, 14);
+
+  // If already a complete 2,770-byte payload with 74-byte header
+  if (binaryData.length === 2770 && binaryData[0] === 0x11) {
+    const payload = new Uint8Array(binaryData);
+    payload[1] = 0x25;
+    payload[6] = safeSlot;
+    // update name if provided
+    for (let i = 0; i < 32; i++) payload[10 + i] = 0;
+    for (let i = 0; i < cleanName.length; i++) {
+      payload[10 + i] = cleanName.charCodeAt(i) & 0xFF;
+    }
+    return payload;
+  }
+
+  // Ensure we have a 2,696-byte Low Model
+  let lowModel;
+  if (binaryData.length === 8840) {
+    lowModel = convertCLOToLowModel(binaryData);
+  } else if (binaryData.length === 2696) {
+    lowModel = binaryData;
+  } else {
+    throw new Error(`Dimensione binario Clone non supportata (${binaryData.length} byte). Attesi 2696, 8840 o 2770 byte.`);
+  }
+
+  const payload = new Uint8Array(2770);
+
+  // 74-byte Clone AMP Header (Verified 100% byte-for-byte against official Sonicake Manager capture)
+  // Byte 0: 0x11 (Flash Write Prefix)
+  // Byte 1: 0x25 (Clone AMP Type Identifier - NOT 0x21 which is IR!)
+  payload[0] = 0x11;
+  payload[1] = 0x25;
+  // Bytes 2-5: 0x00 (padding)
+  payload[2] = 0x00;
+  payload[3] = 0x00;
+  payload[4] = 0x00;
+  payload[5] = 0x00;
+  // Byte 6: 0-based Slot Index (0 = Slot 1, 1 = Slot 2, ..., 4 = Slot 5)
+  payload[6] = safeSlot;
+  // Byte 7: 0x00
+  payload[7] = 0x00;
+  // Byte 8: 0x00 (Clone AMP marker)
+  payload[8] = 0x00;
+  // Byte 9: 0x0F (Clone AMP marker)
+  payload[9] = 0x0F;
+
+  // Name (32 bytes max, ascii null-padded)
+  for (let i = 0; i < cleanName.length; i++) {
+    payload[10 + i] = cleanName.charCodeAt(i) & 0xFF;
+  }
+
+  // Low Model binary: 2,696 bytes (from offset 74 to 2770)
+  payload.set(lowModel, 74);
+
+  return payload;
+}
+
+/**
+ * Mapping table from native hardware 32-bit FXID (from qme20_module_data.json) to internal effect IDs
+ */
+export const HARDWARE_FXID_TO_INTERNAL_ID = {
+  // NR
+  27: 1, // Gate
+  // FX1
+  0: 101, // COMP 1
+  1: 102, // COMP 2
+  16777231: 103, // Touch Wah
+  16777237: 104, // Auto Wah
+  83886088: 105, // C-Wah
+  26: 106, // Boost
+  67108864: 107, // A-Chorus
+  67108872: 108, // B-Chorus
+  67108881: 109, // Flanger
+  67108889: 110, // Phaser
+  67108895: 111, // Vibe
+  67108885: 112, // Vibrato
+  67108897: 113, // Tremolo
+  67108902: 114, // Sine Trem
+  67108904: 115, // Bias Trem
+  // DRV
+  50331648: 201, // Scream
+  50331650: 202, // Butter OD
+  50331690: 203, // JP Dist
+  50331696: 204, // Shark
+  50331691: 205, // Dark Mouse
+  50331682: 206, // Grey Fuzz
+  50331684: 207, // Red Fuzz
+  50331712: 208, // Bass Drive
+  // AMP
+  117440513: 301, // TWD Deluxe
+  117440515: 302, // B-Man N
+  117440516: 303, // Dark Twin
+  117440529: 304, // Voks 30N
+  117440532: 305, // Jazz 120
+  117440554: 306, // Brit 45
+  117440559: 307, // Brit 50JP
+  117440565: 308, // Brit 800
+  117440548: 309, // B-Man B
+  117440551: 310, // Voks 30TB
+  117440583: 311, // Sol 100 OD
+  117440613: 312, // Dizzy VH
+  117440607: 313, // Eng 120
+  117440602: 314, // Halen 51
+  117440601: 315, // Sol 100 LD
+  117440616: 316, // Calif DualV
+  117440617: 317, // Calif DualM
+  117440611: 318, // Eng Power
+  117440605: 319, // Flyman B1+
+  117440621: 320, // Bog XT (Vintage)
+  117440622: 320, // Bog XT (Modern)
+  117440627: 321, // A BassVT
+  117440629: 322, // Voks Bass
+  // IR
+  167772161: 401, // TWD 1x8
+  167772164: 402, // Viblux 1x12
+  167772168: 403, // Voks 1x12
+  167772187: 404, // TWD 2x12
+  167772178: 405, // Double 2x12
+  167772185: 406, // Star 2x12
+  167772177: 407, // Jazz 2x12
+  167772179: 408, // BritGN 2x12
+  167772194: 409, // BritGN 4x12
+  167772199: 410, // Bog 4x12
+  167772206: 411, // Dizzy 4x12
+  167772192: 412, // Halen 4x12
+  167772200: 413, // Sol 4x12
+  167772196: 414, // Dual 4x12
+  167772190: 415, // Bass 4x10
+  // User IR (1 to 5)
+  168820736: 416,
+  168820737: 417,
+  168820738: 418,
+  168820739: 419,
+  168820740: 420,
+  // EQ
+  16777269: 501, // GT EQ 1
+  16777270: 502, // GT EQ 2
+  16777274: 503, // Bass EQ
+  // FX2
+  16777249: 606, // Octave
+  16777251: 607, // Pitch
+  16777257: 608, // Detune
+  // DLY
+  184549376: 701, // Pure
+  184549381: 702, // Slap
+  184549389: 703, // Warm
+  184549378: 704, // Mag
+  184549387: 705, // Tube
+  184549395: 706, // Reverse
+  184549377: 707, // Analog
+  184549382: 708, // Sweep
+  184549380: 709, // Ping Pong
+  184549384: 701, // DLY fallback
+  // RVB
+  201326603: 801, // Air
+  201326592: 802, // Room
+  201326593: 803, // Hall
+  201326594: 804, // Church
+  201326608: 805, // Plate 1
+  201326607: 806, // Plate 2
+  201326596: 807, // Spring
+  201326598: 808, // Light
+  201326599: 809, // Ocean
+  201326613: 810, // Dream
+  // Clone Profiles (Slot 1 to 5)
+  251658240: 901,
+  251658241: 902,
+  251658242: 903,
+  251658243: 904,
+  251658244: 905
+};
+
+/**
+ * Decode native hardware 476-byte preset dump returned by Smart Box / Pocket Master
+ * @param {string|Uint8Array} payloadBytesOrHex
+ * @returns {object} Decoded preset structure (states, order, ampMode, selectedEffects)
+ */
+export function decodeNativeHardwareDump(payloadBytesOrHex) {
+  let bytes = payloadBytesOrHex;
+  if (typeof payloadBytesOrHex === 'string') {
+    const clean = payloadBytesOrHex.replace(/\s+/g, '');
+    bytes = new Uint8Array(clean.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+  }
+
+  // Strip 8080 prefix if present
+  if (bytes[0] === 0x80 && bytes[1] === 0x80) bytes = bytes.slice(2);
+
+  // If SysEx-framed (starts with F0), unpack nibbles from offset 9 to end-1
+  if (bytes[0] === 0xF0) {
+    const nibbles = bytes.slice(9, -1);
+    const unpacked = new Uint8Array(Math.floor(nibbles.length / 2));
+    for (let i = 0; i < unpacked.length; i++) {
+      unpacked[i] = ((nibbles[i * 2] & 0x0F) << 4) | (nibbles[i * 2 + 1] & 0x0F);
+    }
+    bytes = unpacked;
+  }
+
+  if (bytes.length < 140) {
+    throw new Error(`Buffer dump preset troppo corto (${bytes.length} byte).`);
+  }
+
+  // 1. Module bypass mask at offset 0x4E (uint16)
+  const mask = bytes[0x4E] | (bytes[0x4F] << 8);
+  const states = {};
+  for (let i = 0; i < 9; i++) {
+    states[i] = Boolean(mask & (1 << i));
+  }
+
+  // 2. Chain order at offset 0x56 (10 bytes)
+  const order = [];
+  for (let i = 0; i < 9; i++) {
+    const modId = bytes[0x56 + i];
+    order.push(modId < 9 ? modId : i);
+  }
+
+  // 3. Amp Mode (factory vs clone)
+  const isCloneActive = (bytes[0x56 + 3] === 9) || Boolean(mask & (1 << 9));
+  const ampMode = isCloneActive ? 'clone' : 'factory';
+
+  // 4. Selected Effects at offset 100 (0x64), 10 x uint32 little endian
+  const selectedEffects = {};
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+
+  for (let mod = 0; mod < 10; mod++) {
+    const rawFxId = view.getUint32(100 + mod * 4, true);
+    const internalId = HARDWARE_FXID_TO_INTERNAL_ID[rawFxId];
+    if (internalId !== undefined) {
+      selectedEffects[mod] = internalId;
+    } else {
+      const defaults = [1, 101, 201, 301, 401, 501, 601, 701, 801, 901];
+      selectedEffects[mod] = defaults[mod];
+    }
+  }
+
+  return {
+    states,
+    order,
+    ampMode,
+    selectedEffects
+  };
+}
+
+/**
+ * Decode native hardware 50-preset names dump (20-byte stride)
+ * @param {string|Uint8Array} payloadBytesOrHex
+ * @returns {Array<string>} Array of up to 50 preset name strings
+ */
+export function decodeNativePresetNames(payloadBytesOrHex) {
+  let bytes = payloadBytesOrHex;
+  if (typeof payloadBytesOrHex === 'string') {
+    const clean = payloadBytesOrHex.replace(/\s+/g, '');
+    bytes = new Uint8Array(clean.match(/.{1,2}/g).map(b => parseInt(b, 16)));
+  }
+
+  if (bytes[0] === 0x80 && bytes[1] === 0x80) bytes = bytes.slice(2);
+
+  if (bytes[0] === 0xF0) {
+    const nibbles = bytes.slice(9, -1);
+    const unpacked = new Uint8Array(Math.floor(nibbles.length / 2));
+    for (let i = 0; i < unpacked.length; i++) {
+      unpacked[i] = ((nibbles[i * 2] & 0x0F) << 4) | (nibbles[i * 2 + 1] & 0x0F);
+    }
+    bytes = unpacked;
+  }
+
+  const names = [];
+  const maxSlots = Math.min(50, Math.floor((bytes.length - 2) / 20));
+
+  for (let i = 0; i < maxSlots; i++) {
+    const start = 2 + i * 20;
+    let name = '';
+    for (let j = 0; j < 16; j++) {
+      const b = bytes[start + 4 + j];
+      if (b === 0) break;
+      if (b >= 32 && b <= 126) name += String.fromCharCode(b);
+    }
+    names.push(name.trim() || `User ${i + 1}`);
+  }
+
+  return names;
+}
+
 
 

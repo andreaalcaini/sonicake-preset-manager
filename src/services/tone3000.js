@@ -85,7 +85,8 @@ export class Tone3000Service {
                 name: trimmed,
                 toneId: m.tone_id,
                 size: m.size || 'standard',
-                url: m.model_url || `https://www.tone3000.com/tones/${m.tone_id}`,
+                url: m.model_url || null,
+                webUrl: `https://www.tone3000.com/tones/${m.tone_id}`,
                 packName: m.pack_name
               });
             }

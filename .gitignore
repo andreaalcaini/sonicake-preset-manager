@@ -27,3 +27,21 @@ dist-ssr
 # Temporary / Scratch files
 pocketedit.html
 *.tmp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Hardware binary dumps and model cache
+*.bin
+server/cache/*
+!server/cache/.gitkeep
+server/*.bin
+server/*.clo
+server/*.nam

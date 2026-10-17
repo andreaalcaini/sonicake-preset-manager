@@ -196,6 +196,9 @@ export class SonicakeConnection {
 
     if (totalPackets > 1) {
       const responseId = `${message[3]}_${message[4]}`;
+      if (this.usbMultiPacketResponses[responseId] && (Date.now() - this.usbMultiPacketResponses[responseId].startTime > 2500)) {
+        delete this.usbMultiPacketResponses[responseId];
+      }
       if (!this.usbMultiPacketResponses[responseId]) {
         this.usbMultiPacketResponses[responseId] = {
           totalPackets,
@@ -257,20 +260,38 @@ export class SonicakeConnection {
    */
   async connectBle() {
     if (!navigator.bluetooth) {
-      throw new Error('Web Bluetooth API is not supported in this browser. Please use Chrome or Edge.');
+      if (!window.isSecureContext) {
+        throw new Error('Web Bluetooth richiede HTTPS quando usato da smartphone/rete locale. Apri la pagina con https:// anziché http:// (es. https://' + (window.location.hostname || '192.168.1.218') + ':5173).');
+      }
+      throw new Error('Web Bluetooth API non è supportata da questo browser. Usa Google Chrome o Microsoft Edge.');
     }
 
     try {
       this.log('Searching for Sonicake Bluetooth devices...', 'info');
-      this.bleDevice = await navigator.bluetooth.requestDevice({
-        filters: [
-          { name: 'Sonic Master BLE' },
-          { namePrefix: 'Sonic' },
-          { namePrefix: 'Smart' },
-          { services: [this.SERVICE_UUID] }
-        ],
-        optionalServices: [this.SERVICE_UUID]
-      });
+      try {
+        this.bleDevice = await navigator.bluetooth.requestDevice({
+          filters: [
+            { name: 'Sonic Master BLE' },
+            { namePrefix: 'Sonic' },
+            { namePrefix: 'Smart' },
+            { namePrefix: 'Pocket' },
+            { namePrefix: 'QME' },
+            { services: [this.SERVICE_UUID] }
+          ],
+          optionalServices: [this.SERVICE_UUID]
+        });
+      } catch (scanErr) {
+        // If user cancelled, rethrow
+        if (scanErr.name === 'NotFoundError' && scanErr.message?.toLowerCase().includes('user cancelled')) {
+          throw scanErr;
+        }
+        // Fallback: broaden search with acceptAllDevices
+        this.log('Riprovo scansione Bluetooth con tutti i dispositivi...', 'info');
+        this.bleDevice = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [this.SERVICE_UUID]
+        });
+      }
 
       this.log(`Connecting to BLE device: ${this.bleDevice.name}...`, 'info');
 
@@ -283,11 +304,38 @@ export class SonicakeConnection {
       const service = await this.bleServer.getPrimaryService(this.SERVICE_UUID);
       this.bleCharacteristic = await service.getCharacteristic(this.CHARACTERISTIC_UUID);
 
+      this.bleBuffer = [];
       await this.bleCharacteristic.startNotifications();
       this.bleCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
-        const data = new Uint8Array(event.target.value.buffer);
-        const hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-        this.dispatchMessage(hex);
+        const val = event.target.value;
+        if (!val) return;
+        const data = new Uint8Array(val.buffer, val.byteOffset, val.byteLength);
+        if (data.length === 0) return;
+
+        const startsWithSysEx = (data[0] === 0x80 && data[1] === 0x80 && data[2] === 0xF0) || data[0] === 0xF0;
+        const endsWithSysEx = data[data.length - 1] === 0xF7;
+
+        // 1. Single standalone packet
+        if (this.bleBuffer.length === 0 && startsWithSysEx && endsWithSysEx) {
+          let hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+          if (!hex.startsWith('8080')) hex = '8080' + hex;
+          this.dispatchMessage(hex);
+          return;
+        }
+
+        // 2. Fragmented packet - accumulate bytes
+        for (let i = 0; i < data.length; i++) {
+          this.bleBuffer.push(data[i]);
+        }
+
+        // Check if buffer is completed with 0xF7
+        if (this.bleBuffer.length >= 4 && this.bleBuffer[this.bleBuffer.length - 1] === 0xF7) {
+          const buf = new Uint8Array(this.bleBuffer);
+          this.bleBuffer = [];
+          let hex = Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+          if (!hex.startsWith('8080')) hex = '8080' + hex;
+          this.dispatchMessage(hex);
+        }
       });
 
       this.connectionType = 'ble';
@@ -393,10 +441,12 @@ export class SonicakeConnection {
   disconnect() {
     if (this.connectionType === 'usb' && this.midiInput) {
       this.midiInput.onmidimessage = null;
+      try { this.midiInput.close?.(); } catch (e) {}
+      try { this.midiOutput?.close?.(); } catch (e) {}
       this.midiInput = null;
       this.midiOutput = null;
     } else if (this.connectionType === 'ble' && this.bleDevice) {
-      if (this.bleDevice.gatt.connected) {
+      if (this.bleDevice.gatt && this.bleDevice.gatt.connected) {
         this.bleDevice.gatt.disconnect();
       }
       this.bleDevice = null;

@@ -9,6 +9,16 @@
   height: 85vh;
 }
 
+@media (max-width: 639px) {
+  .tone3000-modal {
+    width: 100%;
+    max-width: 100%;
+    height: 94vh;
+    max-height: 94vh;
+    border-radius: 16px 16px 0 0;
+  }
+}
+
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }

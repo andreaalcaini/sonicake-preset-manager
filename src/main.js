@@ -29,7 +29,6 @@ class App {
     this.initUI();
     this.initShortcuts();
     this.initDragAndDrop();
-    this.checkAvailableMidi();
     this.checkSharedUrlOnLaunch();
   }
 
@@ -118,21 +117,32 @@ class App {
       connection.disconnect();
     });
 
+    const connMobileStatus = document.getElementById('connMobileStatus');
+
     connection.onStatusChange((status) => {
       if (status.isConnected) {
         connLed.classList.add('connected');
         connText.textContent = `${status.type.toUpperCase()}: ${status.deviceName}`;
+        if (connMobileStatus) {
+          connMobileStatus.textContent = status.type.toUpperCase();
+          connMobileStatus.classList.remove('hidden');
+        }
         btnConnectUsb.style.display = 'none';
         btnConnectBle.style.display = 'none';
+        btnDisconnect.classList.remove('hidden');
         btnDisconnect.style.display = 'inline-flex';
 
         // Auto sync all Clone Amps, User IRs, and 100 presets on connection
         setTimeout(() => presetEngine.runInitialSyncSequence(), 300);
       } else {
         connLed.classList.remove('connected');
-        connText.textContent = 'Disconnected';
+        connText.textContent = 'Non Connesso';
+        if (connMobileStatus) {
+          connMobileStatus.classList.add('hidden');
+        }
         btnConnectUsb.style.display = 'inline-flex';
         btnConnectBle.style.display = 'inline-flex';
+        btnDisconnect.classList.add('hidden');
         btnDisconnect.style.display = 'none';
       }
     });
@@ -146,7 +156,10 @@ class App {
       presetEngine.runInitialSyncSequence();
     });
 
-    document.getElementById('btnAbToggle').addEventListener('click', () => {
+    document.getElementById('btnAbToggle')?.addEventListener('click', () => {
+      presetEngine.toggleAB();
+    });
+    document.getElementById('btnAbToggleMobile')?.addEventListener('click', () => {
       presetEngine.toggleAB();
     });
 
@@ -212,17 +225,21 @@ class App {
       });
     }
 
-    // Unified Tools Dropdown Toggle
+    // Unified Tools Dropdown Toggle (Desktop & Mobile buttons)
     const btnToolsDropdown = document.getElementById('btnToolsDropdown');
+    const btnToolsDropdownMobile = document.getElementById('btnToolsDropdownMobile');
     const toolsMenuDropdown = document.getElementById('toolsMenuDropdown');
-    if (btnToolsDropdown && toolsMenuDropdown) {
-      btnToolsDropdown.addEventListener('click', (e) => {
+    if (toolsMenuDropdown) {
+      const toggleDropdown = (e) => {
         e.stopPropagation();
         toolsMenuDropdown.classList.toggle('hidden');
-      });
+      };
+
+      btnToolsDropdown?.addEventListener('click', toggleDropdown);
+      btnToolsDropdownMobile?.addEventListener('click', toggleDropdown);
 
       document.addEventListener('click', (e) => {
-        if (!toolsMenuDropdown.contains(e.target) && e.target !== btnToolsDropdown) {
+        if (!toolsMenuDropdown.contains(e.target) && e.target !== btnToolsDropdown && e.target !== btnToolsDropdownMobile) {
           toolsMenuDropdown.classList.add('hidden');
         }
       });
@@ -234,6 +251,11 @@ class App {
         });
       });
     }
+
+    // Mobile Tone3000 Button
+    document.getElementById('btnOpenTone3000Mobile')?.addEventListener('click', () => {
+      tone3000Modal.open();
+    });
 
     // Mobile Tools menu buttons
     document.getElementById('btnOpenTunerMenuMobile')?.addEventListener('click', () => {
@@ -296,6 +318,13 @@ class App {
       };
       btnTogglePresetsMobile.addEventListener('click', toggleDrawer);
       mobilePresetsBackdrop.addEventListener('click', toggleDrawer);
+
+      const headerPresetClickArea = document.getElementById('headerPresetClickArea');
+      if (headerPresetClickArea) {
+        headerPresetClickArea.addEventListener('click', () => {
+          if (window.innerWidth < 1024) toggleDrawer();
+        });
+      }
     }
 
     // 6. Hardware SysEx Log Drawer
@@ -474,4 +503,11 @@ class App {
 // Launch application on DOMContentLoaded
 window.addEventListener('DOMContentLoaded', () => {
   window.app = new App();
+});
+
+// Cleanly release USB MIDI & BLE driver handles on page reload / unload
+window.addEventListener('beforeunload', () => {
+  if (connection && connection.isConnected) {
+    connection.disconnect();
+  }
 });

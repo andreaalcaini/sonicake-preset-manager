@@ -10,7 +10,11 @@ const STORAGE_KEY = 'sonicake_bridge_url';
 
 export class CompilerBridgeService {
   static getServerUrl() {
-    return localStorage.getItem(STORAGE_KEY) || DEFAULT_SERVER_URL;
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return saved;
+    const host = (typeof window !== 'undefined' && window.location && window.location.hostname) ? window.location.hostname : 'localhost';
+    const protocol = (typeof window !== 'undefined' && window.location && window.location.protocol) ? window.location.protocol : 'http:';
+    return `${protocol}//${host}:8080`;
   }
 
   static setServerUrl(url) {
@@ -85,20 +89,101 @@ export class CompilerBridgeService {
     if (!response.ok) {
       let errMsg = `HTTP ${response.status}`;
       try {
-        const errJson = await response.json();
-        if (errJson.error) errMsg = errJson.error;
+        const text = await response.text();
+        try {
+          const errJson = JSON.parse(text);
+          if (errJson.error) errMsg = errJson.error;
+        } catch (pErr) {
+          if (text && text.length < 200 && !text.includes('<html')) {
+            errMsg = text.trim();
+          }
+        }
       } catch (e) {}
-      throw new Error(`Compiler Server Error: ${errMsg}`);
+      throw new Error(errMsg);
     }
 
     const blob = await response.blob();
-    const fileName = `${cleanName}.namb`;
+    const isClo = response.headers.get('Content-Disposition')?.includes('.clo') || cleanName.toLowerCase().endsWith('.clo');
+    const fileName = isClo ? `${cleanName}.clo` : `${cleanName}.namb`;
 
     return {
       blob,
       fileName,
       size: blob.size
     };
+  }
+
+  /**
+   * Check if an imported CLO profile is available in Sonicake Manager AppData
+   * @returns {Promise<{ available: boolean, originalSize?: number, lowModelSize?: number, crc?: string }>}
+   */
+  static async getLatestCloInfo() {
+    const baseUrl = this.getServerUrl();
+    try {
+      const resp = await fetch(`${baseUrl}/api/latest-clo?info=1`, {
+        signal: AbortSignal.timeout(2000)
+      });
+      if (resp.ok) return await resp.json();
+    } catch (_) {}
+    return { available: false };
+  }
+
+  /**
+   * Download the latest CLO profile imported in Sonicake Manager, converted to Low Model
+   * @returns {Promise<Blob>}
+   */
+  static async getLatestCloBlob() {
+    const baseUrl = this.getServerUrl();
+    const resp = await fetch(`${baseUrl}/api/latest-clo`);
+    if (!resp.ok) throw new Error(`Errore recupero ultimo CLO (HTTP ${resp.status})`);
+    return await resp.blob();
+  }
+
+  /**
+   * Fetch list of verified hardware models guaranteed to work without freezing
+   * @returns {Promise<Array<{ id: string, name: string, description: string, size: number, url: string }>>}
+   */
+  static async getVerifiedModels() {
+    const baseUrl = this.getServerUrl();
+    try {
+      const resp = await fetch(`${baseUrl}/api/verified-models`, {
+        signal: AbortSignal.timeout(2000)
+      });
+      if (resp.ok) return await resp.json();
+    } catch (_) {}
+    return [];
+  }
+
+  /**
+   * Fetch a verified model binary
+   * @param {string} relativeOrAbsoluteUrl
+   * @returns {Promise<Blob>}
+   */
+  static async getVerifiedModelBlob(url) {
+    const baseUrl = this.getServerUrl().replace(/\/+$/, '');
+    let target = url;
+    if (!target.startsWith('http')) {
+      if (!target.startsWith('/api/verified-models/')) {
+        target = `/api/verified-models/${target.replace(/^\/+/, '')}`;
+      }
+      target = `${baseUrl}${target}`;
+    }
+    const resp = await fetch(target);
+    if (!resp.ok) throw new Error(`Errore download modello (HTTP ${resp.status})`);
+    return await resp.blob();
+  }
+
+  /**
+   * Fetch detected hardware slot names from local bridge
+   * @returns {Promise<{ cloneSlots?: string[], irSlots?: string[] } | null>}
+   */
+  static async getHardwareSlots() {
+    const baseUrl = this.getServerUrl().replace(/\/+$/, '');
+    try {
+      const resp = await fetch(`${baseUrl}/api/hardware-slots`, { signal: AbortSignal.timeout(2000) });
+      if (resp.ok) return await resp.json();
+    } catch (_) {}
+    return null;
   }
 
   /**
@@ -115,3 +200,4 @@ export class CompilerBridgeService {
     setTimeout(() => URL.revokeObjectURL(blobUrl), 3000);
   }
 }
+

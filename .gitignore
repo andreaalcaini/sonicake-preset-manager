@@ -27,6 +27,8 @@ dist-ssr
 # Temporary / Scratch files
 pocketedit.html
 *.tmp
+prompt.txt
+prompt*.txt
 
 # Python
 __pycache__/

@@ -1,8 +1,8 @@
-# Contributing to Sonicake Smart Box Preset Manager
+# Contributing to Sonicake Pedaliera Preset Manager
 
-Thank you for your interest in contributing to **Sonicake Smart Box Preset Manager**! 🎉
+Thank you for your interest in contributing to **Sonicake Pedaliera Preset Manager**! 🎉
 
-This project is an open-source, community-driven desktop editor designed to provide guitarists and bassists with the ultimate tone design experience for the **Sonicake Smart Box (QME-20)** and **Pocket Master (QME-10)** multi-effects units.
+This project is an open-source, community-driven desktop editor designed to provide guitarists and bassists with the ultimate tone design experience for **all Sonicake multi-effects pedals** (tested on QME-20 and QME-10).
 
 ---
 

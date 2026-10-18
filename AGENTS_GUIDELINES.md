@@ -7,7 +7,7 @@ Questa guida stabilisce il modo di lavorare, comunicare e prendere decisioni per
 
 ## 1. Chi è Andrea e come lavora
 
-- **Ruolo**: Andrea (@andreaalcaini) è il creatore, architetto e product owner del progetto. È **l'unica persona del team con la pedaliera fisica (Sonicake Smart Box QME-20)** collegata su banco di lavoro tramite USB e Bluetooth BLE.
+- **Ruolo**: Andrea (@andreaalcaini) è il creatore, architetto e product owner del progetto. È **l'unica persona del team con la pedaliera fisica (Sonicake QME-20)** collegata su banco di lavoro tramite USB e Bluetooth BLE.
 - **Stile di interazione**:
   - **Pragmatico, rapido e diretto**: zero convenevoli, zero risposte verbose, va dritto al punto.
   - **Feedback dal campo reale**: testa dal vivo su smartphone (Android/iOS) e su PC, riportando esattamente ciò che accade sullo schermo o sulla pedaliera (es. *"da telefono dà questo errore"*, *"l'interfaccia si bugga quando seleziono BLE"*, *"la pedaliera si è bloccata"*).

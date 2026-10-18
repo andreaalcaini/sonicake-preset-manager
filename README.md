@@ -18,7 +18,7 @@
 
 ## 📖 Panoramica del Progetto
 
-Le pedaliere **Sonicake** (come la Smart Box e la serie compatibile) offrono timbriche eccellenti con supporto ai profili **Neural Amp Modeler (.nam)** e risposte all'impulso **IR (.wav)**. Tuttavia, non dispongono di un editor desktop ufficiale completo e multipiattaforma.
+Le pedaliere **Sonicake** (tutta la gamma multi-effetto) offrono timbriche eccellenti con supporto ai profili **Neural Amp Modeler (.nam)** e risposte all'impulso **IR (.wav)**. Tuttavia, non dispongono di un editor desktop ufficiale completo e multipiattaforma.
 
 **Sonicake Studio Preset Manager** nasce per colmare questa esigenza: un'applicazione web nativa, velocissima, con estetica studio hardware (ispirata a *Quad Cortex*, *UAD* e *Ableton*), senza pubblicità e **100% gratuita**. 
 

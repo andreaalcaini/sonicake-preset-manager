@@ -1,8 +1,8 @@
 @echo off
-title Sonicake Smart Box Preset Manager
+title Sonicake Pedaliera Preset Manager
 color 0b
 echo ==============================================================
-echo       SONICAKE SMART BOX (QME-20) PRESET MANAGER
+echo       SONICAKE PEDALIERA PRESET MANAGER
 echo       Neural DSP style PC Editor + Tone3000 Integration
 echo ==============================================================
 echo.

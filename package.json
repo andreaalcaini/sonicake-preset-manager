@@ -1,7 +1,7 @@
 {
   "name": "sonicake-preset-manager",
   "version": "1.0.0",
-  "description": "Sonicake Smart Box (QME-20) Desktop Preset Manager & Tone3000 Cloud Explorer",
+  "description": "Sonicake Pedaliera Preset Manager & Tone3000 Cloud Explorer (all Sonicake multi-effects)",
   "type": "module",
   "scripts": {
     "dev": "vite --host",

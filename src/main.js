@@ -9,6 +9,7 @@ import { presetEngine } from './core/preset-engine.js';
 import { SignalChain } from './components/SignalChain.js';
 import { ModuleEditor } from './components/ModuleEditor.js';
 import { PresetList } from './components/PresetList.js';
+import { PresetDropdown } from './components/PresetDropdown.js';
 import { Tone3000Modal } from './components/Tone3000Modal.js';
 import { DrumMachineModal } from './components/DrumMachineModal.js';
 import { TunerModal } from './components/TunerModal.js';
@@ -339,8 +340,18 @@ class App {
 
       const headerPresetClickArea = document.getElementById('headerPresetClickArea');
       if (headerPresetClickArea) {
+        // Narrow screens: preset drawer. Desktop (list already visible): quick-switch dropdown
+        const presetDropdown = new PresetDropdown(headerPresetClickArea);
+        this.presetDropdown = presetDropdown;
         headerPresetClickArea.addEventListener('click', () => {
           if (window.innerWidth < 1024) toggleDrawer();
+          else presetDropdown.toggle();
+        });
+        headerPresetClickArea.addEventListener('keydown', (e) => {
+          if ((e.key === 'Enter' || e.key === ' ') && e.target === headerPresetClickArea) {
+            e.preventDefault();
+            headerPresetClickArea.click();
+          }
         });
       }
     }

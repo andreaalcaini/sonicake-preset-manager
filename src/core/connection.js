@@ -14,7 +14,7 @@ export class SonicakeConnection {
     this.midiInput = null;
     this.midiOutput = null;
     this.usbMidiBuffer = null;
-    this.usbMultiPacketResponses = {};
+    this.multiFrameAnswers = {}; // multi-frame answers being collected (USB and BLE)
     
     // BLE
     this.bleDevice = null;
@@ -128,7 +128,7 @@ export class SonicakeConnection {
       this.deviceName = selected.name;
 
       this.usbMidiBuffer = null;
-      this.usbMultiPacketResponses = {};
+      this.multiFrameAnswers = {}; // multi-frame answers being collected (USB and BLE)
 
       this.midiInput.onmidimessage = (event) => this.handleUsbMidiMessage(event);
 
@@ -192,73 +192,48 @@ export class SonicakeConnection {
       message = combined;
       this.usbMidiBuffer = null;
     }
+    this.deliverFrame(message);
+  }
 
-    // Packet counting
-    const totalPackets = (message[3] << 4) | message[4];
-    const currentPacket = (message[5] << 4) | message[6];
-
-    if (totalPackets > 1) {
-      const responseId = `${message[3]}_${message[4]}`;
-      // Drop a stale partial answer after 2.5 s without frames (long answers, e.g. the 106-frame
-      // preset names, can take longer than that in total)
-      if (this.usbMultiPacketResponses[responseId] && (Date.now() - this.usbMultiPacketResponses[responseId].lastTime > 2500)) {
-        delete this.usbMultiPacketResponses[responseId];
-      }
-      if (!this.usbMultiPacketResponses[responseId]) {
-        this.usbMultiPacketResponses[responseId] = {
-          totalPackets,
-          packets: {},
-          lastTime: Date.now()
-        };
-      }
-
-      const response = this.usbMultiPacketResponses[responseId];
-      response.lastTime = Date.now();
-      response.packets[currentPacket] = message;
-
-      let allPacketsReceived = true;
-      for (let i = 0; i < totalPackets; i++) {
-        if (!(i in response.packets)) {
-          allPacketsReceived = false;
-          break;
-        }
-      }
-
-      if (allPacketsReceived) {
-        const reassembledPayload = [];
-        for (let i = 0; i < totalPackets; i++) {
-          const pkt = response.packets[i];
-          const payloadStart = 9;
-          const payloadEnd = pkt.length - 1;
-          for (let j = payloadStart; j < payloadEnd; j++) {
-            reassembledPayload.push(pkt[j]);
-          }
-        }
-
-        const singlePacketMessage = new Uint8Array(reassembledPayload.length + 10);
-        singlePacketMessage[0] = 0xF0;
-        singlePacketMessage[1] = message[1];
-        singlePacketMessage[2] = message[2];
-        singlePacketMessage[3] = 0x00;
-        singlePacketMessage[4] = 0x01;
-        singlePacketMessage[5] = 0x00;
-        singlePacketMessage[6] = 0x00;
-        singlePacketMessage[7] = message[7];
-        singlePacketMessage[8] = message[8];
-        singlePacketMessage.set(reassembledPayload, 9);
-        singlePacketMessage[singlePacketMessage.length - 1] = 0xF7;
-
-        delete this.usbMultiPacketResponses[responseId];
-
-        // Format as BLE-equivalent hex starting with 8080F0 for unified handlers
-        const hex = '8080' + Array.from(singlePacketMessage).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-        this.dispatchMessage(hex);
-      }
-    } else {
-      // Single packet message
-      const hex = '8080' + Array.from(message).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-      this.dispatchMessage(hex);
+  /**
+   * One transport frame (F0 crc crc total total idx idx len len payload-nibbles F7) from USB or
+   * BLE. Multi-frame answers are collected by index and dispatched once complete, as a single
+   * frame with total = 1, so every listener receives whole messages whatever the transport.
+   */
+  deliverFrame(frame) {
+    const toHex = (bytes) => '8080' + Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+    const total = (frame[3] << 4) | frame[4];
+    if (total <= 1) {
+      this.dispatchMessage(toHex(frame));
+      return;
     }
+
+    const idx = (frame[5] << 4) | frame[6];
+    const len = (frame[7] << 4) | frame[8];
+    const key = String(total);
+    const now = Date.now();
+    let answer = this.multiFrameAnswers[key];
+    // Drop a stale partial answer after 2.5 s without frames (long answers, e.g. the 106-frame
+    // preset names, can take longer than that in total)
+    if (answer && now - answer.lastTime > 2500) {
+      this.log(`Risposta incompleta scartata (${Object.keys(answer.frames).length}/${total} frame).`, 'warning');
+      answer = null;
+    }
+    if (!answer) answer = this.multiFrameAnswers[key] = { frames: {}, lastTime: now };
+    answer.lastTime = now;
+    answer.frames[idx] = frame.slice(9, 9 + len * 2);
+    if (Object.keys(answer.frames).length < total) return;
+    for (let i = 0; i < total; i++) if (!answer.frames[i]) return;
+    delete this.multiFrameAnswers[key];
+
+    const nibbles = [];
+    for (let i = 0; i < total; i++) nibbles.push(...answer.frames[i]);
+    const size = Math.min(0xFF, nibbles.length / 2);
+    const whole = new Uint8Array(nibbles.length + 10);
+    whole.set([0xF0, 0, 0, 0x00, 0x01, 0x00, 0x00, size >> 4, size & 0x0F], 0);
+    whole.set(nibbles, 9);
+    whole[whole.length - 1] = 0xF7;
+    this.dispatchMessage(toHex(whole));
   }
 
   /**
@@ -327,6 +302,7 @@ export class SonicakeConnection {
     this.bleCharacteristic = await service.getCharacteristic(this.CHARACTERISTIC_UUID);
 
     this.bleBuffer = [];
+    this.multiFrameAnswers = {};
     await this.bleCharacteristic.startNotifications();
     this.bleCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
       const val = event.target.value;
@@ -415,8 +391,8 @@ export class SonicakeConnection {
   /**
    * BLE notifications carry SysEx frames split across notifications, or several frames in one,
    * with BLE-MIDI header/timestamp bytes (>= 0x80) around them. Frame bodies are nibbles only,
-   * so every byte >= 0x80 other than F0/F7 is transport overhead. Each complete F0..F7 frame is
-   * dispatched on its own, like USB delivers them.
+   * so every byte >= 0x80 other than F0/F7 is transport overhead. Each complete F0..F7 frame goes
+   * through the same reassembly as USB (deliverFrame).
    */
   handleBleNotification(data) {
     if (!data || data.length === 0) return;
@@ -427,9 +403,9 @@ export class SonicakeConnection {
         continue; // header / timestamp before a frame
       } else if (b === 0xF7) {
         this.bleBuffer.push(b);
-        const hex = Array.from(this.bleBuffer, x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+        const frame = Uint8Array.from(this.bleBuffer);
         this.bleBuffer = [];
-        this.dispatchMessage('8080' + hex);
+        this.deliverFrame(frame);
       } else if (b < 0x80) {
         this.bleBuffer.push(b);
       }

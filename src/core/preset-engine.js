@@ -106,8 +106,7 @@ export class PresetEngine {
 
     // SysEx Dump Sync State
     this.isSyncingNames = false;
-    this.nameFramesSeen = new Set(); // BLE frame indexes received for the names answer
-    this.nameFramesTotal = 0;
+    this.namesAnswer = null; // payload of the [12 40] preset names answer
     this.hardwareSlotNames = { Clone: [], IR: [] }; // last slot names reported by the pedal
     this.pendingSlotWrite = null; // { type, idx, name } while a flashed slot is being committed
     this.isWaitingForPresetDump = false;
@@ -321,18 +320,13 @@ export class PresetEngine {
   handleIncomingSysEx(hexString) {
     // Raw preset transfers carry arbitrary bytes that could match the signature checks below
     if (this.rawTransferActive) return;
-    let cleanHex = hexString.replace(/\s+/g, '').toUpperCase();
+    const cleanHex = hexString.replace(/\s+/g, '').toUpperCase();
 
-    // BLE: Clone AMP / User IR names answers span 5 frames: decode them only once complete
-    const slotNames = this.collectSlotNamesFrames(cleanHex);
-    if (slotNames === 'pending') return;
-    if (slotNames) cleanHex = slotNames;
-
-    // Short trace of incoming messages in the debug console (first frame of each stream only)
-    const trace = this.decodeTransportFrame(cleanHex);
-    if (trace && (trace.total === 1 || trace.idx === 0)) {
-      const shown = Array.from(trace.payload.slice(0, 16), b => b.toString(16).padStart(2, '0')).join(' ');
-      connection.log(`Ricevuto: ${shown}${trace.payload.length > 16 ? ` … (${trace.payload.length} byte)` : ''}`, 'info');
+    // connection.js delivers whole messages: multi-frame answers are already reassembled
+    const message = this.decodeTransportFrame(cleanHex);
+    if (message) {
+      const shown = Array.from(message.payload.slice(0, 16), b => b.toString(16).padStart(2, '0')).join(' ');
+      connection.log(`Ricevuto: ${shown}${message.payload.length > 16 ? ` … (${message.payload.length} byte)` : ''}`, 'info');
     }
 
     // 1. Clone Amp / NAM Names Response (signature: 01020204)
@@ -357,43 +351,17 @@ export class PresetEngine {
       return;
     }
 
-    // 3. Preset Names Sync (a terminator arriving after all frames were decoded is just dropped)
-    if (!this.isSyncingNames && cleanHex === TERMINATOR_PACKET) return;
-    if (this.isSyncingNames && cleanHex.startsWith('8080F0') && cleanHex.endsWith('F7')) {
-      clearTimeout(this.nameSyncTimeoutId);
-
-      if (connection.connectionType === 'usb') {
-        connection.log('Received complete USB preset names packet. Decoding...', 'info');
-        this.dumpPackets.push(cleanHex);
-        this.processNamesDump();
-      } else if (cleanHex === TERMINATOR_PACKET) {
-        connection.log(`Terminator packet received. Decoding ${this.dumpPackets.length} name packets...`, 'info');
-        this.processNamesDump();
-      } else {
-        // BLE delivers the 106-frame answer frame by frame (sometimes several frames per notification)
-        this.dumpPackets.push(cleanHex);
-        for (const f of this.splitTransportFrames(cleanHex)) {
-          this.nameFramesTotal = f.total;
-          this.nameFramesSeen.add(f.idx);
-        }
-        if (this.nameFramesTotal > 0 && this.nameFramesSeen.size >= this.nameFramesTotal) {
-          this.processNamesDump();
-          return;
-        }
-        this.nameSyncTimeoutId = setTimeout(() => {
-          if (this.isSyncingNames) {
-            connection.log(`Name sync timeout reached after ${this.dumpPackets.length} packets. Processing received packets...`, 'info');
-            this.processNamesDump();
-          }
-        }, 1500);
-      }
+    // 3. Preset names answer [12 40] + 100 records (a late BLE terminator is just dropped)
+    if (cleanHex === TERMINATOR_PACKET) return;
+    if (this.isSyncingNames && message?.payload[0] === 0x12 && message.payload[1] === 0x40) {
+      this.namesAnswer = message.payload;
+      this.processNamesDump();
       return;
     }
 
     // 4. Preset State Sync (native reassembled packet or multi-packet dump)
     const isSysEx = (cleanHex.startsWith('8080F0') || cleanHex.startsWith('F0')) && cleanHex.endsWith('F7');
-    // (the last frame of an indexed dump can be a single byte, hence the transport-frame check)
-    if (this.isWaitingForPresetDump && isSysEx && (cleanHex.length > 50 || this.decodeTransportFrame(cleanHex)?.total > 1)) {
+    if (this.isWaitingForPresetDump && isSysEx && cleanHex.length > 50) {
       const normalizedHex = cleanHex.startsWith('8080') ? cleanHex : ('8080' + cleanHex);
 
       // A. Case 1: Reassembled SysEx (from USB or BLE multi-packet transport)
@@ -409,28 +377,6 @@ export class PresetEngine {
 
       // B. Case 2: Individual dump sub-packets received sequentially
       this.dumpPackets.push(normalizedHex);
-
-      // BLE: indexed transport frames (476-byte answer = 26 frames) -> rebuild the full payload
-      const dumpFrame = this.decodeTransportFrame(normalizedHex);
-      if (dumpFrame && dumpFrame.total > 1) {
-        const seen = new Set(this.dumpPackets.map(h => this.decodeTransportFrame(h)?.idx));
-        clearTimeout(this.syncTimeoutId);
-        if (seen.size >= dumpFrame.total) {
-          this.syncTimeoutId = null;
-          this.isWaitingForPresetDump = false;
-          const payload = this.reassembleTransportPayload(this.dumpPackets);
-          this.dumpPackets = [];
-          this.processPresetDump([payload]);
-        } else {
-          this.syncTimeoutId = setTimeout(() => {
-            if (!this.isWaitingForPresetDump) return;
-            this.isWaitingForPresetDump = false;
-            connection.log(`Preset state sync timed out (${seen.size}/${dumpFrame.total} frames).`, 'warning');
-            this.dumpPackets = [];
-          }, 3500);
-        }
-        return;
-      }
 
       // Extend timeout each time a valid packet arrives to prevent premature timeout on BLE
       clearTimeout(this.syncTimeoutId);
@@ -459,10 +405,9 @@ export class PresetEngine {
 
     // 5a. Active preset message [12 43 <index> ...]: answer to our request or pushed by the pedal
     //     when the preset is changed from its footswitches / knob
-    const frame = this.decodeTransportFrame(cleanHex);
-    if (frame && frame.total === 1 && frame.len >= 3 && frame.payload[0] === 0x12 && frame.payload[1] === 0x43) {
+    if (message && message.payload.length >= 3 && message.payload[0] === 0x12 && message.payload[1] === 0x43) {
       if (this.isWaitingForPresetNumber || this.followPedalPresetChanges) {
-        this.applyHardwareActiveSlot(frame.payload[2] + 1);
+        this.applyHardwareActiveSlot(message.payload[2] + 1);
       }
       this.isWaitingForPresetNumber = false;
       return;
@@ -601,16 +546,13 @@ export class PresetEngine {
     this.nameSyncTimeoutId = null;
 
     let allNames = [];
-    const payload = this.reassembleTransportPayload(this.dumpPackets);
-    if (payload && payload[0] === 0x12 && payload[1] === 0x40) {
-      allNames = decodeNativePresetNames(payload);
+    if (this.namesAnswer) {
+      allNames = decodeNativePresetNames(this.namesAnswer);
     } else {
-      // Never guess names from an unrecognised answer: keep the current ones
-      connection.log('Risposta dei nomi preset non riconosciuta: nomi non aggiornati.', 'warning');
+      // No (complete) answer in time: keep the current names, never guess them
+      connection.log('Nessuna risposta completa con i nomi dei preset: nomi non aggiornati.', 'warning');
     }
-    this.dumpPackets = [];
-    this.nameFramesSeen.clear();
-    this.nameFramesTotal = 0;
+    this.namesAnswer = null;
 
     if (allNames.length > 0) {
       connection.log(`Successfully synced ${allNames.length} preset names from pedal flash!`, 'success');
@@ -812,9 +754,7 @@ export class PresetEngine {
         return resolve();
       }
       this.isSyncingNames = true;
-      this.dumpPackets = [];
-      this.nameFramesSeen.clear();
-      this.nameFramesTotal = 0;
+      this.namesAnswer = null;
       this.nameSyncResolve = resolve;
 
       clearTimeout(this.nameSyncTimeoutId);
@@ -1765,72 +1705,6 @@ export class PresetEngine {
     return { total: byteAt(2), idx: byteAt(4), len: byteAt(6), payload };
   }
 
-  /**
-   * Collect the frames of a multi-frame Clone AMP / User IR names answer ([12 24] / [12 20]).
-   * Returns 'pending' while frames are missing, the full answer as a single nibble-encoded
-   * SysEx hex string once complete (same shape USB delivers), or null for unrelated frames.
-   */
-  collectSlotNamesFrames(hex) {
-    const f = this.decodeTransportFrame(hex);
-    if (!f || f.total <= 1) return null;
-    if (f.idx === 0 && f.payload[0] === 0x12 && (f.payload[1] === 0x24 || f.payload[1] === 0x20)) {
-      this.slotNamesStream = { total: f.total, frames: new Map([[0, f.payload.slice(0, f.len)]]) };
-    } else if (this.slotNamesStream && f.total === this.slotNamesStream.total && f.idx > 0) {
-      this.slotNamesStream.frames.set(f.idx, f.payload.slice(0, f.len));
-    } else {
-      return null;
-    }
-    const stream = this.slotNamesStream;
-    if (stream.frames.size < stream.total) return 'pending';
-    this.slotNamesStream = null;
-    const bytes = [];
-    for (let k = 0; k < stream.total; k++) bytes.push(...(stream.frames.get(k) || []));
-    const nibbles = bytes.map(b => `0${(b >> 4).toString(16)}0${(b & 0x0F).toString(16)}`).join('');
-    return `8080F0${nibbles}F7`.toUpperCase();
-  }
-
-  /** Split a dispatched hex string into transport frames (a BLE notification can carry several) */
-  splitTransportFrames(hex) {
-    const h = hex.replace(/\s+/g, '').toUpperCase();
-    const frames = [];
-    let start = -1;
-    for (let i = 0; i + 1 < h.length; i += 2) {
-      const b = h.substr(i, 2);
-      if (b === 'F0') {
-        start = i;
-      } else if (b === 'F7' && start >= 0) {
-        const frame = this.decodeTransportFrame(h.slice(start, i + 2));
-        if (frame) frames.push(frame);
-        start = -1;
-      }
-    }
-    return frames;
-  }
-
-  /**
-   * Rebuild a multi-frame answer from the received packets, frames in index order.
-   * USB packets are already reassembled by connection.js (total = 1). Stops at the first
-   * missing frame, so a partial answer still yields the leading data. null = no frames found.
-   */
-  reassembleTransportPayload(packets) {
-    const chunks = new Map();
-    let total = 0;
-    for (const packet of packets) {
-      for (const f of this.splitTransportFrames(packet)) {
-        if (f.total <= 1) return f.payload;
-        total = f.total;
-        chunks.set(f.idx, f.payload.slice(0, f.len));
-      }
-    }
-    if (!total) return null;
-    const parts = [];
-    for (let k = 0; k < total && chunks.has(k); k++) parts.push(chunks.get(k));
-    const out = new Uint8Array(parts.reduce((n, c) => n + c.length, 0));
-    let o = 0;
-    for (const c of parts) { out.set(c, o); o += c.length; }
-    return out;
-  }
-
   /** Resolve with the first frame accepted by `accept(frame)` (return value = result), or reject on timeout */
   waitForFrame(accept, timeoutMs, label) {
     return new Promise((resolve, reject) => {
@@ -1852,27 +1726,10 @@ export class PresetEngine {
   async exportPresetRaw(slot) {
     if (!connection.isConnected) throw new Error('Pedaliera non connessa.');
     const index = slot - 1;
-    const chunks = {};
-    let total = 0;
-    const pending = this.waitForFrame((f) => {
-      // USB delivers the reassembled stream as one frame, BLE frame by frame
-      if (f.total === 1 && f.payload.length >= 508 && f.payload[0] === 0x12 && f.payload[1] === 0x4F) {
-        return f.payload.slice(0, 508);
-      }
-      if (f.total > 1 && f.len <= 19) {
-        if (f.idx === 0 && !(f.payload[0] === 0x12 && f.payload[1] === 0x4F)) return null;
-        if (f.idx > 0 && !(0 in chunks)) return null;
-        total = f.total;
-        chunks[f.idx] = f.payload.slice(0, f.len);
-        if (Object.keys(chunks).length === total) {
-          const out = new Uint8Array(Object.values(chunks).reduce((n, c) => n + c.length, 0));
-          let o = 0;
-          for (let k = 0; k < total; k++) { out.set(chunks[k], o); o += chunks[k].length; }
-          return out;
-        }
-      }
-      return null;
-    }, 4000, `lettura ${this.getSlotCode(slot)}`);
+    // The 27-frame answer arrives reassembled by connection.js (USB and BLE)
+    const pending = this.waitForFrame((f) => (
+      f.payload.length >= 508 && f.payload[0] === 0x12 && f.payload[1] === 0x4F ? f.payload.slice(0, 508) : null
+    ), 4000, `lettura ${this.getSlotCode(slot)}`);
     await connection.writeRawBytes(buildStreamingFlashPackets(new Uint8Array([0x12, 0x4F, index, 0, 0, 0]))[0]);
     const data = await pending;
     if (data.length !== 508 || data[2] !== 0xFF || data[5] !== 0xFF) {

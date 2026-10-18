@@ -34,6 +34,13 @@ This project is an open-source, community-driven desktop editor designed to prov
    npm run build
    ```
 
+6. **Run the tests (no pedal needed):**
+   ```bash
+   npm test              # engine + protocol against a virtual pedal
+   npm run test:all      # + compiler server (Python) + interface (headless Chrome)
+   ```
+   CI runs the same tests before publishing the Docker image. AI agents and contributors: read [AGENTS.md](AGENTS.md) and [STRUCTURE.md](STRUCTURE.md) first.
+
 ---
 
 ## 💡 How You Can Help

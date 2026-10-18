@@ -712,7 +712,7 @@ export class PresetEngine {
 
   reportPresetToServer() {
     // Local debugging aid only (server.py on the developer PC); never on the published site
-    if (!import.meta.env.DEV) return;
+    if (!import.meta.env?.DEV) return; // (undefined outside Vite, e.g. in the Node tests)
     try {
       const slot = this.currentSlot;
       const name = this.activePreset?.name || '';

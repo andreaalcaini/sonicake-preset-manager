@@ -131,7 +131,7 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
 1. Rispondi sempre in **italiano**, tono professionale, diretto e conciso.
 2. Niente spiegazioni ovvie: mostra cosa è stato fatto, come testarlo e quali decisioni servono.
 3. Se una scelta è logicamente evidente, implementala e segnalala in breve; chiedi solo su decisioni di prodotto, timbriche/audio o vincoli hardware non documentati. Per modifiche multi-file vale comunque la regola di pianificazione sopra.
-4. Prima di dichiarare concluso un compito: `npm run build` deve passare e `git status` deve essere in ordine.
+4. Prima di dichiarare concluso un compito: `npm run build` e `npm test` devono passare e `git status` deve essere in ordine. Chi non ha la pedaliera (Mattia) verifica le modifiche al protocollo con la pedaliera virtuale dei test.
 
 ---
 
@@ -184,7 +184,8 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
 
 ## ✅ Progetto: Checklist prima di ogni consegna
 
-- [ ] `npm run build` passa (exit code 0)?
+- [ ] `npm run build` passa (exit code 0, controllato davvero: non filtrare l'output con `grep` prima di committare)?
+- [ ] `npm run test:all` passa? Ogni modifica al protocollo ha un test nella pedaliera virtuale (`tests/support/virtual-pedal.mjs`) prima di chiedere ad Andrea di provarla sull'hardware.
 - [ ] `STRUCTURE.md`, `.env.example` e la documentazione del protocollo riflettono lo stato reale?
 - [ ] Nessuna modifica altera la dimensione fissa di 2.696 byte dei Clone AMP o i timing SysEx?
 - [ ] L'interfaccia mobile resta fluida e senza scrollbar orizzontali?

@@ -14,7 +14,42 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Virtual pedal, protocol, compiler server and interface tests: no image is published if they fail
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Engine and protocol tests (virtual pedal)
+        run: npm test
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Compiler server tests
+        run: |
+          pip install -r server/requirements.txt
+          npm run test:server
+
+      - name: Interface tests (headless Chrome)
+        run: npm run test:ui
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read

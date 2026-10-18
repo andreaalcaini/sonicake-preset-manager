@@ -58,3 +58,7 @@ server/nam2clo/build/
 # Environment (template: .env.example)
 .env
 .env*.local
+
+# Small protocol captures used by the automated tests
+!tests/fixtures/
+!tests/fixtures/**

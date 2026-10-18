@@ -60,6 +60,13 @@ sonicake-preset-manager/
 │   │   └── extract-vendor.ps1  # Estrae i file vendor dall'APK SonicLink in data/vendor/
 │   ├── cache/                  # Cache conversioni in sviluppo locale (non committata)
 │   └── *.py / *.bin            # Script e dump di reverse engineering
+├── tests/                      # Test automatici (girano anche in CI prima della build dell'immagine)
+│   ├── support/                # Pedaliera virtuale (risponde come quella vera) e scenario del motore
+│   ├── engine/                 # Scenario completo su USB, BLE a frame spezzati, BLE a 5 frame per notifica
+│   ├── protocol/               # Libreria comandi (CRC8), routing catena, formati binari vs catture, .prst
+│   ├── server/                 # Limiti di sicurezza del compiler (Python unittest)
+│   ├── ui/                     # Chrome headless sulla build, rete e hardware simulati
+│   └── fixtures/               # Piccole catture reali del protocollo (committate)
 ├── data/                       # Volume runtime (/app/data): cache/ + vendor/, mai committato
 ├── Dockerfile                  # Immagine unica multi-arch: sito Vite + API compiler (runtime bionic + nam2clo)
 ├── .dockerignore               # Build context dell'immagine
@@ -175,6 +182,12 @@ npm run build               # Build di produzione in dist/
 npm run preview             # Anteprima della build
 python server/server.py     # Compiler locale su :8080 (necessario per .nam → Clone AMP)
 start.bat                   # Windows: compiler + Vite in un colpo
+
+# Test (nessuna pedaliera necessaria)
+npm test                    # Motore + protocollo contro la pedaliera virtuale (~15 s)
+npm run test:server         # Limiti di sicurezza del compiler (Python)
+npm run test:ui             # Build + Chrome headless (CHROME_PATH per un browser non standard)
+npm run test:all            # Tutto quanto sopra
 
 # Immagine in locale (solo per verificare il rilascio)
 docker build --platform linux/arm64 -t sonicake .

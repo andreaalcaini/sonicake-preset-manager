@@ -56,6 +56,8 @@ export class VirtualPedal {
     this.commitMs = commitMs;
     this.flashAck = flashAck;
     this.flashPacketsReceived = 0;
+    this.rawFrames = []; // every frame received, as uppercase hex (to compare with captures)
+    this.renames = [];
     const userNames = ['APP TEST', 'Creamy OD', 'Pure Clean', 'Creamy OD', 'Dark Wave', 'Pure Clean', 'Metal Riff'];
     this.presets = Array.from({ length: 100 }, (_, i) => {
       const name = i < 50 ? (userNames[i] || `User${i + 1}`) : `Fact${i - 49}`;
@@ -140,6 +142,7 @@ export class VirtualPedal {
   receive(bytes) {
     const { P } = this.site;
     if (bytes[0] === 0xC0) return; // optional MIDI Program Change
+    this.rawFrames.push(Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('').toUpperCase());
     if (bytes[0] !== 0xF0 || bytes[bytes.length - 1] !== 0xF7) { this.errors.push('frame senza F0/F7'); return; }
     const n = bytes.slice(1, -1);
     if (n.some(x => x > 0x0F)) { this.errors.push('byte non-nibble nel frame'); return; }
@@ -209,6 +212,12 @@ export class VirtualPedal {
       this.flashes.push({ kind, slot: data[6], len: data.length, total, data });
       this.pendingCommit = { kind, slot: data[6], name: ascii(data.subarray(10, 26)) };
       this.committingUntil = Date.now() + this.commitMs;
+    } else if (data[0] === 0x11 && (data[1] === 0x26 || data[1] === 0x22) && data.length === 22) {
+      // Native slot rename (captured from Sonicake Manager): only the name changes, immediately
+      const kind = data[1] === 0x26 ? 'clone' : 'ir';
+      const name = ascii(data.subarray(6, 22));
+      this.renames.push({ kind, slot: data[2], name });
+      (kind === 'clone' ? this.clone : this.ir)[data[2]] = { name, used: 1 };
     } else if (data[0] === 0x11 && data[1] === 0x4F) {
       this.imports.push({ slot: data[2], len: data.length });
       this.presets[data[2]] = { name: ascii(data.subarray(6, 22)), raw: data.slice(6) };

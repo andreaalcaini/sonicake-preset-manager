@@ -1,0 +1,22 @@
+{
+  "source": "Sonicake Manager 'Rename Clone' / 'Rename IR' (QME-20, USB), captured 2026-10-19 with server/tools/sniff_import.py",
+  "clone": {
+    "slot": 1,
+    "oldName": "BOOGIE V TWIN",
+    "newName": "TEST1",
+    "frames": [
+      "F00F0A00020000010301010206000100000000000F0504040505030504030100000000000000000000000000000000F7",
+      "F0000A000200010003000000000000F7"
+    ]
+  },
+  "ir": {
+    "slot": 0,
+    "oldName": "Marshall 1960BV",
+    "newName": "TEST2",
+    "frames": [
+      "F00C0E00020000010301010202000000000100000A0504040505030504030200000000000000000000000000000000F7",
+      "F0000A000200010003000000000000F7"
+    ]
+  },
+  "ack": "F00B02000100000003010400080000F7"
+}

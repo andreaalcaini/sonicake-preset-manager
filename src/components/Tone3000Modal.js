@@ -14,7 +14,7 @@
  */
 
 import { Tone3000Service } from '../services/tone3000.js';
-import { presetEngine } from '../core/preset-engine.js';
+import { presetEngine, SLOT_RENAME_MAX } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
 import { CompilerBridgeService } from '../services/compiler-bridge.js';
 import { convertCLOToLowModel } from '../core/protocol.js';
@@ -741,12 +741,12 @@ export class Tone3000Modal {
    * pedal limit. Also used to rename a slot already in memory (`title`, `confirmLabel`, `note`).
    * Resolves with the cleaned name (printable ASCII) or null if cancelled.
    */
-  askSlotName(defaultName, slotLabel, { title = 'Nome nella pedaliera', confirmLabel = 'Scrivi', note = '' } = {}) {
+  askSlotName(defaultName, slotLabel, { title = 'Nome nella pedaliera', confirmLabel = 'Scrivi', note = '', max = 14 } = {}) {
     return askText({
       title,
       subtitle: slotLabel,
       value: defaultName,
-      max: 14,
+      max,
       confirmLabel,
       note,
       filter: (s) => s.replace(/[^\x20-\x7E]/g, '') // printable ASCII only
@@ -1144,28 +1144,25 @@ export class Tone3000Modal {
         const engineType = type === 'amp' ? 'Clone' : 'IR';
         const slotLabel = type === 'amp' ? `Slot Clone AMP ${slot + 1}` : `Slot User IR ${slot + 1}`;
         const currentName = type === 'amp' ? presetEngine.cloneSlotNames[slot] : presetEngine.irSlotNames[slot];
-        // The pedal has no rename command: only captures written from this browser can be
-        // written again with the new name; for the others the name stays in the app
-        const onPedal = presetEngine.canRenameSlotOnPedal(engineType, slot);
-        const newName = await this.askSlotName(currentName, slotLabel, {
-          title: 'Rinomina',
-          confirmLabel: onPedal ? 'Rinomina' : 'Salva',
-          note: onPedal
-            ? 'Il nome viene scritto sulla pedaliera riscrivendo lo slot con la stessa cattura (qualche secondo, non toccare il cavo).'
-            : 'Questa cattura non è stata scritta da questo browser (o la pedaliera non è collegata): il nuovo nome vale solo in questa app e resta finché nello slot c\'è la stessa cattura. Sulla pedaliera resta il nome originale.'
-        });
-        if (!newName || newName === currentName) return;
-        if (!onPedal) {
-          presetEngine.setSlotAlias(engineType, slot, newName);
-          this.render();
+        // The name is written on the pedal (native rename message): it needs the pedal connected
+        if (!connection.isConnected) {
+          notify('Collega la pedaliera via USB o Bluetooth per rinominare lo slot.', 'warning');
           return;
         }
-        this.showFlashProgressModal(`Rinomina "${newName}"`, `Riscrittura dello ${slotLabel}`);
+        const newName = await this.askSlotName(currentName, slotLabel, {
+          title: 'Rinomina',
+          confirmLabel: 'Rinomina',
+          max: SLOT_RENAME_MAX,
+          note: "Il nome viene scritto direttamente sulla pedaliera (al massimo 10 caratteri, come nell'app ufficiale): la cattura nello slot non cambia."
+        });
+        if (!newName || newName === currentName) return;
         try {
-          await presetEngine.renameSlotOnPedal(engineType, slot, newName, (curr, tot, pct) => this.updateFlashProgress(curr, tot, pct));
-          this.hideFlashProgressModal(`${slotLabel} rinominato in "${newName}" sulla pedaliera.`);
+          const confirmed = await presetEngine.renameSlotOnPedal(engineType, slot, newName);
+          notify(confirmed
+            ? `${slotLabel} rinominato in "${newName}".`
+            : `${slotLabel}: nome inviato, ma la pedaliera non l'ha ancora confermato. Verifica con una sincronizzazione.`,
+            confirmed ? 'success' : 'warning');
         } catch (err) {
-          this.hideFlashProgressModal();
           notify(`Rinomina non riuscita: ${err.message}`, 'error');
         }
         this.render();

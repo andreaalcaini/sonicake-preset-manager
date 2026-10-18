@@ -21,6 +21,7 @@ import {
   buildStreamingFlashPackets,
   buildIRPayload,
   buildClonePayload,
+  buildSlotRenamePayload,
   decodePresetStateAndOrder,
   decodeSelectedEffects,
   decodeParameterValues,
@@ -29,6 +30,9 @@ import {
   decodeNativePresetNames
 } from './protocol.js';
 import { PrstParser } from './prst-parser.js';
+
+/** Longest name the official apps allow when renaming a Clone AMP / User IR slot */
+export const SLOT_RENAME_MAX = 10;
 
 export class PresetEngine {
   constructor() {
@@ -110,11 +114,6 @@ export class PresetEngine {
     this.hardwareSlotNames = { Clone: [], IR: [] }; // last slot names reported by the pedal
     this.pendingSlotWrite = null; // { type, idx, name } while a flashed slot is being committed
     this.pedalWrites = 0; // Clone AMP / IR writes in progress (see isBusyWithPedal)
-    // Data of the captures written from this browser (renaming = rewriting the slot with a new
-    // name) and app-only names for slots whose data is unknown (kept while the pedal still
-    // reports the capture they were given to)
-    this.slotData = this.loadStored('sonicake_slot_data', { Clone: [], IR: [] });
-    this.slotAliases = this.loadStored('sonicake_slot_aliases', { Clone: {}, IR: {} });
     this.isWaitingForPresetDump = false;
     this.isWaitingForPresetNumber = false;
     this.dumpPackets = [];
@@ -467,7 +466,7 @@ export class PresetEngine {
       const pending = this.pendingSlotWrite;
       decodedNames.forEach((name, i) => {
         if (pending && pending.type === type && pending.idx === i) return;
-        namesArray[i] = this.applySlotAlias(type, i, name);
+        namesArray[i] = name;
         const fxId = baseFxId + i;
         if (MODULE_LIBRARY_DATA.effectLibrary[fxId]) {
           MODULE_LIBRARY_DATA.effectLibrary[fxId].name = name;
@@ -1595,7 +1594,6 @@ export class PresetEngine {
     this.pedalWrites = (this.pedalWrites || 0) + 1;
     try {
       await this.streamFlashPackets(packets, onProgress);
-      this.rememberSlotData('IR', slotIndex, name, binaryPayload.slice(74));
 
       // Wait for flash sector write completion (as observed in hardware capture: ~1.2s)
       await new Promise(r => setTimeout(r, 1200));
@@ -1651,62 +1649,35 @@ export class PresetEngine {
   }
 
   // --- Renaming Clone AMP / User IR slots ---
-  // The pedal has no rename command (none in Sonicake Manager's traffic): the name travels only
-  // inside the full slot payload. A slot whose capture was written from this browser is renamed
-  // by writing it again with the new name; for the others the new name stays in the app.
 
-  loadStored(key, fallback) {
-    try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch (_) { return fallback; }
-  }
-
-  saveStored(key, value) {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) {}
-  }
-
-  /** Keep the data of a capture just written to the pedal (and drop the slot's app-only name) */
-  rememberSlotData(type, idx, name, bytes) {
-    let binary = '';
-    for (const b of bytes) binary += String.fromCharCode(b);
-    this.slotData[type][idx] = { name: String(name).trim().slice(0, 14), data: btoa(binary) };
-    delete this.slotAliases[type][idx];
-    this.saveStored('sonicake_slot_data', this.slotData);
-    this.saveStored('sonicake_slot_aliases', this.slotAliases);
-  }
-
-  /** True when the slot can be renamed on the pedal: its capture was written from this browser */
-  canRenameSlotOnPedal(type, idx) {
-    const stored = this.slotData[type]?.[idx];
-    const reported = this.hardwareSlotNames[type]?.[idx];
-    const norm = (s) => String(s || '').trim().toLowerCase();
-    return !!(connection.isConnected && stored && reported && norm(reported) === norm(stored.name));
-  }
-
-  /** Write the slot again with its stored capture data and a new name */
-  async renameSlotOnPedal(type, idx, newName, onProgress = () => {}) {
-    if (!this.canRenameSlotOnPedal(type, idx)) throw new Error('Questo slot non può essere rinominato sulla pedaliera.');
-    const data = Uint8Array.from(atob(this.slotData[type][idx].data), c => c.charCodeAt(0));
-    if (type === 'Clone') await this.flashCloneToPedal(idx, data, newName, onProgress);
-    else await this.flashIRToPedal(idx, data, newName, onProgress);
-  }
-
-  /** App-only name for a slot, kept while the pedal still reports the same capture */
-  setSlotAlias(type, idx, alias) {
-    const pedalName = this.hardwareSlotNames[type]?.[idx] || (type === 'Clone' ? this.cloneSlotNames : this.irSlotNames)[idx];
-    this.slotAliases[type][idx] = { pedalName, alias };
-    this.saveStored('sonicake_slot_aliases', this.slotAliases);
-    if (type === 'Clone') this.replaceCloneProfile(idx, alias, false);
-    else this.replaceUserIR(idx, alias, false);
-  }
-
-  /** Name to show for a slot reported by the pedal (its alias while the capture is unchanged) */
-  applySlotAlias(type, idx, pedalName) {
-    const alias = this.slotAliases[type]?.[idx];
-    if (!alias) return pedalName;
-    const norm = (s) => String(s || '').trim().toLowerCase();
-    if (norm(alias.pedalName) === norm(pedalName)) return alias.alias;
-    delete this.slotAliases[type][idx]; // another capture is in the slot now
-    this.saveStored('sonicake_slot_aliases', this.slotAliases);
-    return pedalName;
+  /**
+   * Rename a Clone AMP / User IR slot on the pedal with the native rename message (captured from
+   * Sonicake Manager, see buildSlotRenamePayload): only the name changes, any slot can be renamed
+   * (also captures written by SonicLink). 2 frames paced on the pedal ACKs, then the slot names
+   * are read again until the pedal reports the new one.
+   * @returns {Promise<boolean>} true when the pedal confirmed the new name
+   */
+  async renameSlotOnPedal(type, idx, newName) {
+    if (!connection.isConnected) throw new Error('Collega la pedaliera per rinominare lo slot.');
+    // At most 10 characters, like the rename of Sonicake Manager / SonicLink
+    const name = String(newName || '').replace(/[^\x20-\x7E]/g, '').trim().slice(0, SLOT_RENAME_MAX);
+    if (!name) throw new Error('Nome non valido.');
+    const label = type === 'Clone' ? `Clone AMP ${idx + 1}` : `User IR ${idx + 1}`;
+    connection.log(`Rinomina ${label} in "${name}"...`, 'info');
+    this.pedalWrites = (this.pedalWrites || 0) + 1;
+    try {
+      await this.streamFlashPackets(buildStreamingFlashPackets(buildSlotRenamePayload(type, idx, name)));
+      if (type === 'Clone') this.replaceCloneProfile(idx, name, false);
+      else this.replaceUserIR(idx, name, false);
+      const confirmed = await this.waitForSlotCommit(type, idx, name);
+      connection.log(confirmed
+        ? `${label} rinominato in "${name}".`
+        : `${label}: la pedaliera non ha ancora confermato il nuovo nome, verifica con una sincronizzazione.`,
+        confirmed ? 'success' : 'warning');
+      return confirmed;
+    } finally {
+      this.pedalWrites--;
+    }
   }
 
   /** True while the pedal is being written (Clone AMP / IR flash, preset import / swap / export) */
@@ -1772,7 +1743,6 @@ export class PresetEngine {
     this.pedalWrites = (this.pedalWrites || 0) + 1;
     try {
       await this.streamFlashPackets(packets, onProgress);
-      this.rememberSlotData('Clone', slotIndex, name, payload.slice(74));
 
       // Wait for flash sector write completion (as observed in hardware capture: ~1.2s)
       await new Promise(r => setTimeout(r, 1200));

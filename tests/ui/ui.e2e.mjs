@@ -309,26 +309,38 @@ for (const vp of [{ label: 'desktop', width: 1366, height: 860 }, { label: 'smar
       assert.equal(r.cancelled, null);
     });
 
-    it('rinomina di uno slot in memoria con lo stesso dialog', async () => {
-      const r = await page.evaluate(async () => {
+    it('rinomina di uno slot in memoria: serve la pedaliera, poi dialog con limite 10', async () => {
+      const openRename = () => page.evaluate(async () => {
         document.getElementById('btnOpenTone3000').click();
         await new Promise(r => setTimeout(r, 400));
         [...document.querySelectorAll('#tone3000ModalOverlay button')].find(b => /Sulla pedaliera/.test(b.textContent))?.click();
         await new Promise(r => setTimeout(r, 200));
         document.querySelector('#tone3000ModalOverlay .btn-slot-rename[data-type="amp"]').click();
-        await new Promise(r => setTimeout(r, 150));
-        const form = document.querySelector('.slot-name-input').closest('form');
-        const info = { title: form.querySelector('h3').textContent, confirm: form.querySelector('.btn-write').textContent.trim(), clear: !!form.querySelector('.btn-clear-name') };
-        const input = form.querySelector('.slot-name-input');
-        input.value = 'Mio Plexi';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        form.requestSubmit();
-        await new Promise(r => setTimeout(r, 150));
-        info.applied = document.querySelector('#tone3000ModalOverlay').textContent.includes('Mio Plexi');
+        await new Promise(r => setTimeout(r, 200));
+        const form = document.querySelector('.slot-name-input')?.closest('form');
+        const res = form
+          ? { dialog: true, title: form.querySelector('h3').textContent, confirm: form.querySelector('.btn-write').textContent.trim(), count: form.querySelector('.slot-name-count').textContent, note: form.textContent.includes('10 caratteri') }
+          : { dialog: false, toast: [...document.querySelectorAll('.sl-toast')].at(-1)?.textContent || '' };
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
         document.getElementById('tone3000ModalOverlay').classList.remove('active');
-        return info;
+        return res;
       });
-      assert.deepEqual(r, { title: 'Rinomina', confirm: 'Salva', clear: true, applied: true });
+      // Not connected: a notice, no dialog
+      const off = await openRename();
+      assert.equal(off.dialog, false);
+      assert.match(off.toast, /Collega la pedaliera/);
+      // Connected (fake USB port): the dialog, limited to 10 characters
+      await load({ midiPermission: 'granted' }, null);
+      await page.click('#connectUsbBtn');
+      await sleep(400);
+      const on = await openRename();
+      assert.equal(on.dialog, true);
+      assert.equal(on.title, 'Rinomina');
+      assert.equal(on.confirm, 'Rinomina');
+      assert.match(on.count, /\/10$/);
+      assert.ok(on.note);
+      await page.evaluate(() => document.getElementById('disconnectBtn').click());
+      await load({}, null);
     });
   });
 }

@@ -172,6 +172,7 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
    - Swap = export A + export B, import B→A, import A→B (`presetEngine.swapPresets`); i byte si copiano intatti, mai ricostruiti dai parametri decodificati.
 5. **Routing della catena**: `DRV-AMP-IR-EQ` è un blocco fisso (mai diviso o riordinato). Si muovono solo NR, FX1, FX2, DLY, RVB, che scavalcano il blocco come unità: 6 unità → le 720 voci di `chainOrderCommands`. Usa `moveChainModule()` (`protocol.js`); `setChainOrder()` rifiuta qualsiasi routing non presente nella libreria.
 6. **Protezione dei preset**: i 10 slot di memoria interni (5 Clone AMP + 5 IR) stanno in banchi flash separati. Scriverli **non deve mai** toccare, modificare o sovrascrivere i 50 preset utente (U01-U50).
+7. **Rinomina degli slot Clone AMP / IR** (catturata da Sonicake Manager "Rename Clone" / "Rename IR" il 2026-10-19, `tests/fixtures/slot_rename_capture.json`): messaggio di 22 byte `11 26 <slot> 00 00 0F` (Clone) oppure `11 22 <slot> 00 10 0A` (IR) + nome in 16 byte con padding a zero, inviato in 2 frame con ACK `14 08 00` per frame. Cambia solo il nome, la cattura non viene riscritta. Nome **massimo 10 caratteri**, come nelle app ufficiali. Funzione: `buildSlotRenamePayload()` (riproduce la cattura byte per byte).
 
 ---
 

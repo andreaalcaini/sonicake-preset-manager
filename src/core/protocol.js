@@ -766,6 +766,27 @@ export function convertCLOToLowModel(cloBytes) {
 }
 
 /**
+ * Build the 22-byte "rename slot" message (Sonicake Manager "Rename Clone" / "Rename IR",
+ * captured on USB 2026-10-19, tests/fixtures/slot_rename_capture.json):
+ *   [11 26 | 11 22] [slot] [00] [00 0F | 10 0A] + name (16 bytes, null padded)
+ * The opcode follows the flash one (25 -> 26 Clone AMP, 21 -> 22 User IR) and bytes 2-5 repeat
+ * bytes 6-9 of the flash payload header. Only the name changes: the capture is not rewritten.
+ * Sent with buildStreamingFlashPackets (2 frames, the pedal ACKs each with [14 08 00]).
+ * @param {'Clone'|'IR'} type
+ * @param {number} slotIndex 0 to 4
+ * @param {string} name printable ASCII, at most 16 characters are sent
+ * @returns {Uint8Array}
+ */
+export function buildSlotRenamePayload(type, slotIndex, name) {
+  const isClone = type === 'Clone';
+  const out = new Uint8Array(22);
+  out.set([0x11, isClone ? 0x26 : 0x22, Math.max(0, Math.min(4, slotIndex)), 0x00, isClone ? 0x00 : 0x10, isClone ? 0x0F : 0x0A]);
+  const clean = String(name || '').replace(/[^\x20-\x7E]/g, '').slice(0, 16);
+  for (let i = 0; i < clean.length; i++) out[6 + i] = clean.charCodeAt(i);
+  return out;
+}
+
+/**
  * Build 2,770-byte Clone AMP hardware payload for the pedal persistent Flash memory
  * Verified 100% byte-for-byte against Sonicake Manager hardware stream.
  * @param {number} slotIndex 0 to 4 (representing Clone AMP 1 to 5)

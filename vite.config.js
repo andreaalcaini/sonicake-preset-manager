@@ -8,6 +8,13 @@ export default defineConfig({
   server: {
     host: true, // Exposes server to local network (0.0.0.0)
     port: 5173,
-    https: true
+    https: true,
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8080',
+        changeOrigin: true,
+        secure: false
+      }
+    }
   }
 });

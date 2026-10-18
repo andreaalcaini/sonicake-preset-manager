@@ -5,16 +5,48 @@
  * and normalizes Cabinet IRs.
  */
 
-const DEFAULT_SERVER_URL = 'http://localhost:8080';
+const DEFAULT_SERVER_URL = '';
 const STORAGE_KEY = 'sonicake_bridge_url';
+
+export const VERIFIED_MODELS = [
+  {
+    id: "petersburg_thunder",
+    name: "Petersburg Thunder",
+    fullName: "Petersburg Thunder Drizzle",
+    description: "Boutique Russian Tube Amp - High Gain / Crunch dinamico, attacco definito e sustain ricco.",
+    tag: "High Gain Crunch",
+    size: 2696,
+    fileName: "petersburg_thunder.clo",
+    url: "/models/petersburg_thunder.clo"
+  },
+  {
+    id: "slow30_high_gain",
+    name: "Audio Assault Slow30",
+    fullName: "Audio Assault Slow30 + 99 pedal",
+    description: "Slo-100 Modded High Gain Metal - Lead fluido e ricco di armoniche per ritmiche serrate.",
+    tag: "Modern Metal Lead",
+    size: 2696,
+    fileName: "slow30_high_gain.clo",
+    url: "/models/slow30_high_gain.clo"
+  },
+  {
+    id: "marshall_1959",
+    name: "Marshall 1959 Plexi",
+    fullName: "Marshall 1959 Super Lead (BJA Super Bowl)",
+    description: "Vintage Plexi Super Lead Crunch - Punch e dinamica britannici leggendari.",
+    tag: "Classic British Rock",
+    size: 2696,
+    fileName: "marshall_1959.clo",
+    url: "/models/marshall_1959.clo"
+  }
+];
 
 export class CompilerBridgeService {
   static getServerUrl() {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) return saved;
-    const host = (typeof window !== 'undefined' && window.location && window.location.hostname) ? window.location.hostname : 'localhost';
-    const protocol = (typeof window !== 'undefined' && window.location && window.location.protocol) ? window.location.protocol : 'http:';
-    return `${protocol}//${host}:8080`;
+    // Default to relative (routes via Vite proxy on both desktop and mobile LAN)
+    return '';
   }
 
   static setServerUrl(url) {
@@ -28,30 +60,41 @@ export class CompilerBridgeService {
 
   /**
    * Check connection to the VPS / Local Compiler Bridge
-   * @returns {Promise<{ available: boolean, platform?: string, version?: string }>}
+   * @returns {Promise<{ available: boolean, platform?: string, version?: string, url: string }>}
    */
   static async checkHealth() {
     const baseUrl = this.getServerUrl();
-    try {
-      const resp = await fetch(`${baseUrl}/api/health`, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json' },
-        signal: AbortSignal.timeout(3000)
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        return {
-          available: data.status === 'ok' && !!data.compiler_available,
-          compilerAvailable: !!data.compiler_available,
-          platform: data.platform || 'unknown',
-          version: data.version || '1.0.0',
-          url: baseUrl
-        };
-      }
-    } catch (e) {
-      // Server offline or unreachable
+    const urlsToTry = [baseUrl];
+
+    // If relative, also test direct port 8080 fallback
+    if (!baseUrl && typeof window !== 'undefined' && window.location) {
+      const host = window.location.hostname || 'localhost';
+      urlsToTry.push(`http://${host}:8080`);
     }
-    return { available: false, url: baseUrl };
+
+    for (const url of urlsToTry) {
+      try {
+        const resp = await fetch(`${url}/api/health`, {
+          method: 'GET',
+          headers: { 'Accept': 'application/json' },
+          signal: AbortSignal.timeout(2500)
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          return {
+            available: data.status === 'ok' && !!data.compiler_available,
+            compilerAvailable: !!data.compiler_available,
+            platform: data.platform || 'unknown',
+            version: data.version || '1.1.0',
+            url: url || 'Vite Proxy (Locale)'
+          };
+        }
+      } catch (e) {
+        // Try next
+      }
+    }
+
+    return { available: false, url: baseUrl || 'Offline' };
   }
 
   /**
@@ -149,22 +192,37 @@ export class CompilerBridgeService {
       const resp = await fetch(`${baseUrl}/api/verified-models`, {
         signal: AbortSignal.timeout(2000)
       });
-      if (resp.ok) return await resp.json();
+      if (resp.ok) {
+        const remote = await resp.json();
+        if (Array.isArray(remote) && remote.length > 0) return remote;
+      }
     } catch (_) {}
-    return [];
+    return VERIFIED_MODELS;
   }
 
   /**
-   * Fetch a verified model binary
-   * @param {string} relativeOrAbsoluteUrl
+   * Fetch a verified model binary (checks static public bundle first, then API)
+   * @param {string} urlOrFilename
    * @returns {Promise<Blob>}
    */
-  static async getVerifiedModelBlob(url) {
+  static async getVerifiedModelBlob(urlOrFilename) {
+    const cleanFile = urlOrFilename.replace(/^.*[\\\/]/, '').trim();
+    const staticTarget = `/models/${cleanFile}`;
+
+    // 1. Try static asset in browser bundle
+    try {
+      const staticResp = await fetch(staticTarget);
+      if (staticResp.ok) {
+        return await staticResp.blob();
+      }
+    } catch (_) {}
+
+    // 2. Try API endpoint
     const baseUrl = this.getServerUrl().replace(/\/+$/, '');
-    let target = url;
+    let target = urlOrFilename;
     if (!target.startsWith('http')) {
       if (!target.startsWith('/api/verified-models/')) {
-        target = `/api/verified-models/${target.replace(/^\/+/, '')}`;
+        target = `/api/verified-models/${cleanFile}`;
       }
       target = `${baseUrl}${target}`;
     }

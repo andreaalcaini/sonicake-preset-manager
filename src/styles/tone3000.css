@@ -26,3 +26,15 @@
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+.slot-dropzone {
+  position: relative;
+  transition: all 0.2s ease-in-out;
+}
+
+.slot-dropzone.border-orange-500 {
+  border-style: dashed !important;
+  box-shadow: 0 0 15px rgba(249, 115, 22, 0.25);
+  transform: scale(1.01);
+}
+

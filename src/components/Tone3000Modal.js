@@ -75,21 +75,39 @@ export class Tone3000Modal {
   }
 
   async fetchTones() {
+    // Only the latest search may update the grid (typing fires several searches)
+    const request = (this.searchRequest = (this.searchRequest || 0) + 1);
     this.isLoading = true;
+    this.searchError = null;
     this.renderGrid();
 
     try {
-      this.tones = await Tone3000Service.searchTones({
+      const tones = await Tone3000Service.searchTones({
         query: this.searchQuery,
         gear: this.currentGear,
         limit: 24
       });
+      if (request !== this.searchRequest) return;
+      this.tones = tones;
     } catch (err) {
-      console.warn('Tone3000 search error:', err);
+      if (request !== this.searchRequest) return;
+      this.tones = [];
+      this.searchError = err.message;
     } finally {
-      this.isLoading = false;
-      this.renderGrid();
+      if (request === this.searchRequest) {
+        this.isLoading = false;
+        this.renderGrid();
+      }
     }
+  }
+
+  /** Enable / disable the write and download buttons of a tone card */
+  setToneActionsEnabled(toneId, enabled) {
+    this.overlay.querySelectorAll(`.btn-flash-tone[data-id="${toneId}"], .btn-load-tone[data-id="${toneId}"]`).forEach(btn => {
+      btn.disabled = !enabled;
+      btn.classList.toggle('opacity-40', !enabled);
+      btn.classList.toggle('cursor-not-allowed', !enabled);
+    });
   }
 
   async loadToneVariations(tone) {
@@ -100,22 +118,25 @@ export class Tone3000Modal {
 
     let models = this.variationsCache[toneId];
     if (!models) {
-      if (tone.models && Array.isArray(tone.models) && tone.models.length > 0) {
-        models = tone.models;
-      } else {
+      try {
         models = await Tone3000Service.getToneModels(toneId);
+        this.variationsCache[toneId] = models;
+      } catch (err) {
+        // Not cached: the next render tries again
+        selectEl.innerHTML = '<option value="">File non disponibili: riprova più tardi</option>';
+        this.selectedVariations[toneId] = null;
+        this.setToneActionsEnabled(toneId, false);
+        return;
       }
-      this.variationsCache[toneId] = models;
     }
 
     if (!models || models.length === 0) {
-      models = [{
-        id: tone.id,
-        name: tone.title,
-        size: 'standard',
-        url: tone.url
-      }];
+      selectEl.innerHTML = '<option value="">Nessun file scaricabile</option>';
+      this.selectedVariations[toneId] = null;
+      this.setToneActionsEnabled(toneId, false);
+      return;
     }
+    this.setToneActionsEnabled(toneId, true);
 
     if (countEl) {
       countEl.textContent = '';
@@ -560,6 +581,18 @@ export class Tone3000Modal {
       return;
     }
 
+    if (this.searchError) {
+      gridContainer.innerHTML = `
+        <div class="text-center py-14 px-4 flex flex-col items-center gap-3">
+          <div class="text-sm font-bold text-rose-300">Ricerca non riuscita</div>
+          <div class="text-xs text-zinc-400 max-w-sm">${this.searchError}</div>
+          <button type="button" class="btn-retry-search min-h-[44px] px-5 rounded-xl bg-orange-500 hover:bg-orange-400 text-sm font-bold text-zinc-950">Riprova</button>
+        </div>
+      `;
+      gridContainer.querySelector('.btn-retry-search').addEventListener('click', () => this.fetchTones());
+      return;
+    }
+
     if (this.tones.length === 0) {
       gridContainer.innerHTML = `
         <div class="text-center py-16 text-zinc-500 text-xs sm:text-sm">
@@ -591,11 +624,11 @@ export class Tone3000Modal {
           return;
         }
 
-        const selectedVar = this.selectedVariations[toneId] || (tone.models && tone.models[0]) || {
-          name: tone.title,
-          id: tone.id,
-          url: tone.url
-        };
+        const selectedVar = this.selectedVariations[toneId];
+        if (!selectedVar?.url) {
+          alert('Questa cattura non ha ancora un file scaricabile: attendi il caricamento dei file o scegline un'altra.');
+          return;
+        }
 
         const modelName = selectedVar.name || tone.title;
         let targetType = this.selectedTargetType;
@@ -659,11 +692,11 @@ export class Tone3000Modal {
         const tone = this.tones.find(t => String(t.id) === String(toneId));
         if (!tone) return;
 
-        const selectedVar = this.selectedVariations[toneId] || (tone.models && tone.models[0]) || {
-          name: tone.title,
-          id: tone.id,
-          url: tone.url
-        };
+        const selectedVar = this.selectedVariations[toneId];
+        if (!selectedVar?.url) {
+          alert('Questa cattura non ha ancora un file scaricabile: attendi il caricamento dei file o scegline un'altra.');
+          return;
+        }
 
         const payload = {
           ...tone,

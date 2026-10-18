@@ -14,18 +14,35 @@ import hashlib
 import json
 import threading
 import time
+from urllib.parse import urlparse
 import requests
 from flask import Flask, request, jsonify, send_file, Response
+from werkzeug.exceptions import RequestEntityTooLarge
 
 app = Flask(__name__)
 
-# --- CORS Middleware ---
+# --- Limits for the public server ---
+# Remote models are downloaded only from these hosts (Tone3000 storage), never other URLs
+MODEL_URL_HOSTS = {h.strip().lower() for h in os.environ.get('MODEL_URL_HOSTS', 'api.tone3000.com').split(',') if h.strip()}
+MAX_MODEL_BYTES = int(os.environ.get('MAX_MODEL_MB', '25')) * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = MAX_MODEL_BYTES + 64 * 1024  # uploads (+ multipart overhead)
+
+# --- CORS: the site calls /api on its own origin; other origins only when listed ---
+CORS_ORIGINS = {o.strip() for o in os.environ.get('CORS_ORIGINS', '').split(',') if o.strip()}
+
 @app.after_request
 def after_request(response):
-    response.headers.add('Access-Control-Allow-Origin', '*')
-    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization,X-Requested-With')
-    response.headers.add('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+    origin = request.headers.get('Origin')
+    if origin and (origin in CORS_ORIGINS or '*' in CORS_ORIGINS):
+        response.headers['Access-Control-Allow-Origin'] = origin
+        response.headers['Vary'] = 'Origin'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type,X-File-Name'
+        response.headers['Access-Control-Allow-Methods'] = 'GET,POST,OPTIONS'
     return response
+
+@app.errorhandler(RequestEntityTooLarge)
+def too_large(_err):
+    return jsonify({"error": f"File troppo grande (massimo {MAX_MODEL_BYTES // (1024 * 1024)} MB)."}), 413
 
 # --- Directories ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -43,6 +60,8 @@ except OSError as e:
     os.makedirs(CACHE_DIR, exist_ok=True)
 # Built frontend (Vite dist/) served by this same process in the production image
 STATIC_DIR = os.environ.get('STATIC_DIR', '')
+# Developer-only endpoints (/api/active-preset): off on the production image unless asked for
+DEV_ENDPOINTS = os.environ.get('SONICAKE_DEV_ENDPOINTS', '0' if STATIC_DIR else '1') == '1'
 
 # --- Sonicake CRC16 & CLO Converter ---
 CRC16_T1 = bytes([
@@ -249,6 +268,33 @@ def _convert_with_dll(nam_path, timeout):
 
 _abandoned_buffers = []
 
+class ModelDownloadError(Exception):
+    def __init__(self, message, status):
+        super().__init__(message)
+        self.status = status
+
+def download_model(url):
+    """Download a model from an allowed host (https, no redirects), at most MAX_MODEL_BYTES."""
+    parsed = urlparse(str(url))
+    if parsed.scheme != 'https' or (parsed.hostname or '').lower() not in MODEL_URL_HOSTS:
+        raise ModelDownloadError("Sono ammessi solo i link diretti ai modelli di Tone3000.", 400)
+    too_large = ModelDownloadError(f"Modello troppo grande (massimo {MAX_MODEL_BYTES // (1024 * 1024)} MB).", 413)
+    try:
+        with requests.get(url, timeout=30, stream=True, allow_redirects=False) as resp:
+            if resp.is_redirect or not resp.ok:
+                raise ModelDownloadError(f"Download del modello non riuscito (HTTP {resp.status_code}).", 502)
+            if int(resp.headers.get('Content-Length') or 0) > MAX_MODEL_BYTES:
+                raise too_large
+            chunks, total = [], 0
+            for chunk in resp.iter_content(64 * 1024):
+                total += len(chunk)
+                if total > MAX_MODEL_BYTES:
+                    raise too_large
+                chunks.append(chunk)
+            return b''.join(chunks)
+    except requests.RequestException as e:
+        raise ModelDownloadError(f"Errore durante il download del modello: {e.__class__.__name__}.", 502)
+
 # --- Routes ---
 
 @app.route('/api/health', methods=['GET'])
@@ -280,12 +326,9 @@ def convert_nam():
             return jsonify({"error": "Missing 'url' parameter in JSON payload"}), 400
         try:
             print(f"[*] Fetching Tone model from: {url}")
-            resp = requests.get(url, timeout=30)
-            if not resp.ok:
-                return jsonify({"error": f"Failed to download model from {url} (HTTP {resp.status_code})"}), 502
-            model_bytes = resp.content
-        except Exception as e:
-            return jsonify({"error": f"Error downloading model: {str(e)}"}), 502
+            model_bytes = download_model(url)
+        except ModelDownloadError as e:
+            return jsonify({"error": str(e)}), e.status
 
     # 2. Handle multipart file upload
     elif 'file' in request.files:
@@ -376,6 +419,9 @@ ACTIVE_PRESET_FILE = os.path.join(CACHE_DIR, 'active_preset.json')
 
 @app.route('/api/active-preset', methods=['GET', 'POST', 'OPTIONS'])
 def active_preset_endpoint():
+    # Local debugging aid: the published site never calls it
+    if not DEV_ENDPOINTS:
+        return jsonify({"error": "Not found"}), 404
     if request.method == 'OPTIONS':
         return Response(status=200)
 

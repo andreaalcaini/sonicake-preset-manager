@@ -126,8 +126,8 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 | Metodo | Path | Descrizione |
 |---|---|---|
 | `GET` | `/api/health` | Stato del servizio, `compiler_backend`, numero di elementi in cache |
-| `POST` | `/api/convert-nam` | JSON `{url, name}` oppure multipart `file` (`.nam`) → Low Model 2.696 byte |
-| `GET`/`POST` | `/api/active-preset` | Legge/salva il preset attivo (`active_preset.json` nella cache) |
+| `POST` | `/api/convert-nam` | JSON `{url, name}` (solo modelli Tone3000) oppure multipart `file` (`.nam`) → Low Model 2.696 byte |
+| `GET`/`POST` | `/api/active-preset` | Solo sviluppo: legge/salva il preset attivo (`active_preset.json` nella cache) |
 | `GET` | `/*` | Sito compilato con fallback SPA su `index.html` (solo se `STATIC_DIR` è impostata) |
 
 ---
@@ -154,6 +154,10 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 | `NAM2CLO_CACHE_DIR` | — (`/tmp`) | Directory scratch di JUCE (letta da `juce_android_shim.cpp`) |
 | `NAM2CLO_WORKERS` / `NAM2CLO_TIMEOUT` | `2` / `180` | Vedi sopra |
 | `SONICAKE_LIB_PATH` | — | Percorso alternativo di `5868USB.dll` (solo Windows) |
+| `MODEL_URL_HOSTS` | `api.tone3000.com` | Host (separati da virgola) da cui `/api/convert-nam` può scaricare modelli: solo `https`, niente redirect |
+| `MAX_MODEL_MB` | `25` | Dimensione massima di un modello scaricato o caricato (oltre: HTTP 413) |
+| `CORS_ORIGINS` | — (nessuno) | Origini esterne ammesse a chiamare `/api` (il sito usa la stessa origine e non ne ha bisogno) |
+| `SONICAKE_DEV_ENDPOINTS` | `1` in locale, `0` con `STATIC_DIR` | Abilita `/api/active-preset` (solo debug) |
 
 ### GitHub Actions (`Settings → Secrets and variables → Actions`)
 

@@ -53,10 +53,24 @@ RUN set -e; mkdir -p /out /link; \
 # 4. Android bionic runtime (AOSP redroid, flattened com.android.runtime APEX)
 FROM --platform=linux/arm64 redroid/redroid:13.0.0-latest AS android
 
-# 5. Runner finale multi-arch
+# 5. Python dependencies resolved natively, downloaded as wheels for the target architecture
+#    (never installed with the runner's architecture: charset_normalizer ships compiled modules)
+FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS pydeps
+ARG TARGETARCH
+COPY server/requirements.txt /tmp/requirements.txt
+RUN case "$TARGETARCH" in \
+      arm64) plat=manylinux2014_aarch64 ;; \
+      amd64) plat=manylinux2014_x86_64 ;; \
+      *) echo "Unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
+    esac; \
+    pip install --no-cache-dir --target /deps --platform "$plat" --implementation cp \
+      --python-version 3.12 --only-binary=:all: -r /tmp/requirements.txt
+
+# 6. Runner finale multi-arch
 FROM python:3.12-slim-bookworm AS runner
 WORKDIR /app
 ENV PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/deps \
     PORT=3000 \
     DATA_DIR=/app/data \
     STATIC_DIR=/app/static \
@@ -76,8 +90,7 @@ COPY --from=android /system/lib64/ld-android.so /system/lib64/
 COPY --from=nam2clo /out/liblog.so /out/libOpenSLES.so /out/libandroid.so /out/libEGL.so /out/libGLESv2.so /system/lib64/
 COPY --from=nam2clo /out/nam2clo /out/libc++_shared.so /opt/nam2clo/
 
-COPY server/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+COPY --from=pydeps /deps /deps
 
 RUN groupadd --system --gid 1001 app \
  && useradd --system --uid 1001 --gid app --no-create-home app \
@@ -89,4 +102,4 @@ COPY --from=builder /app/dist ./static
 
 USER app
 EXPOSE 3000
-CMD ["waitress-serve", "--host=0.0.0.0", "--port=3000", "--threads=8", "--channel-timeout=600", "server:app"]
+CMD ["python", "-m", "waitress", "--host=0.0.0.0", "--port=3000", "--threads=8", "--channel-timeout=600", "server:app"]

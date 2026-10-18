@@ -140,6 +140,9 @@ export class VirtualPedal {
   }
 
   receive(bytes) {
+    // Arrival time first: decoding and CRC below can stall (GC on a busy CI runner) and would
+    // shorten the measured gap to the next frame
+    const arrivedAt = performance.now();
     const { P } = this.site;
     if (bytes[0] === 0xC0) return; // optional MIDI Program Change
     this.rawFrames.push(Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('').toUpperCase());
@@ -156,9 +159,8 @@ export class VirtualPedal {
     }
 
     if (total > 1) {
-      const now = performance.now();
-      if (idx > 0) this.minGap = Math.min(this.minGap, now - this.lastFrameAt);
-      this.lastFrameAt = now;
+      if (idx > 0) this.minGap = Math.min(this.minGap, arrivedAt - this.lastFrameAt);
+      this.lastFrameAt = arrivedAt;
       if (idx === 0) this.stream = { total, chunks: [], flash: payload[0] === 0x11 && (payload[1] === 0x25 || payload[1] === 0x21) };
       if (!this.stream) { this.errors.push('frame di stream senza intestazione'); return; }
       this.stream.chunks[idx] = payload.slice(0, len);

@@ -3,8 +3,9 @@
 # then: sudo chown -R 1001:1001 data
 #
 # HTTPS (required by Web MIDI / Bluetooth) comes from the Cloudflare Tunnel: the container joins
-# the `cloudflared-mesh` network and the tunnel's public hostname sonicake.alcaini.it points to
-# http://sonicake:3000. Port 3010 is bound to localhost only, for checks from the server itself.
+# the `cloudflared-mesh` network as sonicake.mesh and the tunnel's public hostname
+# sonicake.alcaini.it points to http://sonicake.mesh:3000. Port 3010 is bound to localhost only,
+# for checks from the server itself. Optional settings: .env (see .env.example).
 services:
   app:
     image: ghcr.io/andreaalcaini/sonicake-preset-manager:latest
@@ -16,10 +17,16 @@ services:
       - ./data:/app/data
     environment:
       - PORT=3000
-      - NAM2CLO_WORKERS=2
+      - NAM2CLO_WORKERS=${NAM2CLO_WORKERS:-2}
+      - NAM2CLO_TIMEOUT=${NAM2CLO_TIMEOUT:-180}
     networks:
-      - cloudflared-mesh
+      default:
+      cloudflared-mesh:
+        aliases:
+          - sonicake.mesh
 
 networks:
+  default:
   cloudflared-mesh:
     external: true
+    name: cloudflared-mesh

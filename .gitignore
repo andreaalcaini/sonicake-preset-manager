@@ -54,3 +54,7 @@ data/*
 !data/.gitkeep
 server/nam2clo/vendor/
 server/nam2clo/build/
+
+# Environment (template: .env.example)
+.env
+.env*.local

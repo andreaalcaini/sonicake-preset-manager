@@ -39,6 +39,15 @@ export class PresetEngine {
     this.presetList = this.initializeDefaultPresets();
     this.currentSlot = 1; // 1-based index (1 to 100)
     this.isDirty = false;
+    this.followPedalPresetChanges = (() => {
+      try { return localStorage.getItem('sonicake_follow_pedal') !== '0'; } catch (_) { return true; }
+    })();
+    this.masterVolume = (() => {
+      try {
+        const v = parseInt(localStorage.getItem('sonicake_master_volume'), 10);
+        return Number.isFinite(v) ? v : null;
+      } catch (_) { return null; }
+    })();
     this.clipboard = null;
 
     // User IR & Clone Amp Profile Names & Tone3000 Metadata
@@ -294,12 +303,29 @@ export class PresetEngine {
       this.handleIncomingSysEx(hexString);
     });
     connection.onProgramChange((slot) => {
+      if (!this.followPedalPresetChanges) return;
       this.selectPreset(slot, false);
     });
   }
 
+  /** When on, switching preset on the pedal (footswitch / knob) switches the site too */
+  setFollowPedalPresetChanges(enabled) {
+    this.followPedalPresetChanges = !!enabled;
+    try { localStorage.setItem('sonicake_follow_pedal', this.followPedalPresetChanges ? '1' : '0'); } catch (_) {}
+    connection.log(`Cambio preset dalla pedaliera: ${enabled ? 'il sito segue la pedaliera' : 'il sito resta sul preset scelto'}.`, 'info');
+  }
+
   handleIncomingSysEx(hexString) {
+    // Raw preset transfers carry arbitrary bytes that could match the signature checks below
+    if (this.rawTransferActive) return;
     const cleanHex = hexString.replace(/\s+/g, '').toUpperCase();
+
+    // Short trace of incoming messages in the debug console (first frame of each stream only)
+    const trace = this.decodeTransportFrame(cleanHex);
+    if (trace && (trace.total === 1 || trace.idx === 0)) {
+      const shown = Array.from(trace.payload.slice(0, 16), b => b.toString(16).padStart(2, '0')).join(' ');
+      connection.log(`Ricevuto: ${shown}${trace.payload.length > 16 ? ` … (${trace.payload.length} byte)` : ''}`, 'info');
+    }
 
     // 1. Clone Amp / NAM Names Response (signature: 01020204)
     if (cleanHex.indexOf('01020204') >= 0 && cleanHex.length >= 80) {
@@ -390,9 +416,23 @@ export class PresetEngine {
       return;
     }
 
-    // 5. Preset Number Response (extract 2 nibbles at chars 30..34)
+    // 5a. Active preset message [12 43 <index> ...]: answer to our request or pushed by the pedal
+    //     when the preset is changed from its footswitches / knob
+    const frame = this.decodeTransportFrame(cleanHex);
+    if (frame && frame.total === 1 && frame.len >= 3 && frame.payload[0] === 0x12 && frame.payload[1] === 0x43) {
+      if (this.isWaitingForPresetNumber || this.followPedalPresetChanges) {
+        this.applyHardwareActiveSlot(frame.payload[2] + 1);
+      }
+      this.isWaitingForPresetNumber = false;
+      return;
+    }
+
+    // 5b. Legacy preset number response (extract 2 nibbles at chars 30..34)
     if (this.isWaitingForPresetNumber || (cleanHex.indexOf('0201020403') >= 0 && cleanHex.length >= 34)) {
-      this.parseActivePresetSlotResponse(cleanHex);
+      // Unsolicited = preset changed on the pedal itself; requested answers are always applied
+      if (this.isWaitingForPresetNumber || this.followPedalPresetChanges) {
+        this.parseActivePresetSlotResponse(cleanHex);
+      }
       this.isWaitingForPresetNumber = false;
       return;
     }
@@ -454,8 +494,15 @@ export class PresetEngine {
       const digit2 = parseInt(hexDigit2AsByte, 16);
       const finalHexString = digit1.toString(16) + digit2.toString(16);
       const presetIndex = parseInt(finalHexString, 16); // 0-based
-      const slot = presetIndex + 1; // 1 to 100
+      this.applyHardwareActiveSlot(presetIndex + 1);
+    } catch (e) {
+      console.warn('Failed to parse preset number response:', e);
+    }
+  }
 
+  /** The pedal reports `slot` (1-100) as its active preset: switch the site to it and read its settings */
+  applyHardwareActiveSlot(slot) {
+    try {
       if (slot >= 1 && slot <= 100) {
         if (slot !== this.currentSlot) {
           // 1. Cache previous preset if valid
@@ -569,7 +616,7 @@ export class PresetEngine {
             this.emit('dirtyChange', false);
             this.emit('stateChange', this.activePreset);
             this.reportPresetToServer();
-            connection.log(`Preset "${this.activePreset.name}" fully loaded from Smart Box!`, 'success');
+            connection.log(`Preset "${this.activePreset.name}" caricato dalla pedaliera!`, 'success');
             return;
           }
         } catch (e) {
@@ -615,13 +662,15 @@ export class PresetEngine {
       this.emit('dirtyChange', false);
       this.emit('stateChange', this.activePreset);
       this.reportPresetToServer();
-      connection.log(`Preset "${this.activePreset.name}" fully loaded from Smart Box!`, 'success');
+      connection.log(`Preset "${this.activePreset.name}" caricato dalla pedaliera!`, 'success');
     } catch (err) {
       connection.log(`Error parsing preset dump: ${err.message}`, 'error');
     }
   }
 
   reportPresetToServer() {
+    // Local debugging aid only (server.py on the developer PC); never on the published site
+    if (!import.meta.env.DEV) return;
     try {
       const slot = this.currentSlot;
       const name = this.activePreset?.name || '';
@@ -928,10 +977,53 @@ export class PresetEngine {
     this.activePreset.volume = Math.max(0, Math.min(100, Math.round(volume)));
     this.markDirty();
     this.emit('stateChange', this.activePreset);
+    if (syncHardware) {
+      this.sendThrottled('presetVolume', COMMAND_LIBRARY_DATA.globalCommands?.presetVolume?.[this.activePreset.volume]);
+    }
+  }
+
+  /**
+   * Pedal master volume (global, not stored in presets). The pedal does not report it back,
+   * so the last value set from this app is remembered locally.
+   */
+  setMasterVolume(volume, syncHardware = true) {
+    this.masterVolume = Math.max(0, Math.min(100, Math.round(volume)));
+    try { localStorage.setItem('sonicake_master_volume', String(this.masterVolume)); } catch (_) {}
+    if (syncHardware) {
+      this.sendThrottled('masterVolume', COMMAND_LIBRARY_DATA.globalCommands?.globalVolume?.[this.masterVolume]);
+    }
+  }
+
+  /** Slider-friendly sender: first value immediately, then at most one command every 40ms, always the latest */
+  sendThrottled(key, cmd) {
+    if (!cmd || !connection.isConnected) return;
+    this.throttle = this.throttle || {};
+    const slot = this.throttle[key] || (this.throttle[key] = { timer: null, pending: null });
+    if (slot.timer) {
+      slot.pending = cmd;
+      return;
+    }
+    connection.writeCommand(cmd);
+    slot.timer = setTimeout(function flush() {
+      if (slot.pending) {
+        const next = slot.pending;
+        slot.pending = null;
+        connection.writeCommand(next);
+        slot.timer = setTimeout(flush, 40);
+      } else {
+        slot.timer = null;
+      }
+    }, 40);
   }
 
   async setChainOrder(newOrder, syncHardware = true) {
     if (!Array.isArray(newOrder) || newOrder.length !== 9) return;
+    // Only the 720 routings the pedal supports (DRV-AMP-IR-EQ fixed block) are accepted
+    const routingKey = newOrder.map(id => MODULE_NAMES[id]).join('-');
+    if (!COMMAND_LIBRARY_DATA.chainOrderCommands?.[routingKey]) {
+      connection.log(`Ordine catena non supportato dalla pedaliera: ${routingKey}`, 'warning');
+      return;
+    }
     this.pushUndoSnapshot();
     this.activePreset.order = [...newOrder];
     this.markDirty();
@@ -1035,7 +1127,7 @@ export class PresetEngine {
     return {
       version: "1.0",
       presetName: p.name,
-      description: "Exported from Sonicake Smart Box Preset Manager",
+      description: "Exported from Sonicake Pedaliera Preset Manager",
       ampMode: p.ampMode === 'clone' ? 'Clone' : 'Normal',
       presetVolume: p.volume !== undefined ? p.volume : 75,
       states: p.states,
@@ -1168,20 +1260,38 @@ export class PresetEngine {
 
   // --- Import / Export (.prst & .json) ---
 
-  exportPresetPrst() {
-    return PrstParser.serialize(this.activePreset);
+  /** Read a user preset (1-50) from the pedal as a Sonicake Manager compatible .prst file */
+  async exportPrstFromSlot(slot) {
+    if (!(slot >= 1 && slot <= 50)) throw new Error('Si possono esportare solo i preset utente (U01-U50).');
+    this.rawTransferActive = true;
+    try {
+      const raw = await this.exportPresetRaw(slot);
+      return { bytes: PrstParser.build(raw), name: PrstParser.readName(raw.subarray(6)) || this.getSlotCode(slot) };
+    } finally {
+      this.rawTransferActive = false;
+    }
   }
 
-  importPresetPrst(buffer) {
-    this.pushUndoSnapshot();
+  /**
+   * Write a .prst file into a user slot (1-50) on the pedal. The 502 preset bytes are sent untouched
+   * (only the name is replaced when `newName` is given), exactly like Sonicake Manager's import.
+   */
+  async importPrstToSlot(buffer, slot, { newName = null, onProgress = () => {} } = {}) {
+    if (!(slot >= 1 && slot <= 50)) throw new Error('Si può importare solo nei preset utente (U01-U50).');
+    if (!connection.isConnected) throw new Error('Pedaliera non connessa.');
     const parsed = PrstParser.parse(buffer);
-    this.activePreset.name = parsed.name || 'Imported';
-    if (parsed.order && parsed.order.length === 9) {
-      this.activePreset.order = parsed.order;
+    const raw = newName ? PrstParser.withName(parsed.raw, newName) : parsed.raw;
+
+    this.rawTransferActive = true;
+    try {
+      await this.importPresetRaw(slot, raw, onProgress);
+    } finally {
+      this.rawTransferActive = false;
     }
-    this.markDirty();
-    this.emit('stateChange', this.activePreset);
-    connection.log(`Imported .prst preset "${this.activePreset.name}"`, 'success');
+    this.presetCache.delete(slot);
+    await this.syncPresetNames();
+    await this.selectPreset(slot);
+    connection.log(`File "${parsed.name}" importato nel preset ${this.getSlotCode(slot)}.`, 'success');
   }
 
   exportBackupJson() {
@@ -1567,6 +1677,161 @@ export class PresetEngine {
 
     connection.log(`Scrittura completata con successo! Clone AMP ${slotIndex + 1} memorizzato in Flash (${total} pacchetti).`, 'success');
     return true;
+  }
+
+  // --- Native preset export / import / swap ---
+  // Same protocol as Sonicake Manager "Export/Import preset" (verified on captured USB traffic):
+  //   export request : [12 4F slot 00 00 00]                    -> 27 x 19-byte frames
+  //   export data    : [12 4F FF FF FF FF] + 502 preset bytes   (508 bytes)
+  //   import data    : [11 4F slot 00 00 00] + same 502 bytes, ACK [14 08 00] after every frame
+  // The 502 bytes are copied untouched, so a swap never loses any parameter.
+
+  /** Decode a dispatched hex frame (8080 F0 crc crc total idx len payload-nibbles F7) */
+  decodeTransportFrame(hex) {
+    let h = hex.replace(/\s+/g, '').toUpperCase();
+    if (h.startsWith('8080')) h = h.slice(4);
+    if (!h.startsWith('F0') || !h.endsWith('F7') || h.length < 20) return null;
+    const nib = h.slice(2, -2).match(/../g).map(x => parseInt(x, 16) & 0x0F);
+    const byteAt = (k) => (nib[k] << 4) | nib[k + 1];
+    const payloadNib = nib.slice(8);
+    const payload = new Uint8Array(Math.floor(payloadNib.length / 2));
+    for (let k = 0; k < payload.length; k++) payload[k] = (payloadNib[2 * k] << 4) | payloadNib[2 * k + 1];
+    return { total: byteAt(2), idx: byteAt(4), len: byteAt(6), payload };
+  }
+
+  /** Resolve with the first frame accepted by `accept(frame)` (return value = result), or reject on timeout */
+  waitForFrame(accept, timeoutMs, label) {
+    return new Promise((resolve, reject) => {
+      const off = connection.onMessage((hex) => {
+        const frame = this.decodeTransportFrame(hex);
+        if (!frame) return;
+        const result = accept(frame);
+        if (result !== undefined && result !== null) {
+          clearTimeout(timer);
+          off();
+          resolve(result);
+        }
+      });
+      const timer = setTimeout(() => { off(); reject(new Error(`Nessuna risposta dalla pedaliera (${label}).`)); }, timeoutMs);
+    });
+  }
+
+  /** Read the full raw data of a user preset (slot 1-50) from the pedal */
+  async exportPresetRaw(slot) {
+    if (!connection.isConnected) throw new Error('Pedaliera non connessa.');
+    const index = slot - 1;
+    const chunks = {};
+    let total = 0;
+    const pending = this.waitForFrame((f) => {
+      // USB delivers the reassembled stream as one frame, BLE frame by frame
+      if (f.total === 1 && f.payload.length >= 508 && f.payload[0] === 0x12 && f.payload[1] === 0x4F) {
+        return f.payload.slice(0, 508);
+      }
+      if (f.total > 1 && f.len <= 19) {
+        if (f.idx === 0 && !(f.payload[0] === 0x12 && f.payload[1] === 0x4F)) return null;
+        if (f.idx > 0 && !(0 in chunks)) return null;
+        total = f.total;
+        chunks[f.idx] = f.payload.slice(0, f.len);
+        if (Object.keys(chunks).length === total) {
+          const out = new Uint8Array(Object.values(chunks).reduce((n, c) => n + c.length, 0));
+          let o = 0;
+          for (let k = 0; k < total; k++) { out.set(chunks[k], o); o += chunks[k].length; }
+          return out;
+        }
+      }
+      return null;
+    }, 4000, `lettura ${this.getSlotCode(slot)}`);
+    await connection.writeRawBytes(buildStreamingFlashPackets(new Uint8Array([0x12, 0x4F, index, 0, 0, 0]))[0]);
+    const data = await pending;
+    if (data.length !== 508 || data[2] !== 0xFF || data[5] !== 0xFF) {
+      throw new Error(`Dati del preset ${this.getSlotCode(slot)} non validi (${data.length} byte).`);
+    }
+    return data;
+  }
+
+  /** Write raw preset data (as returned by exportPresetRaw) into a user slot, ACK-paced like Sonicake Manager */
+  async importPresetRaw(slot, rawData, onProgress = () => {}) {
+    if (!connection.isConnected) throw new Error('Pedaliera non connessa.');
+    if (!(rawData instanceof Uint8Array) || rawData.length !== 508 || rawData[1] !== 0x4F) {
+      throw new Error('Dati preset non validi: scrittura annullata.');
+    }
+    const payload = new Uint8Array(rawData);
+    payload.set([0x11, 0x4F, slot - 1, 0, 0, 0], 0);
+    const packets = buildStreamingFlashPackets(payload);
+
+    for (let i = 0; i < packets.length; i++) {
+      let acked = false;
+      for (let attempt = 0; attempt < 3 && !acked; attempt++) {
+        const ack = this.waitForFrame(
+          (f) => (f.payload[0] === 0x14 && f.payload[1] === 0x08 ? true : null), 1000, `conferma pacchetto ${i + 1}`
+        ).catch(() => false);
+        await connection.writeRawBytes(packets[i]);
+        acked = await ack;
+      }
+      if (!acked) throw new Error(`La pedaliera non ha confermato il pacchetto ${i + 1}/${packets.length}.`);
+      onProgress(i + 1, packets.length);
+    }
+    // Let the pedal commit the preset before the next command
+    await new Promise(r => setTimeout(r, 400));
+  }
+
+  /** Swap two user presets (1-50) on the pedal without losing any setting */
+  async swapPresets(slotA, slotB, onProgress = () => {}) {
+    if (slotA === slotB) return;
+    if (![slotA, slotB].every(s => Number.isInteger(s) && s >= 1 && s <= 50)) {
+      throw new Error('Si possono scambiare solo i preset utente (U01-U50).');
+    }
+    if (!connection.isConnected) throw new Error('Pedaliera non connessa.');
+
+    const codeA = this.getSlotCode(slotA);
+    const codeB = this.getSlotCode(slotB);
+    this.rawTransferActive = true;
+    let dataA = null;
+    let dataB = null;
+    let wroteA = false;
+    try {
+      onProgress(`Lettura ${codeA}...`, 0);
+      dataA = await this.exportPresetRaw(slotA);
+      onProgress(`Lettura ${codeB}...`, 10);
+      dataB = await this.exportPresetRaw(slotB);
+
+      // Keep a copy of both originals in case something goes wrong mid-way
+      try {
+        localStorage.setItem('sonicake_last_swap_backup', JSON.stringify({
+          time: new Date().toISOString(), slotA, slotB,
+          dataA: Array.from(dataA), dataB: Array.from(dataB)
+        }));
+      } catch (_) {}
+
+      await this.importPresetRaw(slotA, dataB, (i, n) => onProgress(`Scrittura ${codeA}...`, 20 + Math.round((i / n) * 40)));
+      wroteA = true;
+      await this.importPresetRaw(slotB, dataA, (i, n) => onProgress(`Scrittura ${codeB}...`, 60 + Math.round((i / n) * 40)));
+    } catch (err) {
+      if (wroteA && dataA) {
+        // Second write failed: put the original preset back into slot A
+        try {
+          await this.importPresetRaw(slotA, dataA);
+          err.message += ` ${codeA} è stato ripristinato com'era.`;
+        } catch (_) {
+          err.message += ` Attenzione: ripristino di ${codeA} non riuscito (copia salvata nel browser).`;
+        }
+      }
+      throw err;
+    } finally {
+      this.rawTransferActive = false;
+    }
+
+    // Swap local caches and refresh names from the pedal
+    const cacheA = this.presetCache.get(slotA);
+    const cacheB = this.presetCache.get(slotB);
+    if (cacheB) this.presetCache.set(slotA, cacheB); else this.presetCache.delete(slotA);
+    if (cacheA) this.presetCache.set(slotB, cacheA); else this.presetCache.delete(slotB);
+    onProgress('Aggiornamento elenco...', 100);
+    await this.syncPresetNames();
+    if (this.currentSlot === slotA || this.currentSlot === slotB) {
+      await this.selectPreset(this.currentSlot);
+    }
+    connection.log(`Preset ${codeA} e ${codeB} scambiati sulla pedaliera.`, 'success');
   }
 
   // --- Utilities ---

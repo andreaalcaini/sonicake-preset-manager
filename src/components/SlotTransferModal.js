@@ -178,7 +178,7 @@ export class SlotTransferModal {
             ${!connection.isConnected ? `
               <div class="flex items-center gap-2">
                 <span class="w-2 h-2 rounded-full bg-amber-400"></span>
-                <span>Hardware non connesso: il preset verrà registrato nello slot della memoria locale.</span>
+                <span>Pedaliera non connessa: il preset viene salvato solo in questa sessione.</span>
               </div>
             ` : `
               <div class="flex items-center gap-2">
@@ -235,10 +235,11 @@ export class SlotTransferModal {
             const buffer = await file.arrayBuffer();
             const parsed = PrstParser.parse(buffer);
             this.loadedFilePreset = {
-              name: parsed.name || file.name.replace('.prst', '').slice(0, 10),
+              name: (parsed.name || file.name.replace('.prst', '')).slice(0, 10),
               fileName: file.name,
               type: 'prst',
-              data: parsed
+              data: parsed,
+              buffer
             };
           } else if (file.name.endsWith('.json')) {
             const text = await file.text();
@@ -289,7 +290,11 @@ export class SlotTransferModal {
         confirmBtn.textContent = 'Salvataggio in corso...';
 
         try {
-          if (this.sourceType === 'file' && this.loadedFilePreset) {
+          if (this.sourceType === 'file' && this.loadedFilePreset?.type === 'prst') {
+            // Native import: the file's preset bytes go to the pedal untouched (only the name may change)
+            if (!connection.isConnected) throw new Error('Collega prima la pedaliera per importare un file .prst.');
+            await presetEngine.importPrstToSlot(this.loadedFilePreset.buffer, this.targetSlot, { newName: targetName });
+          } else if (this.sourceType === 'file' && this.loadedFilePreset) {
             // Write loaded file preset to chosen slot
             const presetData = this.preparePresetDataFromFile(this.loadedFilePreset, targetName);
             await presetEngine.writePresetDataToSlot(this.targetSlot, targetName, presetData, {
@@ -317,30 +322,17 @@ export class SlotTransferModal {
     }
   }
 
+  // JSON presets only: .prst files go through presetEngine.importPrstToSlot (native, lossless)
   preparePresetDataFromFile(filePreset, targetName) {
-    if (filePreset.type === 'json') {
-      const j = filePreset.data;
-      return {
-        name: targetName,
-        ampMode: (j.ampMode || 'Normal').toLowerCase() === 'clone' ? 'clone' : 'factory',
-        volume: j.presetVolume !== undefined ? j.presetVolume : (j.volume !== undefined ? j.volume : 75),
-        states: j.states || {},
-        selectedEffects: j.selectedEffects || {},
-        parameters: j.parameters || {},
-        order: Array.isArray(j.order) && j.order.length === 9 ? j.order : [0, 1, 2, 3, 4, 5, 6, 7, 8]
-      };
-    } else {
-      // prst format
-      const p = filePreset.data;
-      return {
-        name: targetName,
-        ampMode: 'factory',
-        volume: 75,
-        states: { 0: true, 1: true, 2: true, 3: true, 4: true, 5: true, 6: true, 7: true, 8: true },
-        selectedEffects: { 0: 1, 1: 101, 2: 201, 3: 301, 4: 401, 5: 501, 6: 601, 7: 701, 8: 801 },
-        parameters: {},
-        order: p.order || [0, 1, 2, 3, 4, 5, 6, 7, 8]
-      };
-    }
+    const j = filePreset.data;
+    return {
+      name: targetName,
+      ampMode: (j.ampMode || 'Normal').toLowerCase() === 'clone' ? 'clone' : 'factory',
+      volume: j.presetVolume !== undefined ? j.presetVolume : (j.volume !== undefined ? j.volume : 75),
+      states: j.states || {},
+      selectedEffects: j.selectedEffects || {},
+      parameters: j.parameters || {},
+      order: Array.isArray(j.order) && j.order.length === 9 ? j.order : [0, 1, 2, 3, 4, 5, 6, 7, 8]
+    };
   }
 }

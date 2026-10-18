@@ -107,10 +107,10 @@ export class SonicakeConnection {
       const pairs = await this.getAvailableUsbDevices();
 
       if (pairs.length === 0) {
-        throw new Error('No USB MIDI devices found. Make sure your Smart Box is turned on and connected via USB.');
+        throw new Error('No USB MIDI devices found. Make sure your Sonicake pedal is turned on and connected via USB.');
       }
 
-      // Prioritize devices named 'Smart Box', 'Sonicake', 'Sonic', or 'QME'
+      // Prioritize Sonicake hardware by its USB MIDI port name
       let selected = devicePair;
       if (!selected) {
         selected = pairs.find(p => /smart box|sonicake|sonic|qme/i.test(p.name)) || pairs[0];

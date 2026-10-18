@@ -7,6 +7,8 @@
 
 import { presetEngine } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
+import { PrstParser } from '../core/prst-parser.js';
+import { pickPreset, presetPairHtml } from './PresetPickerDialog.js';
 
 export class PresetList {
   constructor(containerElement) {
@@ -94,8 +96,8 @@ export class PresetList {
         <!-- Header row with title and mobile close button -->
         <div class="flex items-center justify-between">
           <span class="text-[11px] font-mono font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
-            <svg class="w-3.5 h-3.5 text-amber-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
-            <span>Banco Preset (100)</span>
+            <svg class="w-3.5 h-3.5 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h7"/></svg>
+            <span>Preset</span>
           </span>
           <button id="btnClosePresetsMobile" class="lg:hidden p-1 text-zinc-400 hover:text-white rounded-md hover:bg-zinc-800 transition" title="Chiudi pannello">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg>
@@ -122,7 +124,7 @@ export class PresetList {
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.35-4.35"></path>
           </svg>
-          <input type="text" class="preset-search-input w-full bg-zinc-900 border border-zinc-800 focus:border-cyan-500 rounded-lg pl-8 pr-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 outline-none transition" placeholder="Cerca tra i preset..." value="${this.searchQuery}">
+          <input type="text" class="preset-search-input w-full bg-zinc-900 border border-zinc-800 focus:border-orange-500 rounded-lg pl-8 pr-3 py-1.5 text-xs text-zinc-100 placeholder-zinc-500 outline-none transition" placeholder="Cerca tra i preset..." value="${this.searchQuery}">
         </div>
       </div>
 
@@ -146,7 +148,7 @@ export class PresetList {
           const isFav = this.favorites.has(item.slot);
           const isActive = item.slot === currentSlot;
           return `
-            <div class="preset-item group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition border ${isActive ? 'bg-zinc-800/90 border-amber-500/40 text-white shadow-sm' : 'hover:bg-zinc-900/80 border-transparent text-zinc-300'}" data-slot="${item.slot}">
+            <div class="preset-item group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer transition border ${isActive ? 'bg-[#2a2a2f] border-orange-500/50 text-white shadow-sm' : 'hover:bg-zinc-900/80 border-transparent text-zinc-300'}" data-slot="${item.slot}">
               <div class="flex items-center gap-2 min-w-0 flex-1">
                 <button class="btn-favorite-preset p-0.5 text-zinc-600 hover:text-amber-400 transition shrink-0" data-slot="${item.slot}" title="${isFav ? 'Rimuovi dai preferiti' : 'Aggiungi ai preferiti'}">
                   <svg class="w-3.5 h-3.5 ${isFav ? 'text-amber-400 fill-amber-400' : 'fill-none'}" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -154,7 +156,7 @@ export class PresetList {
                   </svg>
                 </button>
                 
-                <span class="font-mono text-[11px] font-bold ${isActive ? 'text-amber-400' : 'text-zinc-500'} shrink-0">${item.code}</span>
+                <span class="font-mono text-[11px] font-bold ${isActive ? 'text-orange-400' : 'text-zinc-500'} shrink-0">${item.code}</span>
                 <span class="text-xs font-medium truncate ${isActive ? 'text-zinc-100 font-bold' : 'text-zinc-300'}" title="${item.name}">
                   ${item.name}${isActive && presetEngine.isDirty ? ' *' : ''}
                 </span>
@@ -185,6 +187,97 @@ export class PresetList {
     `;
 
     this.attachEventListeners();
+  }
+
+  showProgressToast(title) {
+    const toast = document.createElement('div');
+    toast.className = 'fixed left-1/2 -translate-x-1/2 bottom-24 lg:bottom-8 z-[10000] w-[min(92vw,360px)] p-3 rounded-xl bg-zinc-900 border border-orange-500/40 shadow-2xl text-sm text-zinc-100';
+    toast.innerHTML = `
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <span class="font-bold truncate"></span>
+        <span class="toast-pct text-orange-400 font-mono text-xs">0%</span>
+      </div>
+      <div class="h-1.5 rounded bg-zinc-800 overflow-hidden"><div class="toast-bar h-full bg-orange-500 transition-all" style="width:0%"></div></div>
+      <div class="toast-step mt-2 text-xs text-zinc-400">Avvio...</div>
+    `;
+    toast.querySelector('.font-bold').textContent = title;
+    document.body.appendChild(toast);
+    return {
+      setProgress: (step, pct) => {
+        toast.querySelector('.toast-step').textContent = step;
+        toast.querySelector('.toast-pct').textContent = `${pct}%`;
+        toast.querySelector('.toast-bar').style.width = `${pct}%`;
+      },
+      remove: () => toast.remove()
+    };
+  }
+
+  async runPrstImport(file) {
+    let parsedName = file.name;
+    try {
+      parsedName = PrstParser.parse(await file.arrayBuffer()).name || file.name;
+    } catch (err) {
+      alert(err.message);
+      return;
+    }
+    const safeName = parsedName.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const slot = await pickPreset({
+      title: 'Importa preset',
+      source: { label: 'File', code: '.prst', name: parsedName },
+      initialSlot: presetEngine.currentSlot <= 50 ? presetEngine.currentSlot : null,
+      confirmLabel: 'Importa',
+      summary: (s) => `<span class="leading-snug">Il preset <strong class="text-orange-400">${presetEngine.getSlotCode(s)}</strong> verrà sostituito da <strong class="text-white">${safeName}</strong></span>`,
+      note: 'Il preset sostituito non si può recuperare: esportalo prima se ti serve.'
+    });
+    if (!slot) return;
+    const code = presetEngine.getSlotCode(slot);
+
+    const { setProgress, remove } = this.showProgressToast(`Importazione in ${code}`);
+    try {
+      await presetEngine.importPrstToSlot(await file.arrayBuffer(), slot, {
+        onProgress: (i, n) => setProgress(`Scrittura ${code}...`, Math.round((i / n) * 100))
+      });
+      setProgress('Importazione completata', 100);
+      setTimeout(remove, 2000);
+    } catch (err) {
+      console.error('prst import failed:', err);
+      remove();
+      alert(`Importazione non riuscita: ${err.message}`);
+    }
+  }
+
+  async runSwap(slot) {
+    if (slot > 50) {
+      alert('Si possono scambiare solo i preset utente (U01-U50).');
+      return;
+    }
+    if (!connection.isConnected) {
+      alert('Collega prima la pedaliera via USB o Bluetooth.');
+      return;
+    }
+    const code = presetEngine.getSlotCode(slot);
+    const target = await pickPreset({
+      title: 'Scambia preset',
+      source: { label: 'Sposta', code, name: presetEngine.presetList[slot - 1].name },
+      excludeSlot: slot,
+      confirmLabel: 'Scambia',
+      summary: (t) => presetPairHtml(slot, t),
+      note: 'Tutte le impostazioni dei due preset vengono conservate.'
+    });
+    if (!target) return;
+    const targetCode = presetEngine.getSlotCode(target);
+
+    const { setProgress, remove } = this.showProgressToast(`Scambio ${code} ⇄ ${targetCode}`);
+
+    try {
+      await presetEngine.swapPresets(slot, target, setProgress);
+      setProgress('Scambio completato', 100);
+      setTimeout(remove, 2000);
+    } catch (err) {
+      console.error('Preset swap failed:', err);
+      remove();
+      alert(`Scambio non riuscito: ${err.message}`);
+    }
   }
 
   attachEventListeners() {
@@ -248,24 +341,7 @@ export class PresetList {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const slot = parseInt(btn.dataset.slot, 10);
-        const slotCode = presetEngine.getSlotCode(slot);
-        const targetStr = prompt(`Scambia la posizione di ${slotCode} con quale altro slot (1-50)?`, slot > 1 ? slot - 1 : 2);
-        const targetSlot = parseInt(targetStr, 10);
-        if (targetSlot >= 1 && targetSlot <= 50 && targetSlot !== slot) {
-          const nameA = presetEngine.presetList[slot - 1].name;
-          const nameB = presetEngine.presetList[targetSlot - 1].name;
-          presetEngine.presetList[slot - 1].name = nameB;
-          presetEngine.presetList[targetSlot - 1].name = nameA;
-
-          if (slot === presetEngine.currentSlot) {
-            presetEngine.activePreset.name = nameB;
-          } else if (targetSlot === presetEngine.currentSlot) {
-            presetEngine.activePreset.name = nameA;
-          }
-
-          connection.log(`Scambiati di posizione ${slotCode} e ${presetEngine.getSlotCode(targetSlot)}`, 'info');
-          this.render();
-        }
+        this.runSwap(slot);
       });
     });
 
@@ -304,33 +380,48 @@ export class PresetList {
       });
     });
 
-    // Import .prst file
+    // Import .prst file into a user slot on the pedal (native import, nothing is rebuilt)
     const fileInputPrst = this.container.querySelector('#importPrstInput');
     const btnImportPrst = this.container.querySelector('.btn-import-prst');
     if (btnImportPrst && fileInputPrst) {
-      btnImportPrst.addEventListener('click', () => fileInputPrst.click());
+      btnImportPrst.addEventListener('click', () => {
+        if (!connection.isConnected) {
+          alert('Collega prima la pedaliera via USB o Bluetooth.');
+          return;
+        }
+        fileInputPrst.click();
+      });
       fileInputPrst.addEventListener('change', async (e) => {
         const file = e.target.files[0];
-        if (file) {
-          const buffer = await file.arrayBuffer();
-          presetEngine.importPresetPrst(buffer);
-          fileInputPrst.value = '';
-        }
+        fileInputPrst.value = '';
+        if (file) await this.runPrstImport(file);
       });
     }
 
-    // Export .prst file
+    // Export the current user preset from the pedal as .prst
     const btnExportPrst = this.container.querySelector('.btn-export-prst');
     if (btnExportPrst) {
-      btnExportPrst.addEventListener('click', () => {
-        const bytes = presetEngine.exportPresetPrst();
-        const blob = new Blob([bytes], { type: 'application/octet-stream' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${presetEngine.getSlotCode(presetEngine.currentSlot)}_${presetEngine.activePreset.name}.prst`;
-        a.click();
-        URL.revokeObjectURL(url);
+      btnExportPrst.addEventListener('click', async () => {
+        const slot = presetEngine.currentSlot;
+        if (!connection.isConnected) {
+          alert('Collega prima la pedaliera: il file viene letto direttamente dal preset salvato.');
+          return;
+        }
+        if (slot > 50) {
+          alert('Si possono esportare solo i preset utente (U01-U50).');
+          return;
+        }
+        try {
+          const { bytes, name } = await presetEngine.exportPrstFromSlot(slot);
+          const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }));
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${presetEngine.getSlotCode(slot)}-${name.replace(/[\\/:*?"<>|]/g, '_')}.prst`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(url), 2000);
+        } catch (err) {
+          alert(`Esportazione non riuscita: ${err.message}`);
+        }
       });
     }
 
@@ -343,7 +434,7 @@ export class PresetList {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Sonicake_SmartBox_Backup_${new Date().toISOString().slice(0,10)}.json`;
+        a.download = `Sonicake_Pedaliera_Backup_${new Date().toISOString().slice(0,10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
       });

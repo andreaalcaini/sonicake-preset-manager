@@ -5,7 +5,7 @@
  */
 
 import { presetEngine } from '../core/preset-engine.js';
-import { PrstParser } from '../core/prst-parser.js';
+import { connection } from '../core/connection.js';
 
 function triggerDownload(content, filename, mimeType) {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
@@ -92,7 +92,7 @@ export class ExportModal {
                 </div>
                 <div>
                   <div class="text-xs sm:text-sm font-bold text-zinc-100 group-hover:text-amber-400 transition-colors">Formato Nativo Sonicake (.prst)</div>
-                  <div class="text-[11px] text-zinc-400">Compatibile 100% con app SonicLink e Smart Box</div>
+                  <div class="text-[11px] text-zinc-400">Compatibile 100% con app SonicLink e pedaliera</div>
                 </div>
               </div>
               <span class="btn-status px-3 py-1.5 rounded-lg border border-zinc-700/60 bg-zinc-800/50 group-hover:bg-amber-500 group-hover:text-zinc-950 group-hover:border-amber-500 text-xs font-semibold text-zinc-300 transition-all">
@@ -124,7 +124,7 @@ export class ExportModal {
                 </div>
                 <div>
                   <div class="text-xs sm:text-sm font-bold text-zinc-100 group-hover:text-emerald-400 transition-colors">Backup Completo 50 Preset User (.json)</div>
-                  <div class="text-[11px] text-zinc-400">Esporta l'intero banco U01-U50 sincronizzato dall'hardware</div>
+                  <div class="text-[11px] text-zinc-400">Esporta tutti i preset utente letti dalla pedaliera</div>
                 </div>
               </div>
               <span class="btn-status px-3 py-1.5 rounded-lg border border-zinc-700/60 bg-zinc-800/50 group-hover:bg-emerald-500 group-hover:text-zinc-950 group-hover:border-emerald-500 text-xs font-semibold text-zinc-300 transition-all">
@@ -174,10 +174,20 @@ export class ExportModal {
     // 1. Download .prst
     const prstCard = this.overlay.querySelector('#btnDownloadPrst');
     if (prstCard) {
-      prstCard.addEventListener('click', () => {
+      prstCard.addEventListener('click', async () => {
+        // A .prst is the exact preset stored on the pedal, read with the native export
+        const slot = presetEngine.currentSlot;
+        if (!connection.isConnected) {
+          alert('Collega prima la pedaliera: il file .prst viene letto direttamente dal preset salvato.');
+          return;
+        }
+        if (slot > 50) {
+          alert('Si possono esportare solo i preset utente (U01-U50).');
+          return;
+        }
         try {
-          const binaryBuffer = PrstParser.serialize(presetEngine.activePreset);
-          triggerDownload(new Blob([binaryBuffer], { type: 'application/octet-stream' }), `${safeBaseName}.prst`, 'application/octet-stream');
+          const { bytes } = await presetEngine.exportPrstFromSlot(slot);
+          triggerDownload(new Blob([bytes], { type: 'application/octet-stream' }), `${safeBaseName}.prst`, 'application/octet-stream');
           this.showDownloadSuccess(prstCard, '✓ Scaricato!');
         } catch (err) {
           alert(`Errore export .prst: ${err.message}`);
@@ -208,7 +218,7 @@ export class ExportModal {
           const backupObj = presetEngine.exportAllPresetsBackupJson();
           const backupStr = JSON.stringify(backupObj, null, 2);
           const dateStr = new Date().toISOString().split('T')[0];
-          triggerDownload(backupStr, `Sonicake_SmartBox_UserPresets_Backup_${dateStr}.json`, 'application/json');
+          triggerDownload(backupStr, `Sonicake_Pedaliera_UserPresets_Backup_${dateStr}.json`, 'application/json');
           this.showDownloadSuccess(backupCard, '✓ Backup Salvato!');
         } catch (err) {
           alert(`Errore backup: ${err.message}`);

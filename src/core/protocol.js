@@ -1,5 +1,5 @@
 /**
- * Sonicake Smart Box & Pocket Master Hardware Protocol
+ * Sonicake Pedaliera Hardware Protocol (all Sonicake multi-effects)
  * Implements SysEx packet parsing, parameter decoding/encoding,
  * EQ lookup tables, and SMBus PEC CRC8 calculations.
  */
@@ -27,6 +27,45 @@ export const MODULE_NAMES = {
   8: 'RVB',
   9: 'Clone'
 };
+
+/**
+ * Pedal routing rule (matches SonicLink and the 720 = 6! entries of chainOrderCommands):
+ * DRV-AMP-IR-EQ is a fixed block that never splits or reorders; only NR, FX1, FX2, DLY and RVB
+ * move, and they hop over the whole block as a single unit.
+ */
+export const FIXED_CHAIN_BLOCK = [2, 3, 4, 5];
+
+export function isFixedChainModule(modId) {
+  return FIXED_CHAIN_BLOCK.includes(modId);
+}
+
+/** Order -> movable units, with the fixed block collapsed into the marker 'B' */
+export function toChainUnits(order) {
+  const units = [];
+  for (const modId of order) {
+    if (isFixedChainModule(modId)) {
+      if (!units.includes('B')) units.push('B');
+    } else {
+      units.push(modId);
+    }
+  }
+  return units;
+}
+
+export function fromChainUnits(units) {
+  return units.flatMap(u => (u === 'B' ? FIXED_CHAIN_BLOCK : [u]));
+}
+
+/** Move a free module one unit earlier (dir = -1) or later (+1). Returns the new order or null. */
+export function moveChainModule(order, modId, dir) {
+  if (isFixedChainModule(modId)) return null;
+  const units = toChainUnits(order);
+  const idx = units.indexOf(modId);
+  const target = idx + dir;
+  if (idx < 0 || target < 0 || target >= units.length) return null;
+  [units[idx], units[target]] = [units[target], units[idx]];
+  return fromChainUnits(units);
+}
 
 export const CHARACTER_MAP = {
   "0000": null, "0200": " ", "0201": "!", "0203": "#", "0205": "%", "0206": "&", "0207": "'",
@@ -686,7 +725,7 @@ export function calculateSonicakeCRC16(dataBytes) {
 }
 
 /**
- * Convert a standard 8,840-byte CLO neural model into a 2,696-byte Low Model accepted by Smart Box hardware
+ * Convert a standard 8,840-byte CLO neural model into a 2,696-byte Low Model accepted by the pedal hardware
  * Sets total length to 2696, extendSize to 2560, layer size to 512, copies first 2560 bytes of weights,
  * and calculates exact CRC16.
  * @param {Uint8Array} cloBytes 8840-byte or 2696-byte CLO data
@@ -726,7 +765,7 @@ export function convertCLOToLowModel(cloBytes) {
 }
 
 /**
- * Build 2,770-byte Clone AMP hardware payload for Smart Box / Pocket Master persistent Flash memory
+ * Build 2,770-byte Clone AMP hardware payload for the pedal persistent Flash memory
  * Verified 100% byte-for-byte against Sonicake Manager hardware stream.
  * @param {number} slotIndex 0 to 4 (representing Clone AMP 1 to 5)
  * @param {string} name Slot name (up to 14 chars)
@@ -908,7 +947,7 @@ export const HARDWARE_FXID_TO_INTERNAL_ID = {
 };
 
 /**
- * Decode native hardware 476-byte preset dump returned by Smart Box / Pocket Master
+ * Decode native hardware 476-byte preset dump returned by the pedal
  * @param {string|Uint8Array} payloadBytesOrHex
  * @returns {object} Decoded preset structure (states, order, ampMode, selectedEffects)
  */

@@ -54,7 +54,7 @@ export class SaveModal {
             </div>
             <div>
               <h3 class="text-sm font-bold tracking-tight text-white uppercase">Salva Preset su Pedaliera</h3>
-              <p class="text-[11px] text-zinc-400">Scrivi i parametri direttamente nella memoria hardware</p>
+              <p class="text-[11px] text-zinc-400">Salva le impostazioni nella memoria della pedaliera</p>
             </div>
           </div>
           <button class="modal-close-btn p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
@@ -143,7 +143,7 @@ export class SaveModal {
             ${!connection.isConnected ? `
               <div class="flex items-center gap-2">
                 <span class="w-2 h-2 rounded-full bg-amber-400"></span>
-                <span>Hardware non connesso. Il preset verrà salvato solo nella sessione locale.</span>
+                <span>Pedaliera non connessa: il preset viene salvato solo in questa sessione.</span>
               </div>
             ` : `
               <div class="flex items-center gap-2">

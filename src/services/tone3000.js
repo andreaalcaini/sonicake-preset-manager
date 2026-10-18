@@ -6,21 +6,46 @@
 const TONE3000_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd6eWJpdW9weGtkeGJ5dG5vamRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgwODIxNjUsImV4cCI6MjA1MzY1ODE2NX0.Gq66BJXjtLsqP2nAGXm9Xb9PAjoeZalWUj66K4nmVSU';
 const BASE_URL = 'https://api.tone3000.com/rest/v1';
 
+// Card fields: author (users), number of files (models), downloads and comments counters
+const TONE_SELECT = [
+  'id', 'title', 'description', 'gear', 'images', 'platform', 'created_at', 'published_at', 'token',
+  'users!tones_user_id_fkey(username,display_name,avatar_url,is_verified)',
+  'models(count)', 'downloads(count)', 'comments(count)'
+].join(',');
+
+export const GEAR_LABELS = {
+  'amp': 'Amp Capture',
+  'amp-cab': 'Amp + Cab Capture',
+  'pedal': 'Pedal Capture',
+  'outboard': 'Outboard Capture',
+  'cab': 'Cab IR',
+  'experimental': 'Experimental Capture',
+  'space': 'Space Capture',
+  'full-rig': 'Full Rig Capture'
+};
+
+const countOf = (rel) => (Array.isArray(rel) && rel[0] && typeof rel[0].count === 'number') ? rel[0].count : null;
+
 export class Tone3000Service {
   /**
-   * Search tones and Neural Amp Modeler captures
+   * Search tones the pedal can use: NAM captures (Clone AMP) and IR cabinets (User IR)
    */
   static async searchTones({ query = '', gear = 'all', limit = 20, offset = 0 } = {}) {
     try {
-      let url = `${BASE_URL}/tones?select=id,title,description,gear,images,platform,created_at,token&is_public=eq.true&is_deleted=eq.false&order=created_at.desc&limit=${limit}&offset=${offset}`;
+      let url = `${BASE_URL}/tones?select=${TONE_SELECT}&is_public=eq.true&is_deleted=eq.false&order=created_at.desc&limit=${limit}&offset=${offset}`;
 
       if (query && query.trim()) {
         const cleanQuery = encodeURIComponent(query.trim());
         url += `&title=ilike.*${cleanQuery}*`;
       }
 
-      if (gear && gear !== 'all') {
-        url += `&gear=eq.${encodeURIComponent(gear)}`;
+      if (gear === 'cab') {
+        url += '&gear=eq.cab&platform=eq.ir';
+      } else if (gear && gear !== 'all') {
+        url += `&gear=eq.${encodeURIComponent(gear)}&platform=eq.nam`;
+      } else {
+        // AIDA-X / Proteus captures cannot be converted for the pedal
+        url += '&platform=in.(nam,ir)';
       }
 
       const response = await fetch(url, {
@@ -36,16 +61,31 @@ export class Tone3000Service {
       }
 
       const data = await response.json();
-      return data.map(item => ({
-        id: item.id,
-        title: item.title,
-        description: item.description || 'No description provided.',
-        gear: item.gear || 'amp',
-        image: item.images && item.images.length > 0 ? item.images[0] : null,
-        createdDate: item.created_at ? new Date(item.created_at).toLocaleDateString() : '',
-        url: `https://www.tone3000.com/tones/${item.id}`,
-        token: item.token
-      }));
+      return data.map(item => {
+        const author = item.users || null;
+        return {
+          id: item.id,
+          title: item.title,
+          description: item.description || '',
+          gear: item.gear || 'amp',
+          gearLabel: GEAR_LABELS[item.gear] || 'Capture',
+          platform: item.platform || 'nam',
+          image: item.images && item.images.length > 0 ? item.images[0] : null,
+          publishedAt: item.published_at || item.created_at || null,
+          createdDate: item.created_at ? new Date(item.created_at).toLocaleDateString() : '',
+          url: `https://www.tone3000.com/tones/${item.id}`,
+          token: item.token,
+          author: author ? {
+            name: author.display_name || author.username || 'Anonimo',
+            username: author.username || '',
+            avatar: author.avatar_url || null,
+            verified: !!author.is_verified
+          } : null,
+          downloads: countOf(item.downloads),
+          filesCount: countOf(item.models),
+          comments: countOf(item.comments)
+        };
+      });
     } catch (err) {
       console.warn('Tone3000 online search failed, falling back to curated library:', err);
       return this.getCuratedTones(query, gear);

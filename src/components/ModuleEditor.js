@@ -6,7 +6,9 @@
 
 import { presetEngine } from '../core/preset-engine.js';
 import { MODULE_LIBRARY_DATA } from '../data/module-library.js';
-import { MODULE_NAMES } from '../core/protocol.js';
+import { MODULE_NAMES, isFixedChainModule, toChainUnits, moveChainModule } from '../core/protocol.js';
+
+const desktopQuery = window.matchMedia('(min-width: 1024px)');
 
 export class ModuleEditor {
   constructor(containerElement) {
@@ -29,6 +31,7 @@ export class ModuleEditor {
     // Subscribe to engine state & user slot changes
     presetEngine.onStateChange(() => this.render());
     presetEngine.onUserSlotsChange(() => this.render());
+    desktopQuery.addEventListener('change', () => this.render());
 
     this.render();
   }
@@ -39,7 +42,7 @@ export class ModuleEditor {
   }
 
   render() {
-    if (this.dragKnob) return;
+    if (this.dragKnob || this.sliderActive) return;
     const preset = presetEngine.activePreset;
     const isAmpModule = this.currentModuleId === 3;
     const isCloneMode = isAmpModule && preset.ampMode === 'clone';
@@ -79,65 +82,114 @@ export class ModuleEditor {
     const currentParams = preset.parameters[effectiveModuleId] || {};
 
     const canReplaceWithTone3000 = (this.currentModuleId === 3 || this.currentModuleId === 4);
+    const isOn = !!preset.states[this.currentModuleId];
+    const order = preset.order || [0, 1, 2, 3, 4, 5, 6, 7, 8];
+    const units = toChainUnits(order);
+    const unitPos = units.indexOf(this.currentModuleId);
+    const useSliders = !desktopQuery.matches;
+    const params = effectDef.alg || [];
 
     this.container.innerHTML = `
-      <div class="flex flex-col gap-2.5 sm:gap-3">
-        <!-- Module Header & Model Select -->
-        <div class="flex flex-wrap items-center justify-between gap-2.5 sm:gap-3 p-2.5 sm:p-4 rounded-xl bg-zinc-950/90 border border-zinc-800/80 shadow-sm">
-          <div class="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
-            <img src="${this.getModuleIconPath(this.currentModuleId, preset.ampMode)}" alt="${moduleName}" class="w-6 h-6 sm:w-8 sm:h-8 object-contain shrink-0" onerror="this.style.display='none'">
-            <div class="min-w-0 flex-1">
-              <span class="text-xs sm:text-sm font-bold text-zinc-100 flex items-center gap-1.5 truncate">
-                <span class="text-zinc-400 font-mono text-[10px] sm:text-[11px] shrink-0">${moduleName}</span>
-                <span class="truncate">${displayFxName}</span>
-              </span>
-              <p class="text-[10px] sm:text-[11px] text-zinc-400 truncate max-w-full sm:max-w-md">${effectDef.descriptionEn || 'Processore segnale audio.'}</p>
-            </div>
-          </div>
+      <div class="sl-editor">
+        <!-- Module on/off + effect model selector (SonicLink style) -->
+        <div class="sl-module-row">
+          <button class="sl-switch module-power ${isOn ? 'on' : ''}" title="${isOn ? 'Modulo attivo: tocca per bypass' : 'Modulo in bypass: tocca per attivare'}"></button>
+          <label class="sl-selector" title="${effectDef.descriptionEn || ''}">
+            <span class="sl-selector-text">${moduleName} - ${displayFxName}</span>
+            <img src="/assets/images/dropdown.svg" alt="">
+            <select class="model-select" data-module-id="${this.currentModuleId}">
+              ${this.renderModelSelectOptions(availableEffects, currentFxId)}
+            </select>
+          </label>
+        </div>
 
-          <div class="w-full sm:w-auto flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 flex-wrap">
+        ${isAmpModule || canReplaceWithTone3000 ? `
+          <div class="sl-chip-row">
             ${isAmpModule ? `
-              <div class="flex items-center bg-zinc-900 border border-zinc-800 rounded-lg p-0.5 text-xs shrink-0">
-                <button class="amp-mode-btn factory-btn px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md font-semibold text-[11px] transition ${preset.ampMode === 'factory' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-zinc-400 hover:text-zinc-200'}" data-mode="factory">
-                  Factory
-                </button>
-                <button class="amp-mode-btn clone-btn px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-md font-semibold text-[11px] transition ${preset.ampMode === 'clone' ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' : 'text-zinc-400 hover:text-zinc-200'}" data-mode="clone">
-                  Clone
-                </button>
+              <div class="sl-segmented">
+                <button class="amp-mode-btn ${preset.ampMode === 'factory' ? 'active' : ''}" data-mode="factory">Factory</button>
+                <button class="amp-mode-btn ${preset.ampMode === 'clone' ? 'active' : ''}" data-mode="clone">Clone</button>
               </div>
             ` : ''}
-
-            <div class="flex items-center gap-1.5 flex-1 sm:flex-initial min-w-[130px]">
-              <select class="model-select bg-zinc-900 border border-zinc-800 focus:border-cyan-500 text-zinc-100 rounded-lg px-2 sm:px-2.5 py-1 sm:py-1.5 text-xs font-semibold outline-none cursor-pointer w-full sm:w-auto max-w-full sm:max-w-[260px]" data-module-id="${this.currentModuleId}">
-                ${this.renderModelSelectOptions(availableEffects, currentFxId)}
-              </select>
-            </div>
-
             ${canReplaceWithTone3000 ? `
-              <button class="btn-action btn-browse-tone3000 flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 text-xs font-semibold rounded-lg bg-zinc-900 border border-zinc-800 hover:border-rose-500 text-rose-400 hover:text-white transition shrink-0" title="${isAmpModule ? 'Sostituisci profilo NAM con Tone3000' : 'Sostituisci Cabinet IR con Tone3000'}">
-                <svg class="w-3.5 h-3.5 text-rose-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                <span class="hidden xs:inline">${isAmpModule ? 'Sostituisci Clone' : 'Sostituisci IR'}</span>
-                <span class="xs:hidden">Tone3000</span>
+              <button class="sl-pill-btn accent btn-browse-tone3000" title="${isAmpModule ? 'Carica una cattura NAM da Tone3000 in uno slot Clone' : 'Carica un IR da Tone3000 in uno slot User IR'}">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                Tone3000
               </button>
             ` : ''}
           </div>
+        ` : ''}
+
+        <!-- Position in the chain (DRV-AMP-IR-EQ is a fixed block, like on SonicLink) -->
+        <div class="sl-chip-row">
+          <span class="sl-section-label">Posizione</span>
+          ${isFixedChainModule(this.currentModuleId) ? `
+            <span class="text-sm text-zinc-400">Fissa nel blocco DRV · AMP · IR · EQ</span>
+          ` : `
+            <button class="sl-pill-btn btn-chain-move" data-dir="-1" ${unitPos <= 0 ? 'disabled' : ''} title="Sposta prima nella catena">
+              <img src="/assets/images/btn_previous.svg" alt="" class="w-4 h-4">
+            </button>
+            <span class="text-sm text-zinc-400 tabular-nums">${unitPos + 1} / ${units.length}</span>
+            <button class="sl-pill-btn btn-chain-move" data-dir="1" ${unitPos >= units.length - 1 ? 'disabled' : ''} title="Sposta dopo nella catena">
+              <img src="/assets/images/btn_next.svg" alt="" class="w-4 h-4">
+            </button>
+          `}
         </div>
 
         <!-- Interactive EQ Visualizer Curve (Module 5 EQ) -->
         ${effectiveModuleId === 5 ? this.renderEqVisualizer(currentFxId, currentParams, effectDef) : ''}
 
-        <!-- Parameters Controls Responsive Grid (3 columns on mobile, 4-7 on tablet/desktop) -->
-        <div class="controls-panel grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-2 sm:gap-4 p-2 sm:p-4 rounded-xl bg-zinc-950/70 border border-zinc-800/80 justify-items-center">
-          ${effectDef.alg && effectDef.alg.length > 0 
-            ? effectDef.alg.map(param => this.renderParameterControl(effectiveModuleId, param, currentParams[param.algId])).join('')
-            : '<div class="text-zinc-500 text-xs py-8 col-span-full text-center">Nessun parametro regolabile per questo modulo.</div>'
-          }
-        </div>
+        ${params.length === 0
+          ? '<div class="text-zinc-500 text-sm py-6 text-center">Nessun parametro regolabile per questo modulo.</div>'
+          : useSliders
+            ? `<div class="sl-params">${params.map(param => this.renderParameterRow(effectiveModuleId, param, currentParams[param.algId])).join('')}</div>`
+            : `<div class="controls-panel grid grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 gap-4 p-4 rounded-md bg-[#0b0b0c] justify-items-center">
+                ${params.map(param => this.renderParameterControl(effectiveModuleId, param, currentParams[param.algId])).join('')}
+              </div>`
+        }
       </div>
     `;
 
     this.attachEventListeners();
     this.updateAllKnobVisuals();
+  }
+
+  /** Mobile parameter row: LABEL ──slider── value (SonicLink layout) */
+  renderParameterRow(moduleId, param, rawValue) {
+    const min = param.min !== undefined ? param.min : 0;
+    const max = param.max !== undefined ? param.max : 100;
+    const val = rawValue !== undefined ? rawValue : (param.defaultValue !== undefined ? param.defaultValue : 50);
+
+    if (param.widgetType === 1) {
+      const isActive = val > 0;
+      return `
+        <div class="sl-param switch-control" data-module-id="${moduleId}" data-alg-id="${param.algId}">
+          <span class="sl-param-label" title="${param.name}">${param.name}</span>
+          <span class="flex-1"></span>
+          <button class="sl-switch small toggle-switch-btn ${isActive ? 'on' : ''}" data-val="${val}"></button>
+        </div>
+      `;
+    }
+
+    if (param.widgetType === 2 && param.options) {
+      return `
+        <div class="sl-param" data-module-id="${moduleId}" data-alg-id="${param.algId}">
+          <span class="sl-param-label" title="${param.name}">${param.name}</span>
+          <select class="param-option-select" data-module-id="${moduleId}" data-alg-id="${param.algId}">
+            ${param.options.map((opt, i) => `<option value="${i}" ${i === val ? 'selected' : ''}>${opt}</option>`).join('')}
+          </select>
+        </div>
+      `;
+    }
+
+    const fill = max > min ? ((val - min) / (max - min)) * 100 : 0;
+    return `
+      <div class="sl-param slider-control" data-module-id="${moduleId}" data-alg-id="${param.algId}" data-min="${min}" data-max="${max}">
+        <span class="sl-param-label" title="${param.name}">${param.name}</span>
+        <input type="range" class="sl-range white param-slider" min="${min}" max="${max}" step="1" value="${val}" style="--fill:${fill}%">
+        <span class="sl-param-val">${val}${param.unit ? param.unit : ''}</span>
+      </div>
+    `;
   }
 
   renderModelSelectOptions(availableEffects, currentFxId) {
@@ -242,6 +294,7 @@ export class ModuleEditor {
     }
 
     // Standard modules (NR, FX1, DRV, EQ, FX2, DLY, RVB)
+    const list = [];
     const modConfig = MODULE_LIBRARY_DATA.modules?.find(m => m.moduleId === moduleId);
     if (modConfig && modConfig.effects) {
       modConfig.effects.forEach(fxRef => {
@@ -341,6 +394,55 @@ export class ModuleEditor {
   }
 
   attachEventListeners() {
+    // Module power (bypass) switch
+    this.container.querySelector('.module-power')?.addEventListener('click', () => {
+      const modId = this.currentModuleId;
+      presetEngine.setModuleBypass(modId, !presetEngine.activePreset.states[modId]);
+    });
+
+    // Move a free module earlier / later; it hops over the DRV-AMP-IR-EQ block as one unit
+    this.container.querySelectorAll('.btn-chain-move').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const order = presetEngine.activePreset.order || [0, 1, 2, 3, 4, 5, 6, 7, 8];
+        const next = moveChainModule(order, this.currentModuleId, parseInt(btn.dataset.dir, 10));
+        if (next) presetEngine.setChainOrder(next);
+      });
+    });
+
+    // Mobile parameter sliders
+    this.container.querySelectorAll('.slider-control').forEach(row => {
+      const slider = row.querySelector('.param-slider');
+      const valEl = row.querySelector('.sl-param-val');
+      const modId = parseInt(row.dataset.moduleId, 10);
+      const algId = parseInt(row.dataset.algId, 10);
+      const min = parseFloat(row.dataset.min);
+      const max = parseFloat(row.dataset.max);
+      const start = () => { this.sliderActive = true; };
+      const end = () => {
+        if (!this.sliderActive) return;
+        this.sliderActive = false;
+        this.render();
+      };
+      slider.addEventListener('pointerdown', start);
+      slider.addEventListener('touchstart', start, { passive: true });
+      slider.addEventListener('pointerup', end);
+      slider.addEventListener('touchend', end);
+      slider.addEventListener('change', end);
+      slider.addEventListener('input', () => {
+        const v = parseInt(slider.value, 10);
+        slider.style.setProperty('--fill', `${max > min ? ((v - min) / (max - min)) * 100 : 0}%`);
+        if (valEl) valEl.textContent = v;
+        presetEngine.setParameter(modId, algId, v);
+      });
+    });
+
+    // Mobile option selects
+    this.container.querySelectorAll('.param-option-select').forEach(sel => {
+      sel.addEventListener('change', () => {
+        presetEngine.setParameter(parseInt(sel.dataset.moduleId, 10), parseInt(sel.dataset.algId, 10), parseInt(sel.value, 10));
+      });
+    });
+
     // Model Select
     const modelSelect = this.container.querySelector('.model-select[data-module-id]');
     if (modelSelect) {
@@ -715,13 +817,13 @@ export class ModuleEditor {
     const gridDbs = [12, 6, 0, -6, -12];
 
     return `
-      <div class="eq-visualizer-card p-3 rounded-xl bg-zinc-950 border border-zinc-800 shadow-inner flex flex-col gap-2">
+      <div class="eq-visualizer-card p-3 rounded-md bg-[#0b0b0c] shadow-inner flex flex-col gap-2">
         <div class="flex items-center justify-between text-xs px-1">
-          <span class="font-mono font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+          <span class="font-mono font-bold text-orange-400 uppercase tracking-wider flex items-center gap-1.5">
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18M7 16l4-8 4 6 4-10"/></svg>
-            <span>Curva di Risposta in Frequenza (EQ Studio)</span>
+            <span>Curva EQ</span>
           </span>
-          <span class="text-[11px] text-zinc-500 font-mono">Trascina i nodi per regolare il guadagno (-50..+50 dB)</span>
+          <span class="hidden lg:inline text-[11px] text-zinc-500 font-mono">Trascina i nodi per regolare il guadagno (-50..+50 dB)</span>
         </div>
 
         <div class="relative w-full overflow-hidden select-none">

@@ -3,6 +3,8 @@
  * Displays user guide, connection walkthrough, and shortcut cheat sheet.
  */
 
+import { applyFeatureFlags } from '../config/features.js';
+
 export class HelpModal {
   constructor(overlayElement) {
     this.overlay = overlayElement;
@@ -74,7 +76,7 @@ export class HelpModal {
                 <kbd class="px-2 py-1 rounded bg-zinc-900 border border-zinc-700/80 text-zinc-200 font-mono font-bold text-[11px] shadow-sm">Ctrl + Z / Ctrl + Y</kbd>
                 <span class="text-zinc-400 text-right">Annulla / Ripristina modifiche (Undo/Redo)</span>
               </div>
-              <div class="p-2.5 sm:px-3 sm:py-2 flex items-center justify-between text-xs">
+              <div data-feature="abCompare" class="p-2.5 sm:px-3 sm:py-2 flex items-center justify-between text-xs">
                 <kbd class="px-2 py-1 rounded bg-zinc-900 border border-zinc-700/80 text-zinc-200 font-mono font-bold text-[11px] shadow-sm">Alt + A</kbd>
                 <span class="text-zinc-400 text-right">Confronto sonoro A / B istantaneo</span>
               </div>
@@ -100,16 +102,16 @@ export class HelpModal {
                 <path d="M12 2v10"></path>
                 <path d="M18.4 6.6a9 9 0 1 1-12.77 0"></path>
               </svg>
-              Connessione USB MIDI & Bluetooth BLE
+              Connessione USB e Bluetooth
             </h4>
             <div class="space-y-2">
               <div class="p-3 bg-zinc-950/40 border border-zinc-800 rounded-xl text-xs leading-relaxed">
                 <div class="font-bold text-zinc-200 mb-0.5">Collegamento USB Diretto:</div>
-                <div class="text-zinc-400">Collega la Smart Box al computer tramite cavo USB-C. Clicca su <strong>USB</strong> in alto a sinistra: l'app configurerà automaticamente input/output MIDI e sincronizzerà i banchi.</div>
+                <div class="text-zinc-400">Collega la pedaliera al computer tramite cavo USB-C. Clicca su <strong>USB</strong> in alto: l'app si collega e legge i tuoi preset.</div>
               </div>
               <div class="p-3 bg-zinc-950/40 border border-zinc-800 rounded-xl text-xs leading-relaxed">
-                <div class="font-bold text-zinc-200 mb-0.5">Collegamento Wireless Bluetooth BLE:</div>
-                <div class="text-zinc-400">Attiva il Bluetooth sul PC/tablet. Clicca su <strong>BLE</strong> in alto a sinistra, seleziona <code>Smart Box</code> dall'elenco del browser e sincronizza senza cavi.</div>
+                <div class="font-bold text-zinc-200 mb-0.5">Collegamento Bluetooth:</div>
+                <div class="text-zinc-400">Attiva il Bluetooth sul PC/tablet. Clicca su <strong>Bluetooth</strong> in alto, seleziona la tua pedaliera Sonicake dall'elenco del browser e sincronizza senza cavi.</div>
               </div>
             </div>
           </div>
@@ -122,10 +124,10 @@ export class HelpModal {
                 <path d="M12 12v9"></path>
                 <path d="m8 17 4 4 4-4"></path>
               </svg>
-              Memoria File Hardware (5 NAM + 5 IR)
+              Amplificatori e casse personali
             </h4>
             <div class="p-3 bg-zinc-950/40 border border-zinc-800 rounded-xl text-xs text-zinc-400 leading-relaxed">
-              La pedaliera dispone di <strong>5 slot Clone AMP (NAM)</strong> e <strong>5 slot Cabinet IR</strong> nella memoria file hardware. Lo strumento Tone3000 ti permette di caricare e sostituire questi file senza intaccare la lista dei tuoi 50 preset.
+              La pedaliera dispone di <strong>5 slot Clone AMP (NAM)</strong> e <strong>5 slot Cabinet IR</strong> nella memoria della pedaliera. Lo strumento Tone3000 ti permette di caricare e sostituire questi file senza intaccare la lista dei tuoi 50 preset.
             </div>
           </div>
         </div>
@@ -138,6 +140,7 @@ export class HelpModal {
         </div>
       </div>
     `;
+    applyFeatureFlags(this.overlay);
 
     this.attachEventListeners();
   }

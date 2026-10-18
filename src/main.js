@@ -1,5 +1,5 @@
 /**
- * Sonicake Smart Box Preset Manager - Main Application Entrypoint
+ * Sonicake Pedaliera Preset Manager - Main Application Entrypoint
  * Coordinates components, connections, shortcuts, and bidirectional hardware syncing.
  */
 
@@ -23,6 +23,7 @@ import { ImportBundleModal } from './components/ImportBundleModal.js';
 import { SetlistModal } from './components/SetlistModal.js';
 import { BackingTrackModal } from './components/BackingTrackModal.js';
 import { decodePresetBundle } from './utils/bundle-encoder.js';
+import { FEATURES, applyFeatureFlags } from './config/features.js';
 
 class App {
   constructor() {
@@ -33,6 +34,9 @@ class App {
   }
 
   initUI() {
+    // Features switched off for the published site (code kept, see config/features.js)
+    applyFeatureFlags();
+
     // 1. Core UI Components
     const moduleEditor = new ModuleEditor(document.getElementById('moduleEditorArea'));
     const signalChain = new SignalChain(
@@ -117,40 +121,28 @@ class App {
       connection.disconnect();
     });
 
-    const connMobileStatus = document.getElementById('connMobileStatus');
+    const connBanner = document.getElementById('connBanner');
+    const btnDisconnectMenu = document.getElementById('btnDisconnectMenu');
+    btnDisconnectMenu?.addEventListener('click', () => connection.disconnect());
 
     connection.onStatusChange((status) => {
-      if (status.isConnected) {
-        connLed.classList.add('connected');
-        connText.textContent = `${status.type.toUpperCase()}: ${status.deviceName}`;
-        if (connMobileStatus) {
-          connMobileStatus.textContent = status.type.toUpperCase();
-          connMobileStatus.classList.remove('hidden');
-        }
-        btnConnectUsb.style.display = 'none';
-        btnConnectBle.style.display = 'none';
-        btnDisconnect.classList.remove('hidden');
-        btnDisconnect.style.display = 'inline-flex';
+      connLed.classList.toggle('connected', status.isConnected);
+      connBanner?.classList.toggle('hidden', status.isConnected);
+      btnDisconnectMenu?.classList.toggle('hidden', !status.isConnected);
+      connText.textContent = status.isConnected
+        ? `${status.type.toUpperCase()} · ${status.deviceName}`
+        : 'Non connessa';
 
+      if (status.isConnected) {
         // Auto sync all Clone Amps, User IRs, and 100 presets on connection
         setTimeout(() => presetEngine.runInitialSyncSequence(), 300);
-      } else {
-        connLed.classList.remove('connected');
-        connText.textContent = 'Non Connesso';
-        if (connMobileStatus) {
-          connMobileStatus.classList.add('hidden');
-        }
-        btnConnectUsb.style.display = 'inline-flex';
-        btnConnectBle.style.display = 'inline-flex';
-        btnDisconnect.classList.add('hidden');
-        btnDisconnect.style.display = 'none';
       }
     });
 
     // 5. Tool Action Buttons
     document.getElementById('btnSyncHardware').addEventListener('click', () => {
       if (!connection.isConnected) {
-        alert('Please connect your Smart Box via USB or Bluetooth first.');
+        alert('Collega prima la pedaliera via USB o Bluetooth.');
         return;
       }
       presetEngine.runInitialSyncSequence();
@@ -245,16 +237,42 @@ class App {
       });
 
       // Auto close dropdown when clicking any tool inside
-      toolsMenuDropdown.querySelectorAll('button').forEach(btn => {
+      toolsMenuDropdown.querySelectorAll('button:not(#btnToggleFollowPedal)').forEach(btn => {
         btn.addEventListener('click', () => {
           toolsMenuDropdown.classList.add('hidden');
         });
       });
     }
 
-    // Mobile Tone3000 Button
-    document.getElementById('btnOpenTone3000Mobile')?.addEventListener('click', () => {
-      tone3000Modal.open();
+    // "Segui i cambi preset della pedaliera" toggle
+    const followSwitch = document.getElementById('followPedalSwitch');
+    followSwitch?.classList.toggle('on', presetEngine.followPedalPresetChanges);
+    document.getElementById('btnToggleFollowPedal')?.addEventListener('click', (e) => {
+      e.stopPropagation(); // keep the menu open to show the new state
+      presetEngine.setFollowPedalPresetChanges(!presetEngine.followPedalPresetChanges);
+      followSwitch?.classList.toggle('on', presetEngine.followPedalPresetChanges);
+    });
+
+    // Mobile menu: undo / redo
+    document.getElementById('btnUndoMenu')?.addEventListener('click', () => presetEngine.undo());
+    document.getElementById('btnRedoMenu')?.addEventListener('click', () => presetEngine.redo());
+
+    // Bottom tab bar (mobile / tablet)
+    document.querySelectorAll('#bottomTabBar .sl-tab').forEach(tab => {
+      tab.addEventListener('click', (e) => {
+        switch (tab.dataset.tab) {
+          case 'effects':
+            document.getElementById('workCanvas')?.scrollTo({ top: 0, behavior: 'smooth' });
+            break;
+          case 'tone3000': tone3000Modal.open(); break;
+          case 'tuner': tunerModal.open(); break;
+          case 'drum': drumModal.open(); break;
+          case 'more':
+            e.stopPropagation();
+            document.getElementById('toolsMenuDropdown')?.classList.toggle('hidden');
+            break;
+        }
+      });
     });
 
     // Mobile Tools menu buttons
@@ -332,8 +350,35 @@ class App {
     const logToggleHeader = document.getElementById('logToggleHeader');
     const logContainer = document.getElementById('logContainer');
 
-    logToggleHeader.addEventListener('click', () => {
+    logToggleHeader.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
       logDrawer.classList.toggle('expanded');
+    });
+
+    const btnCopyLog = document.getElementById('btnCopyLog');
+    btnCopyLog?.addEventListener('click', async () => {
+      const text = [...logContainer.querySelectorAll('.log-line')].map(l => l.textContent).join('\n');
+      try {
+        await navigator.clipboard.writeText(text);
+      } catch (_) {
+        // Clipboard API unavailable (e.g. plain http on LAN): fall back to a hidden textarea
+        const ta = Object.assign(document.createElement('textarea'), { value: text });
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        ta.remove();
+      }
+      btnCopyLog.textContent = 'Copiato ✓';
+      setTimeout(() => { btnCopyLog.textContent = 'Copia'; }, 1500);
+    });
+    document.getElementById('btnClearLog')?.addEventListener('click', () => {
+      logContainer.innerHTML = '';
+    });
+
+    // Mobile: console drawer is hidden by default, toggled from the "Altro" sheet
+    document.getElementById('btnToggleConsole')?.addEventListener('click', () => {
+      const open = logDrawer.classList.toggle('console-open');
+      logDrawer.classList.toggle('expanded', open);
     });
 
     connection.onLog(({ message, type, time }) => {
@@ -383,7 +428,7 @@ class App {
       }
 
       // Alt + A: Toggle A/B
-      if (e.altKey && e.key.toLowerCase() === 'a') {
+      if (FEATURES.abCompare && e.altKey && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         presetEngine.toggleAB();
         return;
@@ -419,9 +464,9 @@ class App {
   async checkAvailableMidi() {
     try {
       const devices = await connection.getAvailableUsbDevices();
-      const smartBox = devices.find(d => d.name.toLowerCase().includes('smart box') || d.name.toLowerCase().includes('sonic'));
-      if (smartBox) {
-        connection.log(`Found Smart Box hardware on USB MIDI: "${smartBox.name}"`, 'success');
+      const pedal = devices.find(d => d.name.toLowerCase().includes('smart box') || d.name.toLowerCase().includes('sonic'));
+      if (pedal) {
+        connection.log(`Pedaliera trovata su USB MIDI: "${pedal.name}"`, 'success');
       }
     } catch (e) {
       // Ignore initial probe error

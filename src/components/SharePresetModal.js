@@ -135,7 +135,7 @@ export class SharePresetModal {
           ` : `
             <div class="p-3 bg-emerald-950/20 border border-emerald-800/30 rounded-xl text-xs text-emerald-300 flex items-center gap-2">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-              <span>Preset autonomo: utilizza modelli factory predefiniti della Smart Box.</span>
+              <span>Preset autonomo: utilizza modelli factory predefiniti della pedaliera.</span>
             </div>
           `}
 

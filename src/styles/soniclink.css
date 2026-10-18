@@ -1,0 +1,573 @@
+/* ==========================================================================
+   SonicLink native look (Sonicake official smartphone app)
+   Header deck, preset VOL bar, pixel pedal chain, module editor, bottom tabs
+   ========================================================================== */
+
+:root {
+  --sl-bg: #131315;
+  --sl-surface: #1c1c1f;
+  --sl-control: #2a2a2f;
+  --sl-control-hover: #34343a;
+  --sl-panel: #0b0b0c;
+  --sl-panel-inner: #18181a;
+  --sl-line: #8a4a17;
+  --sl-orange: #f47a20;
+  --sl-orange-hi: #ff8a33;
+  --sl-text: #f2f2f3;
+  --sl-text-dim: #8b8b93;
+  --sl-tabbar-h: 64px;
+}
+
+body { background-color: var(--sl-bg); }
+
+/* --- Header deck --------------------------------------------------------- */
+.sl-header {
+  background: var(--sl-bg);
+  border-bottom: 1px solid #222226;
+}
+
+.sl-icon-btn {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: background-color 0.15s;
+}
+.sl-icon-btn:hover { background: var(--sl-control); }
+.sl-icon-btn:active { transform: scale(0.95); }
+.sl-icon-btn img { width: 28px; height: 28px; }
+
+.sl-square-btn {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: var(--sl-control);
+  transition: background-color 0.15s;
+}
+.sl-square-btn:hover { background: var(--sl-control-hover); }
+.sl-square-btn:active { transform: scale(0.95); }
+.sl-square-btn img { width: 22px; height: 22px; }
+
+.sl-preset-bar {
+  height: 44px;
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  border-radius: 6px;
+  background: var(--sl-control);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.sl-preset-bar:hover { background: var(--sl-control-hover); }
+.sl-preset-code {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--sl-text);
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+.sl-preset-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--sl-text);
+  min-width: 0;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sl-preset-caret { width: 18px; height: 18px; flex-shrink: 0; opacity: 0.9; }
+
+/* Dirty marker reuses the legacy .visible toggle from main.js */
+#headerDirtyIndicator { opacity: 0; transition: opacity 0.2s; }
+#headerDirtyIndicator.visible { opacity: 1; }
+
+/* Connection LED inside the preset bar */
+.sl-led {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: #52525b;
+  transition: background-color 0.2s, box-shadow 0.2s;
+}
+.sl-led.connected {
+  background: #10b981;
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.8);
+}
+
+/* Disconnected banner */
+.sl-conn-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #1a1410;
+  border-bottom: 1px solid rgba(244, 122, 32, 0.25);
+  font-size: 13px;
+  color: #e7c9b0;
+}
+.sl-conn-btn {
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--sl-control);
+  color: var(--sl-text);
+  transition: background-color 0.15s;
+}
+.sl-conn-btn:hover { background: var(--sl-control-hover); }
+.sl-conn-btn.primary { background: var(--sl-orange); color: #160a02; }
+.sl-conn-btn.primary:hover { background: var(--sl-orange-hi); }
+
+/* --- Preset VOL row ------------------------------------------------------ */
+.sl-vol-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px 10px;
+}
+.sl-row-label {
+  font-size: 16px;
+  color: var(--sl-text);
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 92px;
+}
+.sl-row-value {
+  font-size: 16px;
+  color: var(--sl-text);
+  font-variant-numeric: tabular-nums;
+  width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.sl-save-btn {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: background-color 0.15s;
+}
+.sl-save-btn:hover { background: var(--sl-control); }
+.sl-save-btn img { width: 34px; height: 34px; }
+
+/* --- Range sliders (orange VOL / white params) --------------------------- */
+.sl-range {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 32px;
+  background: transparent;
+  cursor: pointer;
+  --fill: 50%;
+  --fill-color: var(--sl-orange);
+  touch-action: pan-y;
+}
+.sl-range.white { --fill-color: #ececee; }
+.sl-range::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right, var(--fill-color) 0, var(--fill-color) var(--fill), #3a3a40 var(--fill), #3a3a40 100%);
+}
+.sl-range::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: #3a3a40;
+}
+.sl-range::-moz-range-progress {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--fill-color);
+}
+.sl-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 26px;
+  height: 26px;
+  margin-top: -9px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.12), 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.sl-range::-moz-range-thumb {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 5px rgba(255, 255, 255, 0.12), 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.sl-range:active::-webkit-slider-thumb { box-shadow: 0 0 0 8px rgba(255, 255, 255, 0.18), 0 2px 6px rgba(0, 0, 0, 0.5); }
+
+/* --- Pedal chain panel --------------------------------------------------- */
+.sl-chain-panel {
+  margin: 4px 12px 0;
+  padding: 10px;
+  border-radius: 6px;
+  background: var(--sl-panel);
+}
+.sl-chain-inner {
+  border-radius: 4px;
+  background: var(--sl-panel-inner);
+  padding: 14px 8px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sl-chain-row {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  align-items: start;
+}
+/* Orange signal wire behind the pedals */
+.sl-chain-row::before {
+  content: '';
+  position: absolute;
+  left: 4%;
+  right: 0;
+  top: 34%;
+  height: 2px;
+  background: var(--sl-line);
+}
+.sl-chain-row.row-2::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: calc(34% - 5px);
+  width: 10px;
+  height: 10px;
+  border-top: 2px solid var(--sl-line);
+  border-right: 2px solid var(--sl-line);
+  transform: rotate(45deg);
+}
+
+.sl-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 0 0;
+  min-width: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+/* Fixed DRV-AMP-IR-EQ block: dashed frame like SonicLink (segments join across adjacent tiles) */
+.sl-tile.blk::before {
+  content: '';
+  position: absolute;
+  top: -8px;
+  bottom: -2px;
+  left: -2px;
+  right: -2px;
+  border-top: 1.5px dashed #5c5c63;
+  border-bottom: 1.5px dashed #5c5c63;
+  pointer-events: none;
+}
+.sl-tile.blk-l::before { left: -6px; border-left: 1.5px dashed #5c5c63; }
+.sl-tile.blk-r::before { right: -6px; border-right: 1.5px dashed #5c5c63; }
+
+.sl-tile-icon {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  max-width: 64px;
+  height: auto;
+  aspect-ratio: 47 / 66;
+  transition: transform 0.12s, filter 0.2s;
+}
+.sl-tile:active .sl-tile-icon { transform: scale(0.94); }
+.sl-tile.is-selected .sl-tile-icon { filter: drop-shadow(0 0 6px rgba(255, 255, 255, 0.25)); }
+.sl-tile-pointer {
+  width: 22px;
+  height: 18px;
+  margin-top: 4px;
+  visibility: hidden;
+}
+.sl-tile.is-selected .sl-tile-pointer { visibility: visible; }
+.sl-tile-name {
+  display: none;
+  max-width: 100%;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--sl-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sl-tile.is-selected .sl-tile-name { color: var(--sl-text); }
+.sl-tile-badge {
+  position: absolute;
+  z-index: 2;
+  top: -4px;
+  right: 6%;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--sl-orange);
+  color: #160a02;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+@media (min-width: 1024px) {
+  .sl-chain-panel { margin: 4px 16px 0; }
+  .sl-chain-inner { padding: 16px 16px 8px; }
+  .sl-tile-icon { max-width: 72px; }
+  .sl-tile-name { display: block; }
+}
+
+/* --- Module editor ------------------------------------------------------- */
+.sl-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+.sl-module-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.sl-switch {
+  position: relative;
+  width: 72px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: #3a3a40;
+  transition: background-color 0.18s;
+  -webkit-tap-highlight-color: transparent;
+}
+.sl-switch::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #8b8b93;
+  transition: transform 0.18s, background-color 0.18s, box-shadow 0.18s;
+}
+.sl-switch.on { background: #f4f4f5; }
+.sl-switch.on::after {
+  transform: translateX(32px);
+  background: #fff;
+  box-shadow: 0 0 0 3px #131315 inset, 0 0 0 1px #131315;
+}
+.sl-switch.small { width: 56px; height: 32px; }
+.sl-switch.small::after { width: 24px; height: 24px; }
+.sl-switch.small.on::after { transform: translateX(24px); }
+
+.sl-selector {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 18px;
+  border-radius: 6px;
+  background: var(--sl-control);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.sl-selector:hover { background: var(--sl-control-hover); }
+.sl-selector-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 17px;
+  color: var(--sl-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sl-selector img { width: 20px; height: 20px; flex-shrink: 0; }
+.sl-selector select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.sl-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.sl-segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--sl-control);
+}
+.sl-segmented button {
+  min-height: 38px;
+  padding: 0 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--sl-text-dim);
+  transition: background-color 0.15s, color 0.15s;
+}
+.sl-segmented button.active { background: var(--sl-orange); color: #160a02; }
+.sl-pill-btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--sl-control);
+  color: var(--sl-text);
+  transition: background-color 0.15s;
+}
+.sl-pill-btn:hover { background: var(--sl-control-hover); }
+.sl-pill-btn:disabled { opacity: 0.35; cursor: default; }
+.sl-pill-btn.accent { color: var(--sl-orange-hi); }
+
+.sl-section-label {
+  font-size: 15px;
+  color: var(--sl-text);
+  min-width: 92px;
+}
+
+/* Parameter rows (mobile) */
+.sl-params { display: flex; flex-direction: column; gap: 4px; }
+.sl-param {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 52px;
+}
+.sl-param-label {
+  width: 92px;
+  flex-shrink: 0;
+  font-size: 16px;
+  color: var(--sl-text);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sl-param-val {
+  width: 44px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 16px;
+  color: var(--sl-text);
+  font-variant-numeric: tabular-nums;
+}
+.sl-param select {
+  flex: 1 1 auto;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 6px;
+  background: var(--sl-control);
+  color: var(--sl-text);
+  font-size: 15px;
+  outline: none;
+}
+
+/* --- Bottom tab bar (mobile) -------------------------------------------- */
+.sl-tabbar {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  height: calc(var(--sl-tabbar-h) + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: #101012;
+  border-top: 1px solid #26262b;
+  z-index: 30;
+}
+.sl-tab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 11px;
+  color: #6f6f78;
+  -webkit-tap-highlight-color: transparent;
+}
+.sl-tab-icon {
+  width: 40px;
+  height: 34px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s;
+}
+.sl-tab-icon img, .sl-tab-icon svg { width: 24px; height: 24px; opacity: 0.55; }
+.sl-tab.active { color: var(--sl-text); }
+.sl-tab.active .sl-tab-icon { background: var(--sl-control); width: 56px; }
+.sl-tab.active .sl-tab-icon img, .sl-tab.active .sl-tab-icon svg { opacity: 1; }
+
+/* Debug console: selectable text so logs can be copied into bug reports */
+#logContainer, #logContainer * {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+/* Component display rules above would otherwise beat Tailwind's .hidden / lg:hidden */
+.sl-conn-banner.hidden, .sl-tabbar.hidden { display: none; }
+@media (min-width: 1024px) { .sl-tabbar, #btnTogglePresetsMobile { display: none; } }
+@media (max-width: 1023px) { #logDrawer:not(.console-open) { display: none; } }
+
+/* --- Tools menu: dropdown on desktop, bottom sheet on mobile ------------- */
+@media (max-width: 1023px) {
+  #toolsMenuDropdown {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--sl-tabbar-h) + env(safe-area-inset-bottom, 0px));
+    top: auto;
+    width: auto;
+    max-height: calc(100dvh - 140px);
+    overflow-y: auto;
+    margin: 0;
+    border-radius: 16px 16px 0 0;
+    padding: 8px 8px 12px;
+    z-index: 60;
+    box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.6);
+  }
+  #toolsMenuDropdown button { min-height: 44px; font-size: 14px; }
+  #toolsMenuDropdown::before {
+    content: '';
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: 2px auto 8px;
+    border-radius: 2px;
+    background: #3f3f46;
+  }
+}

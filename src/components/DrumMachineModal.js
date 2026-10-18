@@ -258,7 +258,7 @@ export class DrumMachineModal {
             </div>
             <div>
               <h3 class="text-sm font-bold tracking-tight text-white uppercase">Drum Machine & Metronomo</h3>
-              <p class="text-[11px] text-zinc-400">100 pattern ritmici hardware integrati</p>
+              <p class="text-[11px] text-zinc-400">100 ritmi integrati nella pedaliera</p>
             </div>
           </div>
           <button class="modal-close-btn p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">

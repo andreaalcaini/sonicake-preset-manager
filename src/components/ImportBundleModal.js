@@ -154,7 +154,7 @@ export class ImportBundleModal {
           ` : `
             <div class="p-3.5 bg-emerald-950/20 border border-emerald-800/30 rounded-xl text-xs text-emerald-300">
               <div class="font-bold text-white text-sm">Modelli Factory Standard</div>
-              <div class="text-zinc-400 mt-1">Questo preset utilizza amplificatori e cabinet factory già presenti nella Smart Box. Verrà caricato istantaneamente.</div>
+              <div class="text-zinc-400 mt-1">Questo preset utilizza amplificatori e cabinet factory già presenti nella pedaliera. Verrà caricato istantaneamente.</div>
             </div>
           `}
         </div>

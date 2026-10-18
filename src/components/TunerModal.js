@@ -1,7 +1,7 @@
 /**
  * Chromatic Tuner Modal Component
  * Accurate chromatic pitch detection using Web Audio autocorrelation,
- * device input selection (e.g. Sonicake Smart Box USB Audio interface),
+ * device input selection (e.g. the Sonicake pedal USB Audio interface),
  * large note display, cent meter needle, and in-tune indicator.
  */
 
@@ -291,7 +291,7 @@ export class TunerModal {
                     ${d.label || `Ingresso Audio ${d.deviceId.slice(0, 6)}`}
                   </option>
                 `).join('') : `
-                  <option value="">Ingresso Predefinito del Sistema (Smart Box USB / Line-In)</option>
+                  <option value="">Ingresso Predefinito del Sistema (Pedaliera USB / Line-In)</option>
                 `}
               </select>
             </div>
@@ -304,7 +304,7 @@ export class TunerModal {
                 <line x1="12" y1="8" x2="12.01" y2="8"></line>
               </svg>
               <span>
-                <strong>Analisi audio diretta:</strong> Il tuner a schermo rileva l'intonazione catturando il segnale della chitarra via scheda audio o USB Audio. (La pedaliera fisica non trasmette le frequenze del tuner via SysEx).
+                <strong>Analisi audio diretta:</strong> l'accordatore ascolta la chitarra dall'ingresso audio scelto (la pedaliera via USB o la scheda audio).
               </span>
             </div>
           </div>

@@ -2,7 +2,7 @@
  * Tone3000 Cloud Explorer & Hardware Memory Manager Component
  * SonicLink Studio Smartphone & Desktop UI
  * 
- * Manages the Sonicake Smart Box QME-20 internal file memory:
+ * Manages the Sonicake pedal internal file memory:
  * - 5 Clone AMP (Neural Amp Modeler) slots (Banchi 901 - 905)
  * - 5 User Cabinet IR (.wav) slots (Banchi 416 - 420)
  * 
@@ -16,7 +16,7 @@
 import { Tone3000Service } from '../services/tone3000.js';
 import { presetEngine } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
-import { CompilerBridgeService, VERIFIED_MODELS } from '../services/compiler-bridge.js';
+import { CompilerBridgeService } from '../services/compiler-bridge.js';
 import { convertCLOToLowModel } from '../core/protocol.js';
 
 export class Tone3000Modal {
@@ -33,7 +33,7 @@ export class Tone3000Modal {
     this.applyToCurrentPreset = true;
     this.selectedVariations = {};
     this.variationsCache = {};
-    this.bridgeStatus = { available: false, url: CompilerBridgeService.getServerUrl() };
+    this.bridgeStatus = { available: false };
 
     this.checkBridgeStatus();
     this.render();
@@ -41,28 +41,9 @@ export class Tone3000Modal {
 
   async checkBridgeStatus() {
     this.bridgeStatus = await CompilerBridgeService.checkHealth();
-    if (this.bridgeStatus.available) {
-      const hwSlots = await CompilerBridgeService.getHardwareSlots();
-      if (hwSlots && hwSlots.cloneSlots) {
-        let changed = false;
-        hwSlots.cloneSlots.forEach((name, i) => {
-          if (name && (!presetEngine.cloneSlotNames[i] || presetEngine.cloneSlotNames[i].includes('User Profile') || presetEngine.cloneSlotNames[i] === 'Empty')) {
-            presetEngine.cloneSlotNames[i] = name;
-            changed = true;
-          }
-        });
-        if (changed) {
-          try {
-            localStorage.setItem('sonicake_clone_names', JSON.stringify(presetEngine.cloneSlotNames));
-          } catch (_) {}
-          presetEngine.emit('userSlotsChange', { type: 'Clone', names: presetEngine.cloneSlotNames });
-        }
-      }
-    }
     const container = this.overlay.querySelector('#bridgeStatusContainer');
     if (container) {
       container.innerHTML = this.renderBridgeBadge();
-      this.attachBridgeListeners();
     }
   }
 
@@ -137,7 +118,9 @@ export class Tone3000Modal {
     }
 
     if (countEl) {
-      countEl.textContent = `${models.length} var.`;
+      countEl.textContent = '';
+      const badge = this.overlay.querySelector(`#varCountBadge-${toneId}`);
+      if (badge) badge.textContent = models.length;
     }
 
     selectEl.innerHTML = models.map((m, idx) => `
@@ -155,42 +138,15 @@ export class Tone3000Modal {
     };
   }
 
-  attachBridgeListeners() {
-    const configBtns = this.overlay.querySelectorAll('.btn-config-bridge');
-    configBtns.forEach(btn => {
-      btn.onclick = async (e) => {
-        e.stopPropagation();
-        const currentUrl = CompilerBridgeService.getServerUrl();
-        const newUrl = prompt(
-          'Indirizzo Server Compilatore NAM (lascia vuoto per rilevamento automatico LAN/Vite Proxy, oppure es. http://192.168.1.X:8080):',
-          currentUrl
-        );
-        if (newUrl !== null) {
-          CompilerBridgeService.setServerUrl(newUrl);
-          await this.checkBridgeStatus();
-        }
-      };
-    });
-  }
-
   renderBridgeBadge() {
-    if (this.bridgeStatus?.available) {
-      return `
-        <button class="btn-config-bridge px-2 sm:px-2.5 py-1 rounded-lg bg-emerald-950/60 hover:bg-emerald-900/70 border border-emerald-500/50 text-[10px] sm:text-[11px] text-emerald-300 flex items-center gap-1.5 transition-colors shadow-sm" title="Server Compilatore Attivo - Tocca per configurare">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span class="font-bold hidden xs:inline">Server NAM:</span>
-          <span class="font-semibold text-emerald-200">Attivo</span>
-        </button>
-      `;
-    } else {
-      return `
-        <button class="btn-config-bridge px-2 sm:px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-700/80 text-[10px] sm:text-[11px] text-zinc-400 hover:text-white flex items-center gap-1.5 transition-colors" title="Server NAM opzionale (clicca per configurare URL)">
-          <span class="w-2 h-2 rounded-full bg-orange-500/80"></span>
-          <span class="hidden xs:inline">Server NAM: Standby</span>
-          <span class="text-orange-400 font-bold underline text-[10px]">Configura</span>
-        </button>
-      `;
-    }
+    const online = !!this.bridgeStatus?.available;
+    return `
+      <span class="px-2.5 py-1 rounded-lg text-[11px] font-semibold flex items-center gap-1.5 border ${online ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300' : 'bg-zinc-900 border-zinc-700 text-zinc-400'}"
+            title="${online ? 'Conversione delle catture NAM disponibile' : 'Conversione delle catture NAM momentaneamente non disponibile'}">
+        <span class="w-2 h-2 rounded-full ${online ? 'bg-emerald-400' : 'bg-zinc-500'}"></span>
+        Compilatore ${online ? 'online' : 'offline'}
+      </span>
+    `;
   }
 
   render() {
@@ -215,22 +171,22 @@ export class Tone3000Modal {
                 <h3 class="text-xs sm:text-sm font-black tracking-wider text-white uppercase flex items-center gap-1.5">
                   Tone3000 & Memoria
                   ${isConn ? `
-                    <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 uppercase">Hardware Connesso</span>
+                    <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 uppercase">Pedaliera connessa</span>
                   ` : `
-                    <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-zinc-800 text-zinc-400 border border-zinc-700 uppercase">Offline</span>
+                    <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-zinc-800 text-zinc-400 border border-zinc-700 uppercase">Non connessa</span>
                   `}
                 </h3>
-                <p class="text-[10px] text-zinc-400 hidden sm:block">Gestione chip flash 5 NAM + 5 IR (Banchi 901-905 & 416-420)</p>
+                <p class="text-[10px] text-zinc-400 hidden sm:block">5 amplificatori Clone e 5 casse IR personali</p>
               </div>
             </div>
 
             <!-- Segmented Control Tabs (SonicLink style) -->
             <div class="p-1 bg-zinc-950/90 border border-zinc-800 rounded-xl flex items-center gap-1 shadow-inner">
               <button class="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-bold transition-all ${this.activeTab === 'memory' ? 'bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-md' : 'text-zinc-400 hover:text-zinc-200'}" id="tabBtnMemory">
-                Slot Pedaliera (10)
+                Sulla pedaliera
               </button>
               <button class="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-bold transition-all ${this.activeTab === 'browse' ? 'bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-md' : 'text-zinc-400 hover:text-zinc-200'}" id="tabBtnBrowse">
-                Tone3000 Cloud
+                Libreria Tone3000
               </button>
             </div>
           </div>
@@ -258,7 +214,7 @@ export class Tone3000Modal {
         <div class="px-3 sm:px-6 py-2.5 border-t border-zinc-800/80 bg-[#16171b] flex flex-wrap items-center justify-between gap-2.5 shrink-0">
           <div class="text-[11px] text-zinc-400 flex items-center gap-2 min-w-0">
             <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
-            <span class="truncate"><strong>Protezione preset:</strong> Modificare questi 10 file non tocca e non sovrascrive i tuoi 50 preset utente.</span>
+            <span class="truncate">Caricare amplificatori e casse non modifica i tuoi preset.</span>
           </div>
           <button class="modal-close-btn-bottom px-4 py-1.5 rounded-lg border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-bold transition-colors">
             Chiudi
@@ -279,57 +235,6 @@ export class Tone3000Modal {
     const activeCabFx = presetEngine.activePreset.selectedEffects[4];
 
     return `
-      <!-- Safety & Verified Hardware Models Section -->
-      <div class="p-3.5 sm:p-4 bg-gradient-to-r from-orange-950/20 via-[#18191e] to-amber-950/20 border border-orange-500/30 rounded-xl space-y-3 shadow-md">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pb-2.5 border-b border-zinc-800">
-          <div>
-            <div class="text-xs sm:text-sm font-black text-white flex items-center gap-2">
-              <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-              Profili Clone AMP Verificati al 100% (Zero Freeze Hardware)
-            </div>
-            <p class="text-[11px] text-zinc-400 mt-0.5">
-              Profili nativi Low Model (2.696 byte) testati sul chip della Smart Box. Pronti per la scrittura diretta in 1 click.
-            </p>
-          </div>
-          <button id="btnImportLatestClo" class="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-500 active:bg-orange-700 text-white text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm whitespace-nowrap shrink-0">
-            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Importa Ultimo CLO da Sonicake Manager
-          </button>
-        </div>
-
-        <!-- 3 Verified Zero-Freeze Models Grid -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-          ${VERIFIED_MODELS.map((model, idx) => `
-            <div class="p-3 bg-[#18191d] border border-zinc-800 hover:border-orange-500/40 rounded-xl flex flex-col justify-between gap-2 transition-all">
-              <div>
-                <div class="flex items-center justify-between gap-1 mb-1">
-                  <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-orange-500/20 text-orange-400 border border-orange-500/30">
-                    ${model.tag}
-                  </span>
-                  <span class="text-[10px] font-mono text-zinc-500">2.696 byte</span>
-                </div>
-                <div class="text-xs font-bold text-zinc-100">${model.fullName}</div>
-                <div class="text-[10px] text-zinc-400 mt-0.5 line-clamp-2">${model.description}</div>
-              </div>
-
-              <div class="flex items-center gap-2 pt-2 border-t border-zinc-800/80">
-                <select id="selectVerifiedSlot-${idx}" class="px-2 py-1 bg-zinc-950 border border-zinc-700 rounded-lg text-[11px] text-zinc-200 outline-none">
-                  <option value="0" ${idx === 0 ? 'selected' : ''}>Slot 1</option>
-                  <option value="1" ${idx === 1 ? 'selected' : ''}>Slot 2</option>
-                  <option value="2" ${idx === 2 ? 'selected' : ''}>Slot 3</option>
-                  <option value="3">Slot 4</option>
-                  <option value="4">Slot 5</option>
-                </select>
-                <button class="btn-flash-verified flex-1 py-1 px-2.5 rounded-lg bg-orange-600 hover:bg-orange-500 active:bg-orange-700 text-white text-[11px] font-black transition-all flex items-center justify-center gap-1 shadow-sm" data-model="${model.fileName}" data-name="${model.name}" data-select="selectVerifiedSlot-${idx}">
-                  <svg class="w-3 h-3 text-amber-200" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                  <span>Scrivi</span>
-                </button>
-              </div>
-            </div>
-          `).join('')}
-        </div>
-      </div>
-
       <!-- Dual Column: 5 Clone NAM Slots + 5 User IR Slots -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5 sm:gap-5">
         
@@ -338,9 +243,9 @@ export class Tone3000Modal {
           <div class="flex items-center justify-between pb-1.5 border-b border-zinc-800">
             <span class="text-xs font-black uppercase tracking-wider text-orange-400 flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-orange-500"></span>
-              5 Slot Clone AMP / NAM
+              Amplificatori Clone (NAM)
             </span>
-            <span class="text-[10px] text-zinc-400 font-mono">Banchi 901 - 905</span>
+            
           </div>
 
           <div class="space-y-2">
@@ -361,7 +266,7 @@ export class Tone3000Modal {
                       </span>
                       <div class="min-w-0">
                         <div class="text-xs sm:text-sm font-bold text-zinc-100 truncate" title="${name}">${name}</div>
-                        <div class="text-[10px] text-zinc-400 font-mono mt-0.5">Banco Flash 90${i + 1}</div>
+                        
                       </div>
                     </div>
 
@@ -372,7 +277,7 @@ export class Tone3000Modal {
                           In Riproduzione
                         </span>
                       ` : `
-                        <span class="text-[10px] text-zinc-500 font-mono">90${i + 1}</span>
+                        
                       `}
                     </div>
                   </div>
@@ -413,9 +318,9 @@ export class Tone3000Modal {
           <div class="flex items-center justify-between pb-1.5 border-b border-zinc-800">
             <span class="text-xs font-black uppercase tracking-wider text-amber-400 flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-amber-400"></span>
-              5 Slot User Cabinet IR (.wav)
+              Casse IR personali
             </span>
-            <span class="text-[10px] text-zinc-400 font-mono">Banchi 416 - 420</span>
+            
           </div>
 
           <div class="space-y-2">
@@ -432,7 +337,7 @@ export class Tone3000Modal {
                       </span>
                       <div class="min-w-0">
                         <div class="text-xs sm:text-sm font-bold text-zinc-100 truncate" title="${name}">${name}</div>
-                        <div class="text-[10px] text-zinc-400 font-mono mt-0.5">Banco Flash 41${6 + i}</div>
+                        
                       </div>
                     </div>
 
@@ -443,7 +348,7 @@ export class Tone3000Modal {
                           In Riproduzione
                         </span>
                       ` : `
-                        <span class="text-[10px] text-zinc-500 font-mono">41${6 + i}</span>
+                        
                       `}
                     </div>
                   </div>
@@ -495,17 +400,17 @@ export class Tone3000Modal {
           </span>
           
           <select class="target-slot-selector px-3 py-1.5 bg-zinc-950 border border-zinc-700 focus:border-orange-500 rounded-lg text-xs font-bold text-white outline-none">
-            <optgroup label="--- 5 Slot Clone AMP / NAM ---">
+            <optgroup label="Amplificatori Clone">
               ${cloneNames.map((name, i) => `
                 <option value="amp:${i}" ${!isCab && i === this.selectedTargetSlot ? 'selected' : ''}>
-                  NAM Slot ${i + 1}: ${name}
+                  Clone ${i + 1}: ${name}
                 </option>
               `).join('')}
             </optgroup>
-            <optgroup label="--- 5 Slot User Cabinet IR ---">
+            <optgroup label="Casse IR">
               ${irNames.map((name, i) => `
                 <option value="cab:${i}" ${isCab && i === this.selectedTargetSlot ? 'selected' : ''}>
-                  User IR Slot ${i + 1}: ${name}
+                  IR ${i + 1}: ${name}
                 </option>
               `).join('')}
             </optgroup>
@@ -529,16 +434,115 @@ export class Tone3000Modal {
         </div>
 
         <div class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-          <button class="gear-pill px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${this.currentGear === 'all' ? 'bg-orange-500 text-black shadow-sm' : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'}" data-gear="all">Tutti</button>
-          <button class="gear-pill px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${this.currentGear === 'amp' ? 'bg-orange-500 text-black shadow-sm' : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'}" data-gear="amp">Amps (NAM)</button>
-          <button class="gear-pill px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${this.currentGear === 'pedal' ? 'bg-orange-500 text-black shadow-sm' : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'}" data-gear="pedal">Pedali</button>
-          <button class="gear-pill px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${this.currentGear === 'full-rig' ? 'bg-orange-500 text-black shadow-sm' : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'}" data-gear="full-rig">Full Rig</button>
-          <button class="gear-pill px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${this.currentGear === 'cab' ? 'bg-orange-500 text-black shadow-sm' : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'}" data-gear="cab">Cabs / IR</button>
+          ${[
+            ['all', 'Tutti'], ['amp', 'Amp'], ['amp-cab', 'Amp + Cab'], ['pedal', 'Pedali'], ['outboard', 'Outboard'], ['cab', 'Cab IR']
+          ].map(([gear, label]) => `
+            <button class="gear-pill min-h-[36px] px-3.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${this.currentGear === gear ? 'bg-orange-500 text-black shadow-sm' : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'}" data-gear="${gear}">${label}</button>
+          `).join('')}
         </div>
       </div>
 
       <!-- Tones Grid Container -->
       <div class="tones-grid-container flex-1 overflow-y-auto min-h-[300px]"></div>
+    `;
+  }
+
+  formatCount(n) {
+    if (typeof n !== 'number') return '–';
+    if (n >= 1e6) return `${(n / 1e6).toFixed(1).replace(/\.0$/, '')}M`;
+    if (n >= 1e3) return `${(n / 1e3).toFixed(1).replace(/\.0$/, '')}K`;
+    return String(n);
+  }
+
+  formatAge(iso) {
+    if (!iso) return '';
+    const days = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86400000));
+    if (days < 1) return 'oggi';
+    if (days < 7) return `${days}g`;
+    if (days < 30) return `${Math.floor(days / 7)} sett`;
+    if (days < 365) return `${Math.floor(days / 30)} mesi`.replace(/^1 mesi$/, '1 mese');
+    const y = Math.floor(days / 365);
+    return y === 1 ? '1 anno' : `${y} anni`;
+  }
+
+  escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  /** Tone3000-style capture card: image, title, capture type, downloads, files, author */
+  renderToneCard(tone) {
+    const esc = (v) => this.escapeHtml(v);
+    const isIr = tone.platform === 'ir' || tone.gear === 'cab';
+    const author = tone.author;
+    const fallbackIcon = isIr ? '/assets/images/ir_on.svg' : (tone.gear === 'pedal' ? '/assets/images/drv_on.svg' : '/assets/images/amp_on.svg');
+
+    return `
+      <div class="tone-card p-3 bg-[#18191d] border border-zinc-800 hover:border-orange-500/40 rounded-xl flex flex-col gap-3 transition-all" data-id="${tone.id}">
+        <div class="flex gap-3 sm:gap-4 min-w-0">
+          <a href="${tone.url}" target="_blank" rel="noopener" class="shrink-0 w-24 h-24 sm:w-28 sm:h-28 rounded-lg overflow-hidden bg-zinc-900 flex items-center justify-center" title="Apri su Tone3000">
+            ${tone.image
+              ? `<img src="${esc(tone.image)}" alt="" loading="lazy" class="w-full h-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('img'),{src:'${fallbackIcon}',className:'w-12 h-auto opacity-80'}))">`
+              : `<img src="${fallbackIcon}" alt="" class="w-12 h-auto opacity-80">`}
+          </a>
+
+          <div class="min-w-0 flex-1 flex flex-col gap-1.5">
+            <a href="${tone.url}" target="_blank" rel="noopener" class="text-sm sm:text-base font-bold text-white leading-snug line-clamp-2 hover:text-orange-300" title="${esc(tone.title)}">${esc(tone.title)}</a>
+
+            <div class="flex items-center gap-2 text-xs sm:text-sm text-zinc-400">
+              <span class="truncate">${esc(tone.gearLabel || 'Capture')}</span>
+              <span class="px-1.5 py-px rounded text-[10px] font-bold uppercase bg-zinc-300 text-zinc-900 shrink-0">${isIr ? 'IR' : 'NAM'}</span>
+            </div>
+
+            <div class="flex items-center gap-4 text-xs sm:text-sm text-zinc-300">
+              <span class="flex items-center gap-1.5" title="Download">
+                <svg class="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                ${this.formatCount(tone.downloads)}
+              </span>
+              <span class="flex items-center gap-1.5" title="File disponibili">
+                <svg class="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <span id="varCountBadge-${tone.id}">${this.formatCount(tone.filesCount)}</span>
+              </span>
+              ${typeof tone.comments === 'number' ? `
+                <span class="flex items-center gap-1.5" title="Commenti">
+                  <svg class="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg>
+                  ${this.formatCount(tone.comments)}
+                </span>
+              ` : ''}
+            </div>
+
+            ${author ? `
+              <div class="flex items-center gap-2 text-xs sm:text-sm text-zinc-300 min-w-0">
+                ${author.avatar
+                  ? `<img src="${esc(author.avatar)}" alt="" loading="lazy" class="w-6 h-6 rounded-full object-cover shrink-0 bg-zinc-800">`
+                  : `<span class="w-6 h-6 rounded-full bg-zinc-700 text-[11px] font-bold text-zinc-200 flex items-center justify-center shrink-0">${esc(author.name.charAt(0).toUpperCase())}</span>`}
+                <span class="truncate">${esc(author.name)}</span>
+                ${author.verified ? `<svg class="w-4 h-4 shrink-0 text-orange-400" viewBox="0 0 24 24" fill="currentColor" aria-label="Verificato"><path d="M12 2l2.4 2.2 3.2-.4.9 3.1 2.9 1.5-1 3.1 1 3.1-2.9 1.5-.9 3.1-3.2-.4L12 22l-2.4-2.2-3.2.4-.9-3.1-2.9-1.5 1-3.1-1-3.1 2.9-1.5.9-3.1 3.2.4z"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8" fill="none" stroke="#18191d" stroke-width="2"/></svg>` : ''}
+                <span class="text-zinc-500 shrink-0">${this.formatAge(tone.publishedAt)}</span>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+
+        <!-- Files of this capture -->
+        <div class="flex items-center gap-2">
+          <span class="text-[11px] text-zinc-500 shrink-0">File</span>
+          <select class="tone-variation-select flex-1 min-w-0 min-h-[40px] px-2.5 bg-zinc-950 border border-zinc-800 rounded-lg text-xs text-zinc-200 outline-none" data-tone-id="${tone.id}" id="varSelect-${tone.id}">
+            <option value="0" selected>Caricamento file...</option>
+          </select>
+          <span class="text-[11px] text-orange-400 font-mono font-bold shrink-0" id="varCount-${tone.id}"></span>
+        </div>
+
+        <div class="grid grid-cols-[1fr_auto] gap-2">
+          <button class="btn-flash-tone min-h-[44px] px-3 rounded-lg bg-orange-600 hover:bg-orange-500 active:bg-orange-700 text-white text-sm font-black transition-all flex items-center justify-center gap-1.5" data-id="${tone.id}">
+            <svg class="w-4 h-4 text-amber-200" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            <span>Scrivi su Pedaliera</span>
+          </button>
+          <button class="btn-load-tone min-h-[44px] px-3 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-xs font-bold transition-all flex items-center justify-center gap-1.5 border border-zinc-800" data-id="${tone.id}" title="Scarica il file sul dispositivo">
+            <svg class="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-4-4 4m0 0-4-4m4 4V4"/></svg>
+            <span class="hidden sm:inline">Download</span>
+          </button>
+        </div>
+      </div>
     `;
   }
 
@@ -566,50 +570,8 @@ export class Tone3000Modal {
     }
 
     gridContainer.innerHTML = `
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        ${this.tones.map(tone => `
-          <div class="tone-card p-3.5 bg-[#18191d] border border-zinc-800 hover:border-orange-500/40 rounded-xl flex flex-col justify-between gap-3 transition-all shadow-sm" data-id="${tone.id}">
-            <div>
-              <div class="flex items-start justify-between gap-2 mb-2">
-                <span class="px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-orange-500/15 border border-orange-500/30 text-orange-400">
-                  ${tone.gear || 'NAM'}
-                </span>
-                <a href="${tone.url}" target="_blank" class="text-zinc-500 hover:text-orange-400 transition-colors text-xs" title="Scheda online Tone3000">
-                  ↗
-                </a>
-              </div>
-
-              <h4 class="text-xs sm:text-sm font-bold text-white line-clamp-1" title="${tone.title}">${tone.title}</h4>
-              <p class="text-[11px] text-zinc-400 line-clamp-2 mt-1 leading-relaxed">${tone.description || 'Nessuna descrizione'}</p>
-
-              <!-- Creator Variations Dropdown -->
-              <div class="mt-3 p-2 bg-zinc-950/70 border border-zinc-800/80 rounded-lg space-y-1">
-                <div class="flex items-center justify-between text-[10px]">
-                  <span class="text-zinc-400 font-semibold">Variazione Creatore:</span>
-                  <span class="text-amber-400 font-mono font-bold" id="varCount-${tone.id}">...</span>
-                </div>
-                <select class="tone-variation-select w-full px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-[11px] text-zinc-200 outline-none" data-tone-id="${tone.id}" id="varSelect-${tone.id}">
-                  <option value="0" selected>Caricamento variazioni...</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="pt-2 border-t border-zinc-800/60 flex flex-col gap-1.5">
-              <button class="btn-flash-tone w-full py-2 px-3 rounded-lg bg-orange-600 hover:bg-orange-500 active:bg-orange-700 text-white text-xs font-black transition-all flex items-center justify-center gap-1.5 shadow-md shadow-orange-950/30" data-id="${tone.id}">
-                <svg class="w-3.5 h-3.5 text-amber-200" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>
-                </svg>
-                <span>Scrivi su Pedaliera</span>
-              </button>
-              <button class="btn-load-tone w-full py-1.5 px-2 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-zinc-300 hover:text-white text-[11px] font-bold transition-all flex items-center justify-center gap-1 border border-zinc-800" data-id="${tone.id}">
-                <svg class="w-3 h-3 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-4-4 4m0 0-4-4m4 4V4"/>
-                </svg>
-                <span>Solo Download File</span>
-              </button>
-            </div>
-          </div>
-        `).join('')}
+      <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
+        ${this.tones.map(tone => this.renderToneCard(tone)).join('')}
       </div>
     `;
 
@@ -873,7 +835,7 @@ export class Tone3000Modal {
 
   async processAndFlashNam(namFileOrUrl, name, slotIndex) {
     const cleanName = (name || 'Model').trim().slice(0, 14);
-    this.showFlashProgressModal(`Controllo Modello "${cleanName}"`, `Preparazione per Clone AMP ${slotIndex + 1}`);
+    this.showFlashProgressModal(`Conversione NAM "${cleanName}"`, `Conversione in Clone AMP (~20s), poi scrittura nello slot ${slotIndex + 1}`);
 
     try {
       let res;
@@ -898,108 +860,15 @@ export class Tone3000Modal {
         return;
       }
 
-      // If it returned a raw NAMB file (7,980 bytes)
-      this.hideFlashProgressModal();
-      this.showNamToCloInstructionModal(cleanName, slotIndex);
+      // Unexpected format (e.g. legacy .namb from an old bridge): never flash it
+      throw new Error(`Formato non flashabile (${binaryData.length} byte, attesi 2.696).`);
     } catch (err) {
-      console.warn('Process NAM fallback:', err);
+      console.error('NAM convert/flash failed:', err);
       this.hideFlashProgressModal();
-      this.showNamToCloInstructionModal(cleanName, slotIndex);
-    }
-  }
-
-  showNamToCloInstructionModal(name, slotIndex) {
-    let modal = document.getElementById('namToCloModal');
-    if (!modal) {
-      modal = document.createElement('div');
-      modal.id = 'namToCloModal';
-      modal.className = 'fixed inset-0 z-[10000] bg-black/85 backdrop-blur-md flex items-center justify-center p-4';
-      document.body.appendChild(modal);
-    }
-    const cleanName = (name || 'Modello NAM').trim();
-    const targetSlot = (typeof slotIndex === 'number' ? slotIndex : 0) + 1;
-
-    modal.innerHTML = `
-      <div class="bg-[#18191e] border border-orange-500/50 rounded-2xl p-6 max-w-lg w-full shadow-2xl flex flex-col space-y-4 animate-in fade-in zoom-in-95 duration-150 text-zinc-100 font-sans">
-        <!-- Header -->
-        <div class="flex items-start gap-3">
-          <div class="w-10 h-10 rounded-xl bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-orange-400 shrink-0 text-xl font-black">
-            ⚡
-          </div>
-          <div class="flex-1">
-            <h3 class="text-base font-black text-white leading-tight">Formato Hardware Smart Box (QME-20)</h3>
-            <p class="text-xs text-orange-400 font-medium mt-0.5">Protezione Zero-Freeze Hardware Attiva</p>
-          </div>
-          <button class="btn-close-nam-modal text-zinc-400 hover:text-white p-1 rounded-lg">✕</button>
-        </div>
-
-        <!-- Explanation -->
-        <div class="p-3.5 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs space-y-2 text-zinc-300 leading-relaxed">
-          <p>
-            La Smart Box QME-20 accetta nel chip Flash esclusivamente il formato <strong>Low Model .clo (2.696 byte)</strong>.
-          </p>
-          <p class="text-zinc-400 text-[11px]">
-            Inviare modelli oltre 2.696 byte bloccherebbe il DMA della pedaliera. Per usare "${cleanName}", procedi in 1 click con una delle opzioni qui sotto:
-          </p>
-        </div>
-
-        <!-- Action Options -->
-        <div class="space-y-2.5 pt-1">
-          <!-- Option 1: Import latest CLO from Sonicake Manager -->
-          <button id="btnModalImportLatestClo" class="w-full p-3 rounded-xl bg-gradient-to-r from-orange-600/30 to-amber-500/10 hover:from-orange-600/50 hover:to-amber-500/20 border border-orange-500/40 text-left transition-all flex items-center justify-between group">
-            <div class="flex items-center gap-2.5">
-              <span class="w-7 h-7 rounded-lg bg-orange-500/20 border border-orange-500/30 flex items-center justify-center text-orange-400 font-bold text-xs shrink-0">1</span>
-              <div>
-                <div class="text-xs font-bold text-orange-200 group-hover:text-white">Importa da Sonicake Manager (Ultimo Profilo)</div>
-                <div class="text-[10px] text-zinc-400">Hai appena importato "${cleanName}" nell'app ufficiale? Scrivilo subito nello Slot ${targetSlot}!</div>
-              </div>
-            </div>
-            <span class="text-xs text-orange-400 font-bold group-hover:translate-x-0.5 transition-transform">Scrivi →</span>
-          </button>
-
-          <!-- Option 2: 1-Click Verified Zero-Freeze Models -->
-          <button id="btnModalUseVerified" class="w-full p-3 rounded-xl bg-gradient-to-r from-emerald-600/20 to-emerald-500/5 hover:from-emerald-600/30 hover:to-emerald-500/15 border border-emerald-500/30 text-left transition-all flex items-center justify-between group">
-            <div class="flex items-center gap-2.5">
-              <span class="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-300 font-bold text-xs shrink-0">2</span>
-              <div>
-                <div class="text-xs font-bold text-emerald-200 group-hover:text-white">Usa Modelli Verificati al 100% (Zero-Freeze)</div>
-                <div class="text-[10px] text-zinc-400">Petersburg Thunder, Slow30 High Gain, Marshall 1959 Plexi (2.696 bytes esatti)</div>
-              </div>
-            </div>
-            <span class="text-xs text-emerald-400 font-bold">Vedi →</span>
-          </button>
-        </div>
-
-        <div class="pt-2 border-t border-zinc-800 flex justify-end">
-          <button class="btn-close-nam-modal px-4 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-bold text-zinc-300 hover:text-white transition-colors">
-            Chiudi
-          </button>
-        </div>
-      </div>
-    `;
-
-    modal.style.display = 'flex';
-
-    modal.querySelectorAll('.btn-close-nam-modal').forEach(b => {
-      b.addEventListener('click', () => { modal.style.display = 'none'; });
-    });
-
-    const btnImport = modal.querySelector('#btnModalImportLatestClo');
-    if (btnImport) {
-      btnImport.addEventListener('click', () => {
-        modal.style.display = 'none';
-        const btnMainImport = this.overlay.querySelector('#btnImportLatestClo');
-        if (btnMainImport) btnMainImport.click();
-      });
-    }
-
-    const btnVerified = modal.querySelector('#btnModalUseVerified');
-    if (btnVerified) {
-      btnVerified.addEventListener('click', () => {
-        modal.style.display = 'none';
-        this.activeTab = 'memory';
-        this.render();
-      });
+      const offline = /Failed to fetch|NetworkError|HTTP 50[24]/i.test(err.message);
+      alert(offline
+        ? 'Server di conversione NAM non raggiungibile. Avvia "python server/server.py" sul PC con Sonicake Manager installato.'
+        : `Errore conversione/scrittura NAM: ${err.message}`);
     }
   }
 
@@ -1113,7 +982,6 @@ export class Tone3000Modal {
   }
 
   attachEventListeners() {
-    this.attachBridgeListeners();
     this.attachDragAndDropListeners();
 
     // Tab switching
@@ -1161,95 +1029,6 @@ export class Tone3000Modal {
         this.render();
       });
     });
-
-    // Hardware Verified Models: 1-click Direct Flash
-    this.overlay.querySelectorAll('.btn-flash-verified').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        if (!connection.isConnected) {
-          alert('Pedaliera non connessa! Connetti prima il dispositivo via USB o Bluetooth in alto a destra.');
-          return;
-        }
-        const modelFile = btn.dataset.model;
-        const defaultName = btn.dataset.name;
-        const selectId = btn.dataset.select;
-        const selectEl = this.overlay.querySelector(`#${selectId}`);
-        const slot = selectEl ? parseInt(selectEl.value, 10) : 0;
-
-        btn.disabled = true;
-        const origText = btn.innerHTML;
-        btn.innerHTML = `<div class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div>`;
-
-        try {
-          this.showFlashProgressModal(`Scrittura "${defaultName}"`, `Scrittura nello slot Clone AMP ${slot + 1}`);
-          const blob = await CompilerBridgeService.getVerifiedModelBlob(modelFile);
-          const arrayBuffer = await blob.arrayBuffer();
-          const binaryData = new Uint8Array(arrayBuffer);
-
-          await presetEngine.flashCloneToPedal(slot, binaryData, defaultName, (curr, tot, pct) => {
-            this.updateFlashProgress(curr, tot, pct);
-          });
-          await presetEngine.activateCloneSlot(slot, true);
-          this.hideFlashProgressModal(`Clone AMP ${slot + 1} ("${defaultName}") memorizzato con successo!`);
-          this.render();
-        } catch (err) {
-          console.error('Flash verified model failed:', err);
-          alert(`Errore scrittura modello verificato: ${err.message}`);
-          this.hideFlashProgressModal();
-        } finally {
-          btn.disabled = false;
-          btn.innerHTML = origText;
-        }
-      });
-    });
-
-    // Import latest converted CLO from Sonicake Manager
-    const btnImportLatest = this.overlay.querySelector('#btnImportLatestClo');
-    if (btnImportLatest) {
-      btnImportLatest.addEventListener('click', async () => {
-        if (!connection.isConnected) {
-          alert('Pedaliera non connessa! Connetti la pedaliera via USB o Bluetooth in alto a destra.');
-          return;
-        }
-
-        btnImportLatest.disabled = true;
-        const origHtml = btnImportLatest.innerHTML;
-        btnImportLatest.innerHTML = `<div class="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Controllo...`;
-
-        try {
-          const info = await CompilerBridgeService.getLatestCloInfo();
-          if (!info || !info.available) {
-            alert('Nessun file CLO trovato nella cartella Sonicake Manager. Effettua prima un\'importazione in Sonicake Manager.');
-            return;
-          }
-          const modelTitle = info.toneName || (info.filename ? info.filename.replace(/\.clo$/i, '') : 'Clone');
-          const promptMsg = `Trovato modello "${modelTitle}" in Sonicake Manager.\n\nIn quale slot Clone desideri scriverlo? (1 - 5):`;
-          const chosen = prompt(promptMsg, '1');
-          if (!chosen) return;
-          const targetSlot = parseInt(chosen, 10) - 1;
-          if (targetSlot < 0 || targetSlot > 4) return;
-
-          this.showFlashProgressModal(`Scrittura "${modelTitle}"`, `Scrittura nello slot Clone AMP ${targetSlot + 1}`);
-          const blob = await CompilerBridgeService.getLatestCloBlob();
-          const arrayBuffer = await blob.arrayBuffer();
-          const binaryData = new Uint8Array(arrayBuffer);
-
-          const cleanName = modelTitle.slice(0, 14);
-          await presetEngine.flashCloneToPedal(targetSlot, binaryData, cleanName, (curr, tot, pct) => {
-            this.updateFlashProgress(curr, tot, pct);
-          });
-          await presetEngine.activateCloneSlot(targetSlot, true);
-          this.hideFlashProgressModal(`Clone AMP ${targetSlot + 1} ("${cleanName}") memorizzato con successo!`);
-          this.render();
-        } catch (err) {
-          console.error('Import latest CLO failed:', err);
-          alert(`Errore importazione CLO: ${err.message}`);
-          this.hideFlashProgressModal();
-        } finally {
-          btnImportLatest.disabled = false;
-          btnImportLatest.innerHTML = origHtml;
-        }
-      });
-    }
 
     // Memory Tab: slot file inputs (.nam / .wav / .clo)
     this.overlay.querySelectorAll('.slot-file-input').forEach(input => {

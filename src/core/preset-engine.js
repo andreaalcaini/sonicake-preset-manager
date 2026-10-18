@@ -1611,17 +1611,19 @@ export class PresetEngine {
 
   /**
    * Send the packets of a Clone AMP / User IR flash. The pedal ACKs every packet with [14 08 00]
-   * (captured on USB): each packet waits for its ACK (max 1 s), never less than 8 ms apart
+   * (captured on USB): each packet waits for its ACK (max 1 s), at least 9 ms apart (8 ms + margin)
    * (DMA FIFO limit). A missing ACK mid-stream stops the write with an error instead of reporting
-   * a false success. A pedal that does not ACK even the first packet gets the fixed 8 ms pacing.
+   * a false success. A pedal that does not ACK even the first packet gets a fixed 9 ms pacing.
    */
   async streamFlashPackets(packets, onProgress = () => {}) {
-    const MIN_GAP_MS = 8;
+    // 8 ms hardware minimum + 1 ms margin: timers and the USB / BLE stack add jitter, so the gap
+    // seen by the pedal can be shorter than the one between our sends
+    const MIN_GAP_MS = 9;
     const total = packets.length;
     let waitAck = true;
     let lastSent = -Infinity;
     for (let i = 0; i < total; i++) {
-      // Never closer than 8 ms: re-check after the timer, which can fire slightly early
+      // Never closer than MIN_GAP_MS: re-check after the timer, which can fire slightly early
       let elapsed;
       while ((elapsed = performance.now() - lastSent) < MIN_GAP_MS) {
         await new Promise(r => setTimeout(r, Math.ceil(MIN_GAP_MS - elapsed)));
@@ -1636,7 +1638,7 @@ export class PresetEngine {
           throw new Error(`La pedaliera non ha confermato il pacchetto ${i + 1}/${total}: scrittura interrotta. Riprova.`);
         }
         waitAck = false;
-        connection.log('La pedaliera non conferma i pacchetti: invio a ritmo fisso (8 ms).', 'warning');
+        connection.log('La pedaliera non conferma i pacchetti: invio a ritmo fisso (9 ms).', 'warning');
       }
       onProgress(i + 1, total, Math.round(((i + 1) / total) * 100));
     }

@@ -1141,20 +1141,34 @@ export class Tone3000Modal {
       btn.addEventListener('click', async () => {
         const type = btn.dataset.type;
         const slot = parseInt(btn.dataset.slot, 10);
+        const engineType = type === 'amp' ? 'Clone' : 'IR';
+        const slotLabel = type === 'amp' ? `Slot Clone AMP ${slot + 1}` : `Slot User IR ${slot + 1}`;
         const currentName = type === 'amp' ? presetEngine.cloneSlotNames[slot] : presetEngine.irSlotNames[slot];
-        const newName = await this.askSlotName(currentName, type === 'amp' ? `Slot Clone AMP ${slot + 1}` : `Slot User IR ${slot + 1}`, {
+        // The pedal has no rename command: only captures written from this browser can be
+        // written again with the new name; for the others the name stays in the app
+        const onPedal = presetEngine.canRenameSlotOnPedal(engineType, slot);
+        const newName = await this.askSlotName(currentName, slotLabel, {
           title: 'Rinomina',
-          confirmLabel: 'Salva',
-          note: 'Il nuovo nome vale solo in questa app: la pedaliera mantiene quello scritto insieme alla cattura e lo ripropone alla prossima sincronizzazione. Per cambiarlo anche sulla pedaliera, riscrivi la cattura con il nuovo nome.'
+          confirmLabel: onPedal ? 'Rinomina' : 'Salva',
+          note: onPedal
+            ? 'Il nome viene scritto sulla pedaliera riscrivendo lo slot con la stessa cattura (qualche secondo, non toccare il cavo).'
+            : 'Questa cattura non è stata scritta da questo browser (o la pedaliera non è collegata): il nuovo nome vale solo in questa app e resta finché nello slot c\'è la stessa cattura. Sulla pedaliera resta il nome originale.'
         });
-        if (newName) {
-          if (type === 'amp') {
-            presetEngine.replaceCloneProfile(slot, newName, false);
-          } else {
-            presetEngine.replaceUserIR(slot, newName, false);
-          }
+        if (!newName || newName === currentName) return;
+        if (!onPedal) {
+          presetEngine.setSlotAlias(engineType, slot, newName);
           this.render();
+          return;
         }
+        this.showFlashProgressModal(`Rinomina "${newName}"`, `Riscrittura dello ${slotLabel}`);
+        try {
+          await presetEngine.renameSlotOnPedal(engineType, slot, newName, (curr, tot, pct) => this.updateFlashProgress(curr, tot, pct));
+          this.hideFlashProgressModal(`${slotLabel} rinominato in "${newName}" sulla pedaliera.`);
+        } catch (err) {
+          this.hideFlashProgressModal();
+          notify(`Rinomina non riuscita: ${err.message}`, 'error');
+        }
+        this.render();
       });
     });
 

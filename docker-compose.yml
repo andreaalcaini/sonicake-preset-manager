@@ -1,15 +1,25 @@
 # Production server (Oracle ARM VPS). Put the vendor files in ./data/vendor first:
 #   lib5868USB.so, libc++_shared.so, nam_input_wav.wav  (see server/nam2clo/extract-vendor.ps1)
-# The site needs HTTPS (Web MIDI / Bluetooth): put your reverse proxy in front of port 3000.
+# then: sudo chown -R 1001:1001 data
+#
+# HTTPS (required by Web MIDI / Bluetooth) comes from the Cloudflare Tunnel: the container joins
+# the `cloudflared-mesh` network and the tunnel's public hostname sonicake.alcaini.it points to
+# http://sonicake:3000. Port 3010 is bound to localhost only, for checks from the server itself.
 services:
   app:
     image: ghcr.io/andreaalcaini/sonicake-preset-manager:latest
     container_name: sonicake
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3010:3000"
     volumes:
       - ./data:/app/data
     environment:
       - PORT=3000
       - NAM2CLO_WORKERS=2
+    networks:
+      - cloudflared-mesh
+
+networks:
+  cloudflared-mesh:
+    external: true

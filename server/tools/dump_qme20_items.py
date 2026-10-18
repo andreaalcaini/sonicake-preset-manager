@@ -4,7 +4,7 @@ import sys
 sys.stdout.reconfigure(encoding='utf-8')
 data = json.load(open(r"C:\Program Files\Sonicake\Sonicake Manager\data\flutter_assets\assets\data\qme20_module_data.json", encoding="utf-8"))
 
-with open('server/qme20_items.txt', 'w', encoding='utf-8') as out:
+with open('server/tools/qme20_items.txt', 'w', encoding='utf-8') as out:
     for m in data.get("modules", []):
         m_name = m.get("name")
         m_id = m.get("moduleId")

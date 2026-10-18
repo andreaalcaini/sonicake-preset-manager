@@ -1,6 +1,6 @@
 import json
 
-data = json.load(open('server/captured_packets.json'))
+data = json.load(open('server/tools/captured_packets.json'))
 
 # Filter long SysEx packets (length 48 or 14 to 50)
 sysex_pkts = [d for d in data if d.get('direction') == 'OUT' and d.get('length', 0) > 10]

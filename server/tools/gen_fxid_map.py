@@ -77,6 +77,6 @@ for i in range(5):
     mapping[251658240 + i] = 901 + i
 
 print("Total mapped FXIDs:", len(mapping))
-with open('server/fxid_map.json', 'w') as out:
+with open('server/tools/fxid_map.json', 'w') as out:
     json.dump(mapping, out, indent=2)
-print("Saved to server/fxid_map.json")
+print("Saved to server/tools/fxid_map.json")

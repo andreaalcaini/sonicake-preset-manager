@@ -1,6 +1,6 @@
 import json
 
-data = json.load(open('server/captured_packets.json'))
+data = json.load(open('server/tools/captured_packets.json'))
 stream = [d for d in data if d.get('length') in (48, 40, 36)]
 
 # Transfer 1: pkts 0 to 146

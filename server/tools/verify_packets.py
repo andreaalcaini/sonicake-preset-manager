@@ -50,7 +50,7 @@ raw = open('server/transfer1_clone.bin', 'rb').read()
 generated = build_streaming_packets(raw)
 
 # Load captured packets
-data = json.load(open('server/captured_packets.json'))
+data = json.load(open('server/tools/captured_packets.json'))
 captured_stream = [d['hex'] for d in data if d.get('length') in (48, 40, 36)][:146]
 
 print(f"Generated count: {len(generated)}, Captured count: {len(captured_stream)}")

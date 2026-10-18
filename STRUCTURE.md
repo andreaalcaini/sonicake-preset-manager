@@ -59,7 +59,7 @@ sonicake-preset-manager/
 │   │   ├── stubs/              # Stub librerie Android + lib5868usb_link_stub.cpp (link in CI senza vendor)
 │   │   └── extract-vendor.ps1  # Estrae i file vendor dall'APK SonicLink in data/vendor/
 │   ├── cache/                  # Cache conversioni in sviluppo locale (non committata)
-│   └── *.py / *.bin            # Script e dump di reverse engineering
+│   └── tools/                  # Script di reverse engineering (storici, non usati dal sito né dal server)
 ├── tests/                      # Test automatici (girano anche in CI prima della build dell'immagine)
 │   ├── support/                # Pedaliera virtuale (risponde come quella vera) e scenario del motore
 │   ├── engine/                 # Scenario completo su USB, BLE a frame spezzati, BLE a 5 frame per notifica

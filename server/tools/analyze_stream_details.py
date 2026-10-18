@@ -1,6 +1,6 @@
 import json
 
-data = json.load(open('server/captured_packets.json'))
+data = json.load(open('server/tools/captured_packets.json'))
 
 print(f"Total entries: {len(data)}")
 

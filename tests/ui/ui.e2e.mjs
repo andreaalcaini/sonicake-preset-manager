@@ -163,6 +163,29 @@ for (const vp of [{ label: 'desktop', width: 1366, height: 860 }, { label: 'smar
       assert.ok(s.presets >= 50);
     });
 
+    it('pannelli chiusi: nascosti e senza sfocatura (su telefono la pagina diventava nera)', async () => {
+      const s = await page.evaluate(async () => {
+        const closed = [...document.querySelectorAll('.modal-overlay:not(.active)')].map(o => {
+          const cs = getComputedStyle(o);
+          return { id: o.id, visibility: cs.visibility, blur: cs.backdropFilter };
+        });
+        const tuner = document.getElementById('tunerModalOverlay');
+        tuner.classList.add('active');
+        const open = { visibility: getComputedStyle(tuner).visibility, blur: getComputedStyle(tuner).backdropFilter };
+        tuner.classList.remove('active');
+        await new Promise(r => setTimeout(r, 300));
+        const closedAgain = getComputedStyle(tuner).visibility;
+        return { closed, open, closedAgain };
+      });
+      assert.ok(s.closed.length >= 10, `solo ${s.closed.length} pannelli trovati`);
+      for (const o of s.closed) {
+        assert.equal(o.visibility, 'hidden', `${o.id} chiuso ma visibile`);
+        assert.equal(o.blur, 'none', `${o.id} chiuso con backdrop-filter`);
+      }
+      assert.deepEqual(s.open, { visibility: 'visible', blur: 'blur(6px)' });
+      assert.equal(s.closedAgain, 'hidden');
+    });
+
     it('apre tutti i pannelli senza errori né scroll orizzontale', async () => {
       const panels = { btnOpenTuner: 'tunerModalOverlay', btnOpenDrums: 'drumModalOverlay', btnOpenTone3000: 'tone3000ModalOverlay', btnOpenShare: 'shareModalOverlay', btnOpenSlotTransfer: 'slotTransferModalOverlay', btnOpenExport: 'exportModalOverlay', btnOpenSetlist: 'setlistModalOverlay', btnOpenStage: 'stageModalOverlay', btnOpenHelp: 'helpModalOverlay' };
       for (const [button, overlay] of Object.entries(panels)) {

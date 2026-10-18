@@ -568,25 +568,31 @@ body {
 .log-line.warning { color: var(--led-yellow); }
 .log-line.error { color: var(--led-red); }
 
-/* Generic Modal */
+/* Generic Modal.
+   Closed overlays are visibility:hidden and have no blur: a dozen full-screen backdrop-filter
+   layers (even at opacity 0) exhaust the GPU on real phones (dpr 3.5) and the page renders black.
+   DevTools device emulation does not show it. */
 .modal-overlay {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(6px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 12px;
   z-index: 1000;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.2s ease-in-out;
+  transition: opacity 0.2s ease-in-out, visibility 0s linear 0.2s;
 }
 
 .modal-overlay.active {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
+  backdrop-filter: blur(6px);
+  transition: opacity 0.2s ease-in-out, visibility 0s;
 }
 
 .modal-dialog {

@@ -12,7 +12,9 @@ import time
 import json
 import frida
 
-OUTPUT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'captured_packets.json')
+# Output: first argument, otherwise a new timestamped file (never overwrite older captures)
+OUTPUT_FILE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), time.strftime('capture_%Y%m%d_%H%M%S.json'))
 EXE_PATH = r"C:\Program Files\Sonicake\Sonicake Manager\Sonicake Manager.exe"
 
 captured_packets = []
@@ -163,9 +165,9 @@ def main():
 
     print("\n" + "=" * 60)
     print(" >>> SNIFFER ATTIVO IN ASCOLTO! <<<")
-    print(" Ora esegui l'operazione su Sonicake Manager:")
-    print("  1. Trascina / Carica 1 file NAM o IR sullo Slot desiderato.")
-    print("  2. Appena termina la scrittura, premi CTRL+C in questa finestra.")
+    print(" Ora esegui l'operazione su Sonicake Manager (es. carica un NAM / IR,")
+    print(" oppure Rename Clone / Rename IR su uno slot).")
+    print(" Appena termina, premi CTRL+C in questa finestra.")
     print("=" * 60 + "\n")
 
     try:

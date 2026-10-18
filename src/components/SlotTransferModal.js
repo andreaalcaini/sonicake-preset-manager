@@ -8,6 +8,7 @@
 import { presetEngine } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
 import { PrstParser } from '../core/prst-parser.js';
+import { notify } from './ui-feedback.js';
 
 export class SlotTransferModal {
   constructor(overlayElement) {
@@ -251,13 +252,13 @@ export class SlotTransferModal {
               data: json
             };
           } else {
-            alert('Formato non supportato. Seleziona un file .prst o .json.');
+            notify('Formato non supportato. Seleziona un file .prst o .json.', 'warning');
             return;
           }
           this.sourceType = 'file';
           this.render();
         } catch (err) {
-          alert(`Errore lettura file: ${err.message}`);
+          notify(`Errore lettura file: ${err.message}`, 'error');
         }
       });
     }
@@ -314,7 +315,7 @@ export class SlotTransferModal {
             this.close();
           }, 600);
         } catch (err) {
-          alert(`Errore salvataggio nello slot: ${err.message}`);
+          notify(`Errore salvataggio nello slot: ${err.message}`, 'error');
           confirmBtn.disabled = false;
           confirmBtn.textContent = `💾 Salva / Sovrascrivi su U${this.targetSlot < 10 ? '0' : ''}${this.targetSlot}`;
         }

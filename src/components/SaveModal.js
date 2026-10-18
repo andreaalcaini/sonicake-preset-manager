@@ -6,6 +6,7 @@
 
 import { presetEngine } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
+import { notify } from './ui-feedback.js';
 
 export class SaveModal {
   constructor(overlayElement) {
@@ -212,7 +213,7 @@ export class SaveModal {
             this.close();
           }, 500);
         } catch (err) {
-          alert(`Errore salvataggio: ${err.message}`);
+          notify(`Errore salvataggio: ${err.message}`, 'error');
           confirmBtn.disabled = false;
           confirmBtn.textContent = `Salva su U${this.selectedSlot < 10 ? '0' : ''}${this.selectedSlot}`;
         }

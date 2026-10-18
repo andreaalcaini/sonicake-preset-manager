@@ -203,12 +203,49 @@ for (const vp of [{ label: 'desktop', width: 1366, height: 860 }, { label: 'smar
       assert.match(s.emptySelect, /Nessun file scaricabile/);
     });
 
-    it('scrittura senza pedaliera: avviso chiaro', async () => {
+    it('scrittura senza pedaliera: avviso nello stile del sito, chiudibile', async () => {
       const before = dialogs.length;
       await page.evaluate(() => document.querySelector('#tone3000ModalOverlay .btn-flash-tone[data-id="9001"]').click());
       await sleep(300);
-      assert.ok(dialogs.length > before);
-      assert.match(dialogs.at(-1), /non connessa/i);
+      const toast = await page.evaluate(() => {
+        const t = [...document.querySelectorAll('.sl-toast')].at(-1);
+        if (!t) return null;
+        const r = { text: t.textContent.trim(), type: t.dataset.type, role: t.getAttribute('role'), onTop: t.getBoundingClientRect().top >= 0 };
+        t.querySelector('.sl-toast-close').click();
+        r.closed = !document.body.contains(t);
+        return r;
+      });
+      assert.equal(dialogs.length, before, 'nessun alert() del browser');
+      assert.match(toast.text, /non connessa/i);
+      assert.equal(toast.type, 'warning');
+      assert.equal(toast.role, 'alert');
+      assert.ok(toast.onTop && toast.closed);
+    });
+
+    it('rinomina di un preset: limite 10 e solo caratteri della pedaliera', async () => {
+      const r = await page.evaluate(async () => {
+        if (innerWidth < 1024) document.getElementById('btnTogglePresetsMobile').click();
+        await new Promise(r => setTimeout(r, 300));
+        document.querySelector('#presetSidebar .btn-rename-preset[data-slot="3"]').click();
+        await new Promise(r => setTimeout(r, 150));
+        const input = document.querySelector('.slot-name-input');
+        const form = input.closest('form');
+        input.value = 'Crunch ✓ Lead 2026';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        const res = { title: form.querySelector('h3').textContent, value: input.value, count: form.querySelector('.slot-name-count').textContent, disabled: form.querySelector('.btn-write').disabled };
+        input.value = 'Crunch 26';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        form.requestSubmit();
+        await new Promise(r => setTimeout(r, 200));
+        res.listed = document.querySelector('#presetSidebar [data-slot="3"]').textContent.includes('Crunch 26');
+        if (innerWidth < 1024) document.getElementById('btnTogglePresetsMobile').click();
+        return res;
+      });
+      assert.equal(r.title, 'Rinomina preset');
+      assert.equal(r.value, 'Crunch  Lead 2026');
+      assert.equal(r.count, '17/10');
+      assert.ok(r.disabled);
+      assert.ok(r.listed);
     });
 
     it('ricerca fallita: messaggio di errore e Riprova (nessuna libreria finta)', async () => {

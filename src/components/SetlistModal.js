@@ -5,6 +5,7 @@
  */
 
 import { presetEngine } from '../core/preset-engine.js';
+import { notify, askText, askConfirm } from './ui-feedback.js';
 
 const STORAGE_KEY = 'sonicake_setlists';
 
@@ -347,9 +348,9 @@ export class SetlistModal {
     // New setlist button
     const btnNewSetlist = this.overlay.querySelector('#btnNewSetlist');
     if (btnNewSetlist) {
-      btnNewSetlist.addEventListener('click', () => {
-        const name = prompt('Inserisci il nome della nuova scaletta:', 'Nuova Scaletta');
-        if (name && name.trim()) {
+      btnNewSetlist.addEventListener('click', async () => {
+        const name = await askText({ title: 'Nuova scaletta', value: 'Nuova Scaletta', max: 40, confirmLabel: 'Crea' });
+        if (name) {
           const newSetlist = {
             id: 'setlist_' + Date.now(),
             name: name.trim(),
@@ -410,7 +411,7 @@ export class SetlistModal {
     this.overlay.querySelector('#btnSaveSongForm')?.addEventListener('click', () => {
       const title = this.overlay.querySelector('#inputSongTitle').value.trim();
       if (!title) {
-        alert('Inserisci il titolo del brano.');
+        notify('Inserisci il titolo del brano.', 'warning');
         return;
       }
       const artist = this.overlay.querySelector('#inputSongArtist').value.trim();
@@ -474,11 +475,17 @@ export class SetlistModal {
     });
 
     this.overlay.querySelectorAll('.btn-delete-song').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const index = parseInt(btn.dataset.index, 10);
         const activeSetlist = this.getActiveSetlist();
-        if (confirm(`Eliminare "${activeSetlist.songs[index]?.title}" dalla scaletta?`)) {
+        const confirmed = await askConfirm({
+          title: 'Eliminare il brano?',
+          message: `"${activeSetlist.songs[index]?.title}" verrà tolto dalla scaletta.`,
+          confirmLabel: 'Elimina',
+          danger: true
+        });
+        if (confirmed) {
           activeSetlist.songs.splice(index, 1);
           if (this.activeSongIndex >= activeSetlist.songs.length) {
             this.activeSongIndex = Math.max(0, activeSetlist.songs.length - 1);

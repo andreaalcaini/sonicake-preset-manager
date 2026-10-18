@@ -25,6 +25,7 @@ import { SetlistModal } from './components/SetlistModal.js';
 import { BackingTrackModal } from './components/BackingTrackModal.js';
 import { decodePresetBundle } from './utils/bundle-encoder.js';
 import { FEATURES, applyFeatureFlags } from './config/features.js';
+import { notify } from './components/ui-feedback.js';
 
 class App {
   constructor() {
@@ -106,7 +107,7 @@ class App {
       try {
         await connection.connectUsb();
       } catch (err) {
-        alert(`USB connection failed: ${err.message}`);
+        notify(`Connessione USB non riuscita: ${err.message}`, 'error');
       }
     });
 
@@ -114,7 +115,9 @@ class App {
       try {
         await connection.connectBle();
       } catch (err) {
-        alert(`Bluetooth connection failed: ${err.message}`);
+        // Closing the browser's device chooser is not an error
+        if (err?.name === 'NotFoundError' && /cancel/i.test(err.message)) return;
+        notify(`Connessione Bluetooth non riuscita: ${err.message}`, 'error');
       }
     });
 
@@ -147,7 +150,7 @@ class App {
     // 5. Tool Action Buttons
     document.getElementById('btnSyncHardware').addEventListener('click', () => {
       if (!connection.isConnected) {
-        alert('Collega prima la pedaliera via USB o Bluetooth.');
+        notify('Collega prima la pedaliera via USB o Bluetooth.', 'warning');
         return;
       }
       presetEngine.runInitialSyncSequence();
@@ -313,7 +316,7 @@ class App {
         }
         deferredInstallPrompt = null;
       } else {
-        alert("Per installare Sonicake Studio come App nativa:\n\n• Su Chrome / Edge PC: Clicca sull'icona di installazione nella barra degli indirizzi del browser.\n• Su Android / iOS: Apri il menu del browser e seleziona 'Aggiungi a schermata Home' / 'Installa app'.");
+        notify("Per installare Sonicake Studio come App nativa:\n\n• Su Chrome / Edge PC: Clicca sull'icona di installazione nella barra degli indirizzi del browser.\n• Su Android / iOS: Apri il menu del browser e seleziona 'Aggiungi a schermata Home' / 'Installa app'.", 'info');
       }
     });
 

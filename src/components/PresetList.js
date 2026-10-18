@@ -9,6 +9,8 @@ import { presetEngine } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
 import { PrstParser } from '../core/prst-parser.js';
 import { pickPreset, presetPairHtml } from './PresetPickerDialog.js';
+import { notify, askText } from './ui-feedback.js';
+import { REVERSE_CHARACTER_MAP } from '../core/protocol.js';
 
 export class PresetList {
   constructor(containerElement) {
@@ -217,7 +219,7 @@ export class PresetList {
     try {
       parsedName = PrstParser.parse(await file.arrayBuffer()).name || file.name;
     } catch (err) {
-      alert(err.message);
+      notify(err.message, 'error');
       return;
     }
     const safeName = parsedName.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -242,17 +244,17 @@ export class PresetList {
     } catch (err) {
       console.error('prst import failed:', err);
       remove();
-      alert(`Importazione non riuscita: ${err.message}`);
+      notify(`Importazione non riuscita: ${err.message}`, 'error');
     }
   }
 
   async runSwap(slot) {
     if (slot > 50) {
-      alert('Si possono scambiare solo i preset utente (U01-U50).');
+      notify('Si possono scambiare solo i preset utente (U01-U50).', 'warning');
       return;
     }
     if (!connection.isConnected) {
-      alert('Collega prima la pedaliera via USB o Bluetooth.');
+      notify('Collega prima la pedaliera via USB o Bluetooth.', 'warning');
       return;
     }
     const code = presetEngine.getSlotCode(slot);
@@ -276,7 +278,7 @@ export class PresetList {
     } catch (err) {
       console.error('Preset swap failed:', err);
       remove();
-      alert(`Scambio non riuscito: ${err.message}`);
+      notify(`Scambio non riuscito: ${err.message}`, 'error');
     }
   }
 
@@ -363,13 +365,24 @@ export class PresetList {
 
     // Rename Preset
     this.container.querySelectorAll('.btn-rename-preset').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', async (e) => {
         e.stopPropagation();
         const slot = parseInt(btn.dataset.slot, 10);
         const currentName = presetEngine.presetList[slot - 1].name;
-        const newName = prompt(`Rinomina slot ${presetEngine.getSlotCode(slot)} (max 10 caratteri):`, currentName);
-        if (newName !== null && newName.trim().length > 0) {
-          const cleanName = newName.trim().slice(0, 10);
+        const isActive = slot === presetEngine.currentSlot;
+        const newName = await askText({
+          title: 'Rinomina preset',
+          subtitle: `${presetEngine.getSlotCode(slot)} · ${currentName}`,
+          value: currentName,
+          max: 10,
+          // Only characters the pedal can store in a preset name
+          filter: (s) => [...s].filter(c => REVERSE_CHARACTER_MAP[c] !== undefined).join(''),
+          note: isActive
+            ? 'Il nuovo nome viene scritto sulla pedaliera quando salvi il preset.'
+            : 'Il nuovo nome vale in questa app: per scriverlo sulla pedaliera seleziona il preset e salvalo.'
+        });
+        if (newName) {
+          const cleanName = newName;
           presetEngine.presetList[slot - 1].name = cleanName;
           if (slot === presetEngine.currentSlot) {
             presetEngine.activePreset.name = cleanName;
@@ -386,7 +399,7 @@ export class PresetList {
     if (btnImportPrst && fileInputPrst) {
       btnImportPrst.addEventListener('click', () => {
         if (!connection.isConnected) {
-          alert('Collega prima la pedaliera via USB o Bluetooth.');
+          notify('Collega prima la pedaliera via USB o Bluetooth.', 'warning');
           return;
         }
         fileInputPrst.click();
@@ -404,11 +417,11 @@ export class PresetList {
       btnExportPrst.addEventListener('click', async () => {
         const slot = presetEngine.currentSlot;
         if (!connection.isConnected) {
-          alert('Collega prima la pedaliera: il file viene letto direttamente dal preset salvato.');
+          notify('Collega prima la pedaliera: il file viene letto direttamente dal preset salvato.', 'warning');
           return;
         }
         if (slot > 50) {
-          alert('Si possono esportare solo i preset utente (U01-U50).');
+          notify('Si possono esportare solo i preset utente (U01-U50).', 'warning');
           return;
         }
         try {
@@ -420,7 +433,7 @@ export class PresetList {
           a.click();
           setTimeout(() => URL.revokeObjectURL(url), 2000);
         } catch (err) {
-          alert(`Esportazione non riuscita: ${err.message}`);
+          notify(`Esportazione non riuscita: ${err.message}`, 'error');
         }
       });
     }

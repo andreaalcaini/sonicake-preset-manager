@@ -6,6 +6,7 @@
 
 import { presetEngine } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
+import { notify } from './ui-feedback.js';
 
 function triggerDownload(content, filename, mimeType) {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
@@ -178,11 +179,11 @@ export class ExportModal {
         // A .prst is the exact preset stored on the pedal, read with the native export
         const slot = presetEngine.currentSlot;
         if (!connection.isConnected) {
-          alert('Collega prima la pedaliera: il file .prst viene letto direttamente dal preset salvato.');
+          notify('Collega prima la pedaliera: il file .prst viene letto direttamente dal preset salvato.', 'warning');
           return;
         }
         if (slot > 50) {
-          alert('Si possono esportare solo i preset utente (U01-U50).');
+          notify('Si possono esportare solo i preset utente (U01-U50).', 'warning');
           return;
         }
         try {
@@ -190,7 +191,7 @@ export class ExportModal {
           triggerDownload(new Blob([bytes], { type: 'application/octet-stream' }), `${safeBaseName}.prst`, 'application/octet-stream');
           this.showDownloadSuccess(prstCard, '✓ Scaricato!');
         } catch (err) {
-          alert(`Errore export .prst: ${err.message}`);
+          notify(`Errore export .prst: ${err.message}`, 'error');
         }
       });
     }
@@ -205,7 +206,7 @@ export class ExportModal {
           triggerDownload(jsonStr, `${safeBaseName}.json`, 'application/json');
           this.showDownloadSuccess(jsonCard, '✓ Scaricato!');
         } catch (err) {
-          alert(`Errore export JSON: ${err.message}`);
+          notify(`Errore export JSON: ${err.message}`, 'error');
         }
       });
     }
@@ -221,7 +222,7 @@ export class ExportModal {
           triggerDownload(backupStr, `Sonicake_Pedaliera_UserPresets_Backup_${dateStr}.json`, 'application/json');
           this.showDownloadSuccess(backupCard, '✓ Backup Salvato!');
         } catch (err) {
-          alert(`Errore backup: ${err.message}`);
+          notify(`Errore backup: ${err.message}`, 'error');
         }
       });
     }
@@ -236,7 +237,7 @@ export class ExportModal {
           triggerDownload(bundleStr, `${safeBaseName}.sonicbundle`, 'application/json');
           this.showDownloadSuccess(bundleCard, '✓ Bundle Salvato!');
         } catch (err) {
-          alert(`Errore export bundle: ${err.message}`);
+          notify(`Errore export bundle: ${err.message}`, 'error');
         }
       });
     }

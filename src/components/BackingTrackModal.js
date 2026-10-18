@@ -4,6 +4,8 @@
  * slow down audio without changing pitch (0.5x - 1.5x), set A-B loop sections, and practice solos.
  */
 
+import { notify } from './ui-feedback.js';
+
 export class BackingTrackModal {
   constructor(overlayElement) {
     this.overlay = overlayElement;
@@ -354,7 +356,7 @@ export class BackingTrackModal {
     // Play/Pause
     this.overlay.querySelector('#btnBackingPlayPause')?.addEventListener('click', () => {
       if (!this.audio.src) {
-        alert('Carica prima un file audio (MP3 o WAV).');
+        notify('Carica prima un file audio (MP3 o WAV).', 'warning');
         return;
       }
       if (this.isPlaying) {

@@ -18,6 +18,7 @@ import { presetEngine } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
 import { CompilerBridgeService } from '../services/compiler-bridge.js';
 import { convertCLOToLowModel } from '../core/protocol.js';
+import { notify, askText } from './ui-feedback.js';
 
 export class Tone3000Modal {
   constructor(overlayElement) {
@@ -620,13 +621,13 @@ export class Tone3000Modal {
         if (!tone) return;
 
         if (!connection.isConnected) {
-          alert('Pedaliera non connessa! Connetti la pedaliera via USB o Bluetooth in alto a destra.');
+          notify('Pedaliera non connessa! Connetti la pedaliera via USB o Bluetooth in alto a destra.', 'warning');
           return;
         }
 
         const selectedVar = this.selectedVariations[toneId];
         if (!selectedVar?.url) {
-          alert("Questa cattura non ha ancora un file scaricabile: attendi il caricamento dei file o scegline un'altra.");
+          notify("Questa cattura non ha ancora un file scaricabile: attendi il caricamento dei file o scegline un'altra.", 'warning');
           return;
         }
 
@@ -642,7 +643,7 @@ export class Tone3000Modal {
         // IR Path
         if (targetType === 'cab') {
           if (!modelUrl || (!modelUrl.toLowerCase().includes('.wav') && !modelUrl.toLowerCase().includes('/ir/') && !modelUrl.toLowerCase().includes('/models/'))) {
-            alert(`Il profilo cassa IR ("${modelName}") non dispone di un file .wav con download diretto.\n\nPuoi caricare un file .wav dal computer o smartphone tramite la scheda "Slot Pedaliera".`);
+            notify(`Il profilo cassa IR ("${modelName}") non dispone di un file .wav con download diretto.\n\nPuoi caricare un file .wav dal computer o smartphone tramite la scheda "Slot Pedaliera".`, 'warning');
             return;
           }
           const irName = await this.askSlotName(modelName, `Slot User IR ${slotIndex + 1}`);
@@ -672,7 +673,7 @@ export class Tone3000Modal {
             this.render();
           } catch (err) {
             console.error('Flash IR failed:', err);
-            alert(`Errore caricamento IR: ${err.message}`);
+            notify(`Errore caricamento IR: ${err.message}`, 'error');
             this.hideFlashProgressModal();
           }
           return;
@@ -694,7 +695,7 @@ export class Tone3000Modal {
 
         const selectedVar = this.selectedVariations[toneId];
         if (!selectedVar?.url) {
-          alert("Questa cattura non ha ancora un file scaricabile: attendi il caricamento dei file o scegline un'altra.");
+          notify("Questa cattura non ha ancora un file scaricabile: attendi il caricamento dei file o scegline un'altra.", 'warning');
           return;
         }
 
@@ -736,88 +737,19 @@ export class Tone3000Modal {
 
   /**
    * Ask the name to store in the pedal slot before a flash. The field starts with the full
-   * capture name (the user shortens it); writing is enabled only within the pedal limit.
-   * Resolves with the cleaned name (printable ASCII, max 14 chars) or null if cancelled.
-   * Also used to rename a slot already in memory (`title`, `confirmLabel`, `note`).
+   * capture name (the user shortens it); writing is enabled only within the 14-character
+   * pedal limit. Also used to rename a slot already in memory (`title`, `confirmLabel`, `note`).
+   * Resolves with the cleaned name (printable ASCII) or null if cancelled.
    */
   askSlotName(defaultName, slotLabel, { title = 'Nome nella pedaliera', confirmLabel = 'Scrivi', note = '' } = {}) {
-    const MAX = 14;
-    const ascii = (s) => String(s || '').replace(/[^\x20-\x7E]/g, '');
-    return new Promise((resolve) => {
-      const dialog = document.createElement('div');
-      dialog.className = 'fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4';
-      dialog.innerHTML = `
-        <form class="bg-[#18191e] border border-orange-500/40 rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4 text-zinc-100 font-sans">
-          <div>
-            <h3 class="text-base font-black text-white">${title}</h3>
-            <p class="text-xs text-orange-400 font-medium mt-1">${slotLabel}</p>
-          </div>
-          ${note ? `<p class="text-[11px] leading-relaxed text-zinc-400 bg-zinc-950/60 border border-zinc-800 rounded-lg px-3 py-2">${note}</p>` : ''}
-          <div class="space-y-1">
-            <div class="relative">
-              <input type="text" autocomplete="off" spellcheck="false" aria-label="Nome nella pedaliera"
-                class="slot-name-input w-full min-h-[44px] pl-3 pr-12 rounded-xl bg-zinc-950 border border-zinc-700 focus:border-orange-500 outline-none text-sm font-mono text-white" />
-              <button type="button" class="btn-clear-name absolute right-0 top-0 h-full w-11 flex items-center justify-center rounded-r-xl text-zinc-400 hover:text-white" title="Cancella tutto il nome" aria-label="Cancella tutto il nome">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
-              </button>
-            </div>
-            <div class="flex justify-between gap-3 text-[11px]">
-              <span class="slot-name-hint text-zinc-500">Lettere, numeri e simboli semplici</span>
-              <span class="slot-name-count font-mono font-bold text-zinc-400 shrink-0">0/${MAX}</span>
-            </div>
-          </div>
-          <div class="flex gap-2">
-            <button type="button" class="btn-cancel flex-1 min-h-[44px] rounded-xl border border-zinc-700 text-sm font-semibold text-zinc-300 hover:bg-zinc-800">Annulla</button>
-            <button type="submit" class="btn-write flex-1 min-h-[44px] rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-bold text-zinc-950">${confirmLabel}</button>
-          </div>
-        </form>
-      `;
-      document.body.appendChild(dialog);
-      const input = dialog.querySelector('.slot-name-input');
-      const count = dialog.querySelector('.slot-name-count');
-      const hint = dialog.querySelector('.slot-name-hint');
-      const write = dialog.querySelector('.btn-write');
-      const update = () => {
-        const len = input.value.length;
-        const name = input.value.trim();
-        const over = len - MAX;
-        count.textContent = `${len}/${MAX}`;
-        count.classList.toggle('text-rose-400', over > 0);
-        count.classList.toggle('text-zinc-400', over <= 0);
-        hint.textContent = over > 0
-          ? `Accorcia di ${over} ${over === 1 ? 'lettera' : 'lettere'}`
-          : (name ? 'Lettere, numeri e simboli semplici' : 'Scrivi un nome');
-        hint.classList.toggle('text-rose-400', over > 0);
-        hint.classList.toggle('text-zinc-500', over <= 0);
-        write.disabled = over > 0 || !name;
-      };
-      input.value = ascii(defaultName).trim();
-      update();
-      input.addEventListener('input', () => {
-        const cleaned = ascii(input.value);
-        if (cleaned !== input.value) input.value = cleaned;
-        update();
-      });
-      dialog.querySelector('.btn-clear-name').addEventListener('click', () => {
-        input.value = '';
-        update();
-        input.focus();
-      });
-      const close = (value) => {
-        document.removeEventListener('keydown', onKey);
-        dialog.remove();
-        resolve(value);
-      };
-      const onKey = (e) => { if (e.key === 'Escape') close(null); };
-      document.addEventListener('keydown', onKey);
-      dialog.querySelector('.btn-cancel').addEventListener('click', () => close(null));
-      dialog.querySelector('form').addEventListener('submit', (e) => {
-        e.preventDefault();
-        if (write.disabled) return;
-        close(input.value.trim());
-      });
-      input.focus();
-      input.setSelectionRange(input.value.length, input.value.length);
+    return askText({
+      title,
+      subtitle: slotLabel,
+      value: defaultName,
+      max: 14,
+      confirmLabel,
+      note,
+      filter: (s) => s.replace(/[^\x20-\x7E]/g, '') // printable ASCII only
     });
   }
 
@@ -924,7 +856,7 @@ export class Tone3000Modal {
       this.render();
     } catch (err) {
       console.error('Flash IR failed:', err);
-      alert(`Errore caricamento IR: ${err.message}`);
+      notify(`Errore caricamento IR: ${err.message}`, 'error');
       this.hideFlashProgressModal();
     }
   }
@@ -952,7 +884,7 @@ export class Tone3000Modal {
       this.render();
     } catch (err) {
       console.error('Flash CLO failed:', err);
-      alert(`Errore scrittura CLO: ${err.message}`);
+      notify(`Errore scrittura CLO: ${err.message}`, 'error');
       this.hideFlashProgressModal();
     }
   }
@@ -991,9 +923,13 @@ export class Tone3000Modal {
       console.error('NAM convert/flash failed:', err);
       this.hideFlashProgressModal();
       const offline = /Failed to fetch|NetworkError|HTTP 50[24]/i.test(err.message);
-      alert(offline
-        ? 'Server di conversione NAM non raggiungibile. Avvia "python server/server.py" sul PC con Sonicake Manager installato.'
-        : `Errore conversione/scrittura NAM: ${err.message}`);
+      if (offline) {
+        notify(import.meta.env?.DEV
+          ? 'Server di conversione NAM non raggiungibile. Avvia "python server/server.py" sul PC con Sonicake Manager installato.'
+          : 'Il servizio di conversione NAM non è raggiungibile in questo momento: riprova tra qualche minuto.', 'error');
+      } else {
+        notify(`Errore conversione/scrittura NAM: ${err.message}`, 'error');
+      }
     }
   }
 
@@ -1087,7 +1023,7 @@ export class Tone3000Modal {
           if (connection.isConnected) {
             await this.processAndFlashWavFile(file, slot);
           } else {
-            alert('Connetti prima la pedaliera via USB o Bluetooth in alto a destra.');
+            notify('Connetti prima la pedaliera via USB o Bluetooth in alto a destra.', 'warning');
           }
         } else if (type === 'amp') {
           if (connection.isConnected) {
@@ -1096,10 +1032,10 @@ export class Tone3000Modal {
             } else if (lower.endsWith('.nam')) {
               await this.processAndFlashNam(file, file.name.replace(/\.[^/.]+$/, ''), slot);
             } else {
-              alert('Formato non supportato. Trascina un file .clo o .nam.');
+              notify('Formato non supportato. Trascina un file .clo o .nam.', 'warning');
             }
           } else {
-            alert('Connetti prima la pedaliera via USB o Bluetooth in alto a destra.');
+            notify('Connetti prima la pedaliera via USB o Bluetooth in alto a destra.', 'warning');
           }
         }
       });
@@ -1173,7 +1109,7 @@ export class Tone3000Modal {
           } else {
             presetEngine.replaceUserIR(slot, cleanName, true);
             this.render();
-            alert('File IR impostato in memoria! Per scriverlo nel chip hardware, connetti la pedaliera via USB o Bluetooth.');
+            notify('File IR impostato in memoria! Per scriverlo nel chip hardware, connetti la pedaliera via USB o Bluetooth.', 'info');
           }
           input.value = '';
           return;
@@ -1187,12 +1123,12 @@ export class Tone3000Modal {
             } else if (lower.endsWith('.nam')) {
               await this.processAndFlashNam(file, cleanName, slot);
             } else {
-              alert('Formato non supportato. Seleziona un file .clo o .nam.');
+              notify('Formato non supportato. Seleziona un file .clo o .nam.', 'warning');
             }
           } else {
             presetEngine.replaceCloneProfile(slot, cleanName, true);
             this.render();
-            alert('Profilo Clone impostato in memoria! Per scriverlo nel chip hardware, connetti la pedaliera via USB o Bluetooth.');
+            notify('Profilo Clone impostato in memoria! Per scriverlo nel chip hardware, connetti la pedaliera via USB o Bluetooth.', 'info');
           }
           input.value = '';
           return;

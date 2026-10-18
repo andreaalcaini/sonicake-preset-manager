@@ -8,6 +8,7 @@
 import { presetEngine } from '../core/preset-engine.js';
 import { encodePresetBundle, decodePresetBundle } from '../utils/bundle-encoder.js';
 import { MODULE_NAMES } from '../core/protocol.js';
+import { notify } from './ui-feedback.js';
 
 function triggerDownload(content, filename, mimeType) {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
@@ -265,7 +266,7 @@ export class SharePresetModal {
             btnDownload.className = 'px-3.5 py-2 rounded-lg border border-zinc-700/60 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold whitespace-nowrap transition-colors';
           }, 2000);
         } catch (err) {
-          alert(`Errore download bundle: ${err.message}`);
+          notify(`Errore download bundle: ${err.message}`, 'error');
         }
       });
     }
@@ -284,11 +285,11 @@ export class SharePresetModal {
             this.close();
             if (this.importModal) {
               this.importModal.open(parsed, () => {
-                alert(`Preset "${parsed.preset.name}" caricato con successo!`);
+                notify(`Preset "${parsed.preset.name}" caricato con successo!`, 'success');
               });
             }
           } catch (err) {
-            alert(`File bundle non valido: ${err.message}`);
+            notify(`File bundle non valido: ${err.message}`, 'error');
           }
         };
         reader.readAsText(file);

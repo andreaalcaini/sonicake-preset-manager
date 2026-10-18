@@ -7,6 +7,7 @@
 
 import { presetEngine } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
+import { notify } from './ui-feedback.js';
 
 export class ImportBundleModal {
   constructor(overlayElement) {
@@ -210,7 +211,7 @@ export class ImportBundleModal {
 
           this.close();
         } catch (err) {
-          alert(`Errore caricamento bundle: ${err.message}`);
+          notify(`Errore caricamento bundle: ${err.message}`, 'error');
         }
       });
     }

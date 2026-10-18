@@ -107,6 +107,10 @@ export class PresetEngine {
 
     // SysEx Dump Sync State
     this.isSyncingNames = false;
+    this.nameFramesSeen = new Set(); // BLE frame indexes received for the names answer
+    this.nameFramesTotal = 0;
+    this.hardwareSlotNames = { Clone: [], IR: [] }; // last slot names reported by the pedal
+    this.pendingSlotWrite = null; // { type, idx, name } while a flashed slot is being committed
     this.isWaitingForPresetDump = false;
     this.isWaitingForPresetNumber = false;
     this.dumpPackets = [];
@@ -318,7 +322,12 @@ export class PresetEngine {
   handleIncomingSysEx(hexString) {
     // Raw preset transfers carry arbitrary bytes that could match the signature checks below
     if (this.rawTransferActive) return;
-    const cleanHex = hexString.replace(/\s+/g, '').toUpperCase();
+    let cleanHex = hexString.replace(/\s+/g, '').toUpperCase();
+
+    // BLE: Clone AMP / User IR names answers span 5 frames: decode them only once complete
+    const slotNames = this.collectSlotNamesFrames(cleanHex);
+    if (slotNames === 'pending') return;
+    if (slotNames) cleanHex = slotNames;
 
     // Short trace of incoming messages in the debug console (first frame of each stream only)
     const trace = this.decodeTransportFrame(cleanHex);
@@ -349,7 +358,8 @@ export class PresetEngine {
       return;
     }
 
-    // 3. Preset Names Sync
+    // 3. Preset Names Sync (a terminator arriving after all frames were decoded is just dropped)
+    if (!this.isSyncingNames && cleanHex === TERMINATOR_PACKET) return;
     if (this.isSyncingNames && cleanHex.startsWith('8080F0') && cleanHex.endsWith('F7')) {
       clearTimeout(this.nameSyncTimeoutId);
 
@@ -361,7 +371,16 @@ export class PresetEngine {
         connection.log(`Terminator packet received. Decoding ${this.dumpPackets.length} name packets...`, 'info');
         this.processNamesDump();
       } else {
+        // BLE delivers the 106-frame answer frame by frame (sometimes several frames per notification)
         this.dumpPackets.push(cleanHex);
+        for (const f of this.splitTransportFrames(cleanHex)) {
+          this.nameFramesTotal = f.total;
+          this.nameFramesSeen.add(f.idx);
+        }
+        if (this.nameFramesTotal > 0 && this.nameFramesSeen.size >= this.nameFramesTotal) {
+          this.processNamesDump();
+          return;
+        }
         this.nameSyncTimeoutId = setTimeout(() => {
           if (this.isSyncingNames) {
             connection.log(`Name sync timeout reached after ${this.dumpPackets.length} packets. Processing received packets...`, 'info');
@@ -374,7 +393,8 @@ export class PresetEngine {
 
     // 4. Preset State Sync (native reassembled packet or multi-packet dump)
     const isSysEx = (cleanHex.startsWith('8080F0') || cleanHex.startsWith('F0')) && cleanHex.endsWith('F7');
-    if (this.isWaitingForPresetDump && isSysEx && cleanHex.length > 50) {
+    // (the last frame of an indexed dump can be a single byte, hence the transport-frame check)
+    if (this.isWaitingForPresetDump && isSysEx && (cleanHex.length > 50 || this.decodeTransportFrame(cleanHex)?.total > 1)) {
       const normalizedHex = cleanHex.startsWith('8080') ? cleanHex : ('8080' + cleanHex);
 
       // A. Case 1: Reassembled SysEx (from USB or BLE multi-packet transport)
@@ -390,6 +410,28 @@ export class PresetEngine {
 
       // B. Case 2: Individual dump sub-packets received sequentially
       this.dumpPackets.push(normalizedHex);
+
+      // BLE: indexed transport frames (476-byte answer = 26 frames) -> rebuild the full payload
+      const dumpFrame = this.decodeTransportFrame(normalizedHex);
+      if (dumpFrame && dumpFrame.total > 1) {
+        const seen = new Set(this.dumpPackets.map(h => this.decodeTransportFrame(h)?.idx));
+        clearTimeout(this.syncTimeoutId);
+        if (seen.size >= dumpFrame.total) {
+          this.syncTimeoutId = null;
+          this.isWaitingForPresetDump = false;
+          const payload = this.reassembleTransportPayload(this.dumpPackets);
+          this.dumpPackets = [];
+          this.processPresetDump([payload]);
+        } else {
+          this.syncTimeoutId = setTimeout(() => {
+            if (!this.isWaitingForPresetDump) return;
+            this.isWaitingForPresetDump = false;
+            connection.log(`Preset state sync timed out (${seen.size}/${dumpFrame.total} frames).`, 'warning');
+            this.dumpPackets = [];
+          }, 3500);
+        }
+        return;
+      }
 
       // Extend timeout each time a valid packet arrives to prevent premature timeout on BLE
       clearTimeout(this.syncTimeoutId);
@@ -443,9 +485,10 @@ export class PresetEngine {
     const sigIndex = packet.indexOf(sig);
     if (sigIndex < 0) return;
 
-    // Slot 0 starts 14 bytes (28 hex chars) after the signature
+    // Answer = [12 24|20] + 5 occupancy bytes + 5 x 16-byte name records, nibble-encoded
+    // (4 hex chars per byte): slot 0 starts 28 hex chars after the signature
     const slotStart = sigIndex + 28;
-    const stride = 64; // 32 bytes = 64 hex chars per slot
+    const stride = 64; // 16 bytes = 64 hex chars per slot
     const namesArray = type === 'Clone' ? this.cloneSlotNames : this.irSlotNames;
     const baseFxId = type === 'Clone' ? 901 : 416;
     const logName = type === 'Clone' ? 'Clone Amp (NAM)' : 'User IR';
@@ -454,13 +497,13 @@ export class PresetEngine {
     for (let s = 0; s < 5; s++) {
       const start = slotStart + s * stride;
       if (packet.length >= start + 40) {
-        const slotHex = packet.substring(start, start + 40);
-        let name = decodeName(slotHex).trim();
+        const slotHex = packet.substring(start, start + stride);
+        let name = decodeName(slotHex, 16).trim();
         if (name === 'Empty' || !name) {
           name = type === 'Clone' ? `Slot ${s + 1} (Libero)` : `User IR ${s + 1}`;
-        } else if (name === 'Audio Assa') {
+        } else if (name.startsWith('Audio Assa')) {
           name = 'Audio Assault Slow30';
-        } else if (name === 'Petersburg') {
+        } else if (name.startsWith('Petersburg')) {
           name = 'Petersburg Thunder';
         }
         decodedNames.push(name);
@@ -468,7 +511,12 @@ export class PresetEngine {
     }
 
     if (decodedNames.length > 0) {
+      this.hardwareSlotNames[type] = decodedNames.slice();
+      // Right after a flash the pedal can still answer with the previous names: keep the
+      // name just written until the pedal reports it (see waitForSlotCommit)
+      const pending = this.pendingSlotWrite;
       decodedNames.forEach((name, i) => {
+        if (pending && pending.type === type && pending.idx === i) return;
         namesArray[i] = name;
         const fxId = baseFxId + i;
         if (MODULE_LIBRARY_DATA.effectLibrary[fxId]) {
@@ -554,21 +602,20 @@ export class PresetEngine {
     this.nameSyncTimeoutId = null;
 
     let allNames = [];
-    if (this.dumpPackets.length > 0) {
+    const payload = this.reassembleTransportPayload(this.dumpPackets);
+    if (payload) {
       try {
-        const nativeNames = decodeNativePresetNames(this.dumpPackets[0]);
-        if (nativeNames && nativeNames.length > 0) {
-          allNames = nativeNames;
-        }
+        allNames = decodeNativePresetNames(payload);
       } catch (e) {
-        console.warn('Native preset names decode failed, falling back:', e);
+        console.warn('Native preset names decode failed:', e);
       }
-    }
-
-    if (allNames.length === 0) {
+    } else {
+      // No transport frames recognised: legacy scan of the raw packets
       allNames = this.dumpPackets.flatMap(pkt => parsePacketForNames(pkt));
     }
     this.dumpPackets = [];
+    this.nameFramesSeen.clear();
+    this.nameFramesTotal = 0;
 
     if (allNames.length > 0) {
       connection.log(`Successfully synced ${allNames.length} preset names from pedal flash!`, 'success');
@@ -771,6 +818,8 @@ export class PresetEngine {
       }
       this.isSyncingNames = true;
       this.dumpPackets = [];
+      this.nameFramesSeen.clear();
+      this.nameFramesTotal = 0;
       this.nameSyncResolve = resolve;
 
       clearTimeout(this.nameSyncTimeoutId);
@@ -1449,7 +1498,8 @@ export class PresetEngine {
   async activateCloneSlot(slotIndex, syncHardware = true) {
     const idx = Math.max(0, Math.min(4, parseInt(slotIndex, 10) || 0));
     const fxId = 901 + idx;
-    await this.setAmpMode('clone', syncHardware);
+    // setEffectType already switches the amp to clone mode: calling setAmpMode first would
+    // re-send the previously selected clone slot before the new one
     await this.setEffectType(9, fxId, syncHardware);
     this.activePreset.tone3000Model = this.cloneSlotMetadata[idx];
     this.emit('stateChange', this.activePreset);
@@ -1614,15 +1664,38 @@ export class PresetEngine {
     // Update local name and persist metadata
     this.replaceUserIR(slotIndex, name, false);
 
-    // Refresh pedalboard slot names (both IR and Clone names)
-    try {
-      await connection.writeCommand(REQUEST_USER_IR_NAMES_CMD);
-      await new Promise(r => setTimeout(r, 150));
-      await connection.writeCommand(REQUEST_CLONE_AMP_NAMES_CMD);
-    } catch (_) {}
-
-    connection.log(`Scrittura completata con successo! User IR ${slotIndex + 1} aggiornato in Flash.`, 'success');
+    // The pedal keeps committing for a while: wait until it reports the new slot name
+    const committed = await this.waitForSlotCommit('IR', slotIndex, name);
+    connection.log(committed
+      ? `Scrittura completata con successo! User IR ${slotIndex + 1} aggiornato in Flash.`
+      : `User IR ${slotIndex + 1} scritto, ma la pedaliera non ha ancora confermato il nome: verifica con una sincronizzazione.`,
+      committed ? 'success' : 'warning');
     return true;
+  }
+
+  /**
+   * After a flash, poll the slot names until the pedal reports `name` in slot `idx` (it answers
+   * with the previous names for a few seconds while it commits). Returns true once confirmed.
+   */
+  async waitForSlotCommit(type, idx, name, timeoutMs = 6000) {
+    const norm = (s) => String(s || '').trim().toLowerCase();
+    const expected = norm(name).slice(0, 16);
+    const sync = type === 'Clone' ? () => this.syncCloneAmpNames() : () => this.syncUserIRNames();
+    this.pendingSlotWrite = { type, idx, name };
+    const deadline = Date.now() + timeoutMs;
+    try {
+      while (Date.now() < deadline) {
+        await sync();
+        const reported = norm(this.hardwareSlotNames[type][idx]);
+        if (reported && (reported === expected || (reported.length >= 10 && expected.startsWith(reported)))) {
+          return true;
+        }
+        await new Promise(r => setTimeout(r, 700));
+      }
+      return false;
+    } finally {
+      this.pendingSlotWrite = null;
+    }
   }
 
   /**
@@ -1668,14 +1741,12 @@ export class PresetEngine {
     // Update local name and persist metadata
     this.replaceCloneProfile(slotIndex, name, false);
 
-    // Refresh pedalboard slot names (both IR and Clone names)
-    try {
-      await connection.writeCommand(REQUEST_USER_IR_NAMES_CMD);
-      await new Promise(r => setTimeout(r, 150));
-      await connection.writeCommand(REQUEST_CLONE_AMP_NAMES_CMD);
-    } catch (_) {}
-
-    connection.log(`Scrittura completata con successo! Clone AMP ${slotIndex + 1} memorizzato in Flash (${total} pacchetti).`, 'success');
+    // The pedal keeps committing for a while: wait until it reports the new slot name
+    const committed = await this.waitForSlotCommit('Clone', slotIndex, name);
+    connection.log(committed
+      ? `Scrittura completata con successo! Clone AMP ${slotIndex + 1} memorizzato in Flash (${total} pacchetti).`
+      : `Clone AMP ${slotIndex + 1} scritto, ma la pedaliera non ha ancora confermato il nome: verifica con una sincronizzazione.`,
+      committed ? 'success' : 'warning');
     return true;
   }
 
@@ -1697,6 +1768,72 @@ export class PresetEngine {
     const payload = new Uint8Array(Math.floor(payloadNib.length / 2));
     for (let k = 0; k < payload.length; k++) payload[k] = (payloadNib[2 * k] << 4) | payloadNib[2 * k + 1];
     return { total: byteAt(2), idx: byteAt(4), len: byteAt(6), payload };
+  }
+
+  /**
+   * Collect the frames of a multi-frame Clone AMP / User IR names answer ([12 24] / [12 20]).
+   * Returns 'pending' while frames are missing, the full answer as a single nibble-encoded
+   * SysEx hex string once complete (same shape USB delivers), or null for unrelated frames.
+   */
+  collectSlotNamesFrames(hex) {
+    const f = this.decodeTransportFrame(hex);
+    if (!f || f.total <= 1) return null;
+    if (f.idx === 0 && f.payload[0] === 0x12 && (f.payload[1] === 0x24 || f.payload[1] === 0x20)) {
+      this.slotNamesStream = { total: f.total, frames: new Map([[0, f.payload.slice(0, f.len)]]) };
+    } else if (this.slotNamesStream && f.total === this.slotNamesStream.total && f.idx > 0) {
+      this.slotNamesStream.frames.set(f.idx, f.payload.slice(0, f.len));
+    } else {
+      return null;
+    }
+    const stream = this.slotNamesStream;
+    if (stream.frames.size < stream.total) return 'pending';
+    this.slotNamesStream = null;
+    const bytes = [];
+    for (let k = 0; k < stream.total; k++) bytes.push(...(stream.frames.get(k) || []));
+    const nibbles = bytes.map(b => `0${(b >> 4).toString(16)}0${(b & 0x0F).toString(16)}`).join('');
+    return `8080F0${nibbles}F7`.toUpperCase();
+  }
+
+  /** Split a dispatched hex string into transport frames (a BLE notification can carry several) */
+  splitTransportFrames(hex) {
+    const h = hex.replace(/\s+/g, '').toUpperCase();
+    const frames = [];
+    let start = -1;
+    for (let i = 0; i + 1 < h.length; i += 2) {
+      const b = h.substr(i, 2);
+      if (b === 'F0') {
+        start = i;
+      } else if (b === 'F7' && start >= 0) {
+        const frame = this.decodeTransportFrame(h.slice(start, i + 2));
+        if (frame) frames.push(frame);
+        start = -1;
+      }
+    }
+    return frames;
+  }
+
+  /**
+   * Rebuild a multi-frame answer from the received packets, frames in index order.
+   * USB packets are already reassembled by connection.js (total = 1). Stops at the first
+   * missing frame, so a partial answer still yields the leading data. null = no frames found.
+   */
+  reassembleTransportPayload(packets) {
+    const chunks = new Map();
+    let total = 0;
+    for (const packet of packets) {
+      for (const f of this.splitTransportFrames(packet)) {
+        if (f.total <= 1) return f.payload;
+        total = f.total;
+        chunks.set(f.idx, f.payload.slice(0, f.len));
+      }
+    }
+    if (!total) return null;
+    const parts = [];
+    for (let k = 0; k < total && chunks.has(k); k++) parts.push(chunks.get(k));
+    const out = new Uint8Array(parts.reduce((n, c) => n + c.length, 0));
+    let o = 0;
+    for (const c of parts) { out.set(c, o); o += c.length; }
+    return out;
   }
 
   /** Resolve with the first frame accepted by `accept(frame)` (return value = result), or reject on timeout */

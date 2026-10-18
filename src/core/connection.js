@@ -20,6 +20,7 @@ export class SonicakeConnection {
     this.bleDevice = null;
     this.bleServer = null;
     this.bleCharacteristic = null;
+    this.bleBuffer = []; // bytes of the SysEx frame being received over BLE
     this.SERVICE_UUID = '03b80e5a-ede8-4b33-a751-6ce34ec4c700';
     this.CHARACTERISTIC_UUID = '7772e5db-3868-4112-a1a9-f2669d106bf3';
 
@@ -196,18 +197,21 @@ export class SonicakeConnection {
 
     if (totalPackets > 1) {
       const responseId = `${message[3]}_${message[4]}`;
-      if (this.usbMultiPacketResponses[responseId] && (Date.now() - this.usbMultiPacketResponses[responseId].startTime > 2500)) {
+      // Drop a stale partial answer after 2.5 s without frames (long answers, e.g. the 106-frame
+      // preset names, can take longer than that in total)
+      if (this.usbMultiPacketResponses[responseId] && (Date.now() - this.usbMultiPacketResponses[responseId].lastTime > 2500)) {
         delete this.usbMultiPacketResponses[responseId];
       }
       if (!this.usbMultiPacketResponses[responseId]) {
         this.usbMultiPacketResponses[responseId] = {
           totalPackets,
           packets: {},
-          startTime: Date.now()
+          lastTime: Date.now()
         };
       }
 
       const response = this.usbMultiPacketResponses[responseId];
+      response.lastTime = Date.now();
       response.packets[currentPacket] = message;
 
       let allPacketsReceived = true;
@@ -309,33 +313,7 @@ export class SonicakeConnection {
       this.bleCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
         const val = event.target.value;
         if (!val) return;
-        const data = new Uint8Array(val.buffer, val.byteOffset, val.byteLength);
-        if (data.length === 0) return;
-
-        const startsWithSysEx = (data[0] === 0x80 && data[1] === 0x80 && data[2] === 0xF0) || data[0] === 0xF0;
-        const endsWithSysEx = data[data.length - 1] === 0xF7;
-
-        // 1. Single standalone packet
-        if (this.bleBuffer.length === 0 && startsWithSysEx && endsWithSysEx) {
-          let hex = Array.from(data).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-          if (!hex.startsWith('8080')) hex = '8080' + hex;
-          this.dispatchMessage(hex);
-          return;
-        }
-
-        // 2. Fragmented packet - accumulate bytes
-        for (let i = 0; i < data.length; i++) {
-          this.bleBuffer.push(data[i]);
-        }
-
-        // Check if buffer is completed with 0xF7
-        if (this.bleBuffer.length >= 4 && this.bleBuffer[this.bleBuffer.length - 1] === 0xF7) {
-          const buf = new Uint8Array(this.bleBuffer);
-          this.bleBuffer = [];
-          let hex = Array.from(buf).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-          if (!hex.startsWith('8080')) hex = '8080' + hex;
-          this.dispatchMessage(hex);
-        }
+        this.handleBleNotification(new Uint8Array(val.buffer, val.byteOffset, val.byteLength));
       });
 
       this.connectionType = 'ble';
@@ -353,6 +331,30 @@ export class SonicakeConnection {
   /**
    * Dispatch raw incoming hex message to registered handlers
    */
+  /**
+   * BLE notifications carry SysEx frames split across notifications, or several frames in one,
+   * with BLE-MIDI header/timestamp bytes (>= 0x80) around them. Frame bodies are nibbles only,
+   * so every byte >= 0x80 other than F0/F7 is transport overhead. Each complete F0..F7 frame is
+   * dispatched on its own, like USB delivers them.
+   */
+  handleBleNotification(data) {
+    if (!data || data.length === 0) return;
+    for (const b of data) {
+      if (b === 0xF0) {
+        this.bleBuffer = [b];
+      } else if (this.bleBuffer.length === 0) {
+        continue; // header / timestamp before a frame
+      } else if (b === 0xF7) {
+        this.bleBuffer.push(b);
+        const hex = Array.from(this.bleBuffer, x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+        this.bleBuffer = [];
+        this.dispatchMessage('8080' + hex);
+      } else if (b < 0x80) {
+        this.bleBuffer.push(b);
+      }
+    }
+  }
+
   dispatchMessage(hexString) {
     this.messageHandlers.forEach(handler => handler(hexString));
   }

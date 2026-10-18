@@ -486,11 +486,12 @@ export function isValidNameBlock(hexString) {
 }
 
 /**
- * Decode a 40-char hex string to a human-readable preset name
+ * Decode a nibble-encoded hex string (4 hex chars per character) to a human-readable name.
+ * Preset names use 10 characters; Clone AMP / User IR slot names use 16.
  */
-export function decodeName(hexString) {
+export function decodeName(hexString, maxChars = 10) {
   let name = '';
-  for (let i = 0; i < 10; i++) {
+  for (let i = 0; i < maxChars; i++) {
     const chunk = hexString.substring(i * 4, (i * 4) + 4).toUpperCase();
     const char = CHARACTER_MAP[chunk];
     if (char === null) break;

@@ -705,8 +705,9 @@ export class Tone3000Modal {
    * Ask the name to store in the pedal slot before a flash. The field starts with the full
    * capture name (the user shortens it); writing is enabled only within the pedal limit.
    * Resolves with the cleaned name (printable ASCII, max 14 chars) or null if cancelled.
+   * Also used to rename a slot already in memory (`title`, `confirmLabel`, `note`).
    */
-  askSlotName(defaultName, slotLabel) {
+  askSlotName(defaultName, slotLabel, { title = 'Nome nella pedaliera', confirmLabel = 'Scrivi', note = '' } = {}) {
     const MAX = 14;
     const ascii = (s) => String(s || '').replace(/[^\x20-\x7E]/g, '');
     return new Promise((resolve) => {
@@ -715,9 +716,10 @@ export class Tone3000Modal {
       dialog.innerHTML = `
         <form class="bg-[#18191e] border border-orange-500/40 rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4 text-zinc-100 font-sans">
           <div>
-            <h3 class="text-base font-black text-white">Nome nella pedaliera</h3>
+            <h3 class="text-base font-black text-white">${title}</h3>
             <p class="text-xs text-orange-400 font-medium mt-1">${slotLabel}</p>
           </div>
+          ${note ? `<p class="text-[11px] leading-relaxed text-zinc-400 bg-zinc-950/60 border border-zinc-800 rounded-lg px-3 py-2">${note}</p>` : ''}
           <div class="space-y-1">
             <div class="relative">
               <input type="text" autocomplete="off" spellcheck="false" aria-label="Nome nella pedaliera"
@@ -733,7 +735,7 @@ export class Tone3000Modal {
           </div>
           <div class="flex gap-2">
             <button type="button" class="btn-cancel flex-1 min-h-[44px] rounded-xl border border-zinc-700 text-sm font-semibold text-zinc-300 hover:bg-zinc-800">Annulla</button>
-            <button type="submit" class="btn-write flex-1 min-h-[44px] rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-bold text-zinc-950">Scrivi</button>
+            <button type="submit" class="btn-write flex-1 min-h-[44px] rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-bold text-zinc-950">${confirmLabel}</button>
           </div>
         </form>
       `;
@@ -1167,16 +1169,20 @@ export class Tone3000Modal {
 
     // Memory Tab: slot rename buttons
     this.overlay.querySelectorAll('.btn-slot-rename').forEach(btn => {
-      btn.addEventListener('click', () => {
+      btn.addEventListener('click', async () => {
         const type = btn.dataset.type;
         const slot = parseInt(btn.dataset.slot, 10);
         const currentName = type === 'amp' ? presetEngine.cloneSlotNames[slot] : presetEngine.irSlotNames[slot];
-        const newName = prompt(`Rinomina ${type === 'amp' ? 'Clone Profile' : 'User IR'} ${slot + 1} (max 14 caratteri):`, currentName);
-        if (newName && newName.trim()) {
+        const newName = await this.askSlotName(currentName, type === 'amp' ? `Slot Clone AMP ${slot + 1}` : `Slot User IR ${slot + 1}`, {
+          title: 'Rinomina',
+          confirmLabel: 'Salva',
+          note: 'Il nuovo nome vale solo in questa app: la pedaliera mantiene quello scritto insieme alla cattura e lo ripropone alla prossima sincronizzazione. Per cambiarlo anche sulla pedaliera, riscrivi la cattura con il nuovo nome.'
+        });
+        if (newName) {
           if (type === 'amp') {
-            presetEngine.replaceCloneProfile(slot, newName.trim(), false);
+            presetEngine.replaceCloneProfile(slot, newName, false);
           } else {
-            presetEngine.replaceUserIR(slot, newName.trim(), false);
+            presetEngine.replaceUserIR(slot, newName, false);
           }
           this.render();
         }

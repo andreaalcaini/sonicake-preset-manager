@@ -47,11 +47,13 @@ Communicates directly with the physical pedal via **Web MIDI** (USB) and **Web B
 │       └── tone3000.css        # Tone3000 modal and dropzone styling
 ├── server/
 │   ├── server.py               # Flask microservice (port 8080)
-│   ├── Dockerfile              # Linux ARM64 compiler image (bionic runtime + nam2clo)
 │   ├── 5868USB.dll             # Sonicake native C++ compiler library (Windows backend)
-│   ├── nam2clo/                # ARM64 converter: nam2clo.c, JUCE shim, Android stubs, build.ps1
+│   ├── nam2clo/                # ARM64 converter: nam2clo.c, JUCE shim, Android stubs, extract-vendor.ps1
 │   └── cache/                  # Converted models cache
-├── deploy/                     # docker-compose.yml + Caddyfile for the Oracle ARM VPS
+├── data/                       # Runtime volume (/app/data): cache + vendor/ files, never committed
+├── Dockerfile                  # Multi-arch image: Vite site + compiler API (bionic runtime + nam2clo)
+├── docker-compose.yml          # Production service (ghcr.io image, port 3000, ./data volume)
+├── .github/workflows/deploy.yml # Build & push linux/amd64 + linux/arm64 image to GHCR
 ├── vite.config.js              # Vite server (HTTPS basicSsl, LAN exposure, /api proxy to 8080)
 └── package.json
 ```
@@ -81,9 +83,9 @@ npm run preview
 
 Two interchangeable backends (`server.py` picks one, `/api/health` reports `compiler_backend`):
 - **Windows** (`dll`): Sonicake Manager's `5868USB.dll` in-process. `SONICAKE_LIB_PATH` / `SONICAKE_NAM_INPUT_WAV` override the paths.
-- **Linux ARM64** (`nam2clo`, production on the Oracle VPS): the SonicLink Android build of the same library (`lib5868USB.so`, arm64) run by `server/nam2clo/nam2clo` inside `server/Dockerfile`, which ships a minimal Android bionic runtime (linker64 + libc/libm/libdl from the AOSP redroid image) and stubs for liblog/OpenSL ES/EGL/GLES/libandroid. `juce_android_shim.cpp` interposes `juce::File::getSpecialLocation` (otherwise resolved via JNI → crash without a Java VM). Output is byte-identical to the SonicLink phone app; vs. the Windows DLL it differs by ~0.07% (ARM vs x86 float math). One process per conversion, `NAM2CLO_WORKERS` in parallel (default 2), `NAM2CLO_TIMEOUT` seconds (default 180).
-- Vendor files (`.so`, input WAV) are extracted from the SonicLink APK by `server/nam2clo/build.ps1` into `server/nam2clo/vendor/` and are **never committed**.
-- Deploy: `deploy/docker-compose.yml` (Caddy HTTPS for `dist/` + `/api` → compiler).
+- **Linux ARM64** (`nam2clo`, production on the Oracle VPS): the SonicLink Android build of the same library (`lib5868USB.so`, arm64) run by `server/nam2clo/nam2clo` inside the root `Dockerfile`, which ships a minimal Android bionic runtime (linker64 + libc/libm/libdl from the AOSP redroid image) and stubs for liblog/OpenSL ES/EGL/GLES/libandroid. `juce_android_shim.cpp` interposes `juce::File::getSpecialLocation` (otherwise resolved via JNI → crash without a Java VM). Output is byte-identical to the SonicLink phone app; vs. the Windows DLL it differs by ~0.07% (ARM vs x86 float math). One process per conversion, `NAM2CLO_WORKERS` in parallel (default 2), `NAM2CLO_TIMEOUT` seconds (default 180).
+- Vendor files (`lib5868USB.so`, `libc++_shared.so`, input WAV) are extracted from the SonicLink APK by `server/nam2clo/extract-vendor.ps1` into `data/vendor/` and mounted at runtime: **never committed, never in the image**. CI links `nam2clo` against `stubs/lib5868usb_link_stub.cpp` instead.
+- Deploy: GitHub Actions builds `ghcr.io/andreaalcaini/sonicake-preset-manager` (amd64 + arm64) on every push to master; the VPS runs `docker compose pull && docker compose up -d`. The converter works on arm64 only (amd64 → compiler offline). HTTPS comes from the reverse proxy in front of port 3000.
 
 ### Backend Microservice (required for .nam → Clone AMP conversion)
 ```bash

@@ -29,8 +29,20 @@ def after_request(response):
 
 # --- Directories ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-CACHE_DIR = os.path.join(SCRIPT_DIR, 'cache')
-os.makedirs(CACHE_DIR, exist_ok=True)
+# DATA_DIR is the persistent volume in Docker (/app/data): conversion cache + vendor files
+DATA_DIR = os.environ.get('DATA_DIR', SCRIPT_DIR)
+CACHE_DIR = os.path.join(DATA_DIR, 'cache')
+try:
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    if not os.access(CACHE_DIR, os.W_OK):
+        raise PermissionError(CACHE_DIR)
+except OSError as e:
+    # e.g. host volume owned by root while the container runs as uid 1001
+    print(f"[!] Cache non scrivibile ({e}): uso una cache temporanea. Esegui: chown -R 1001:1001 data")
+    CACHE_DIR = os.path.join(tempfile.gettempdir(), 'sonicake-cache')
+    os.makedirs(CACHE_DIR, exist_ok=True)
+# Built frontend (Vite dist/) served by this same process in the production image
+STATIC_DIR = os.environ.get('STATIC_DIR', '')
 
 # --- Sonicake CRC16 & CLO Converter ---
 CRC16_T1 = bytes([
@@ -154,7 +166,12 @@ clo_convert_lock = threading.Lock()  # the DLL keeps a single global conversion 
 # Linux ARM64 backend: vendor Android library run through nam2clo (see Dockerfile / nam2clo/)
 NAM2CLO_BIN = os.environ.get('NAM2CLO_BIN', '')
 NAM2CLO_LIB = os.environ.get('NAM2CLO_LIB', '')
-NAM2CLO_AVAILABLE = bool(NAM2CLO_BIN and NAM2CLO_LIB and os.path.exists(NAM2CLO_BIN) and os.path.exists(NAM2CLO_LIB))
+# The vendor library is ARM64-only: on amd64 images the compiler simply reports offline
+import platform
+NAM2CLO_AVAILABLE = bool(
+    platform.machine().lower() in ('aarch64', 'arm64')
+    and NAM2CLO_BIN and NAM2CLO_LIB and os.path.exists(NAM2CLO_BIN) and os.path.exists(NAM2CLO_LIB)
+)
 # Each conversion is its own process, so several can run in parallel (bounded by CPU cores)
 nam2clo_slots = threading.BoundedSemaphore(max(1, int(os.environ.get('NAM2CLO_WORKERS', '2'))))
 
@@ -177,7 +194,7 @@ def convert_nam_to_clo(nam_path, timeout=None):
 def _convert_with_nam2clo(nam_path, timeout):
     import subprocess
     lib_dir = os.path.dirname(NAM2CLO_LIB)
-    env = dict(os.environ, LD_LIBRARY_PATH=f"{lib_dir}:/system/lib64")
+    env = dict(os.environ, LD_LIBRARY_PATH=f"{lib_dir}:{os.path.dirname(NAM2CLO_BIN)}:/system/lib64")
     with nam2clo_slots:
         fd, out_path = tempfile.mkstemp(suffix='.clo', dir=CACHE_DIR)
         os.close(fd)
@@ -380,6 +397,21 @@ def active_preset_endpoint():
         except Exception:
             pass
     return jsonify({"slot": None, "name": None, "ampName": None})
+
+
+# --- Static frontend (production image only) ---
+if STATIC_DIR and os.path.isdir(STATIC_DIR):
+    from flask import send_from_directory
+
+    @app.route('/', defaults={'path': ''})
+    @app.route('/<path:path>')
+    def frontend(path):
+        if path.startswith('api/'):
+            return jsonify({"error": "Not found"}), 404
+        full = os.path.join(STATIC_DIR, path)
+        if path and os.path.isfile(full):
+            return send_from_directory(STATIC_DIR, path)
+        return send_from_directory(STATIC_DIR, 'index.html')
 
 
 if __name__ == '__main__':

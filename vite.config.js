@@ -8,6 +8,8 @@ export default defineConfig({
   server: {
     host: true, // Exposes server to local network (0.0.0.0)
     port: 5173,
+    // Server data volume and Python compiler are not part of the frontend
+    watch: { ignored: ['**/data/**', '**/server/**'] },
     https: true,
     proxy: {
       '/api': {

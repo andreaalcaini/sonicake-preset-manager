@@ -49,6 +49,8 @@ server/*.bin
 server/*.clo
 server/*.nam
 
-# Vendor ARM64 converter files (extracted from the SonicLink APK) and build outputs
+# Server data volume (conversion cache + vendor ARM64 converter files from the SonicLink APK)
+data/*
+!data/.gitkeep
 server/nam2clo/vendor/
 server/nam2clo/build/

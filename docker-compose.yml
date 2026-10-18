@@ -1,0 +1,15 @@
+# Production server (Oracle ARM VPS). Put the vendor files in ./data/vendor first:
+#   lib5868USB.so, libc++_shared.so, nam_input_wav.wav  (see server/nam2clo/extract-vendor.ps1)
+# The site needs HTTPS (Web MIDI / Bluetooth): put your reverse proxy in front of port 3000.
+services:
+  app:
+    image: ghcr.io/andreaalcaini/sonicake-preset-manager:latest
+    container_name: sonicake
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=3000
+      - NAM2CLO_WORKERS=2

@@ -12,6 +12,8 @@ import struct
 import tempfile
 import hashlib
 import json
+import threading
+import time
 import requests
 from flask import Flask, request, jsonify, send_file, Response
 
@@ -28,9 +30,7 @@ def after_request(response):
 # --- Directories ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CACHE_DIR = os.path.join(SCRIPT_DIR, 'cache')
-VERIFIED_DIR = os.path.join(SCRIPT_DIR, 'verified')
 os.makedirs(CACHE_DIR, exist_ok=True)
-os.makedirs(VERIFIED_DIR, exist_ok=True)
 
 # --- Sonicake CRC16 & CLO Converter ---
 CRC16_T1 = bytes([
@@ -82,7 +82,7 @@ def calc_sonicake_crc16(data):
     return ((cl << 8) | r10) & 0xFFFF
 
 def convert_clo_to_low(clo_data):
-    """Converts 8,840-byte CLO into 2,696-byte Low Model accepted by Smart Box."""
+    """Converts 8,840-byte CLO into 2,696-byte Low Model accepted by the pedal."""
     if len(clo_data) == 2696:
         return clo_data
     if len(clo_data) != 8840:
@@ -96,51 +96,141 @@ def convert_clo_to_low(clo_data):
     low[10:12] = b'\x00\x00'
     return bytes(low)
 
+def validate_clo(clo_data):
+    """Mirrors Sonicake Manager TcHelper.checkTcFile: magic, declared size, CRC16 from offset 12."""
+    if len(clo_data) < 12 or clo_data[:4] != b'VTSI':
+        raise ValueError("CLO non valido: magic VTSI assente.")
+    declared = struct.unpack_from('<I', clo_data, 4)[0]
+    if declared != len(clo_data):
+        raise ValueError(f"CLO non valido: dimensione dichiarata {declared} != {len(clo_data)} byte.")
+    file_crc = struct.unpack_from('<H', clo_data, 8)[0]
+    calc_crc = calc_sonicake_crc16(clo_data[12:])
+    if file_crc != calc_crc:
+        raise ValueError(f"CLO non valido: CRC16 {calc_crc:#06x} != {file_crc:#06x}.")
+
 # --- Locate Sonicake C++ Native Library ---
 dll_candidates = [
     os.path.join(SCRIPT_DIR, '5868USB.dll'),
-    os.path.join(SCRIPT_DIR, 'lib5868USB.so'),
     r'C:\Program Files\Sonicake\Sonicake Manager\assets\5868USB.dll',
     os.environ.get('SONICAKE_LIB_PATH', '')
 ]
 
+# Excitation signal Sonicake Manager plays through the NAM model before fitting the CLO
+nam_wav_candidates = [
+    os.environ.get('SONICAKE_NAM_INPUT_WAV', ''),
+    os.path.join(SCRIPT_DIR, 'assets', 'nam_input_wav.wav'),
+    r'C:\Program Files\Sonicake\Sonicake Manager\data\flutter_assets\assets\wavs\nam_input_wav.wav',
+    os.path.join(os.environ.get('APPDATA', ''), 'Sonicake', 'Sonicake Manager', 'wavs', 'nam_input_wav.wav'),
+]
+NAM_INPUT_WAV = next((p for p in nam_wav_candidates if p and os.path.exists(p)), None)
+
 SONICAKE_DLL = None
-convert_func = None
-err_func = None
+clo_convert_func = None
+clo_err_func = None
 
 for path in dll_candidates:
     if path and os.path.exists(path):
         try:
             SONICAKE_DLL = ctypes.cdll.LoadLibrary(path)
-            convert_func = SONICAKE_DLL.convertNamToNambAtPath
-            convert_func.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_float]
-            convert_func.restype = ctypes.c_int
-
-            if hasattr(SONICAKE_DLL, 'getLastNamToNambError'):
-                err_func = SONICAKE_DLL.getLastNamToNambError
-                err_func.restype = ctypes.c_char_p
-
+            # Reverse engineered from 5868USB.dll + Sonicake Manager tone_import.log:
+            # int namConvertCloDataWithProcess(void* ctx, const char* inWav, const char* outWav,
+            #     const char* namPath, uint8_t* cloOut, int* outSize, int* progress, int* total)
+            # Returns 8840 immediately and converts on a worker thread. ctx is a scratch object
+            # (zeroed block); *outSize becomes 8840 on success, progress/total become -2 on error.
+            clo_convert_func = SONICAKE_DLL.namConvertCloDataWithProcess
+            clo_convert_func.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p,
+                                         ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+            clo_convert_func.restype = ctypes.c_int
+            clo_err_func = SONICAKE_DLL.getNamConvertCloErrorMessage
+            clo_err_func.restype = ctypes.c_char_p
             print(f"[*] Loaded Sonicake native library: {path}")
             break
         except Exception as e:
             print(f"[!] Warning: Failed loading library from {path}: {e}")
 
-def convert_nam_file(in_path, out_path, slim_ratio=1.0):
-    if not convert_func:
-        raise RuntimeError("Sonicake native compiler library (5868USB.dll) is not loaded.")
-    ret = convert_func(in_path.encode('utf-8'), out_path.encode('utf-8'), ctypes.c_float(slim_ratio))
-    if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
-        c_err = ""
-        if err_func:
-            try:
-                raw_err = err_func()
-                if raw_err:
-                    c_err = raw_err.decode('utf-8', errors='ignore').strip()
-            except Exception:
-                pass
-        err_msg = c_err if c_err else f"Compiler failed (exit code {ret})"
-        raise RuntimeError(err_msg)
-    return os.path.getsize(out_path)
+CLO_SIZE = 8840
+clo_convert_lock = threading.Lock()  # the DLL keeps a single global conversion state
+
+# Linux ARM64 backend: vendor Android library run through nam2clo (see Dockerfile / nam2clo/)
+NAM2CLO_BIN = os.environ.get('NAM2CLO_BIN', '')
+NAM2CLO_LIB = os.environ.get('NAM2CLO_LIB', '')
+NAM2CLO_AVAILABLE = bool(NAM2CLO_BIN and NAM2CLO_LIB and os.path.exists(NAM2CLO_BIN) and os.path.exists(NAM2CLO_LIB))
+# Each conversion is its own process, so several can run in parallel (bounded by CPU cores)
+nam2clo_slots = threading.BoundedSemaphore(max(1, int(os.environ.get('NAM2CLO_WORKERS', '2'))))
+
+COMPILER_BACKEND = 'dll' if clo_convert_func else ('nam2clo' if NAM2CLO_AVAILABLE else None)
+COMPILER_AVAILABLE = COMPILER_BACKEND is not None and NAM_INPUT_WAV is not None
+
+CONVERT_TIMEOUT = int(os.environ.get('NAM2CLO_TIMEOUT', '180'))
+
+def convert_nam_to_clo(nam_path, timeout=None):
+    """NAM -> Sonicake CLO (8,840 bytes) with whichever backend this host supports."""
+    timeout = timeout or CONVERT_TIMEOUT
+    if not NAM_INPUT_WAV:
+        raise RuntimeError("nam_input_wav.wav non trovato: imposta SONICAKE_NAM_INPUT_WAV.")
+    if COMPILER_BACKEND == 'dll':
+        return _convert_with_dll(nam_path, timeout)
+    if COMPILER_BACKEND == 'nam2clo':
+        return _convert_with_nam2clo(nam_path, timeout)
+    raise RuntimeError("Nessun convertitore NAM disponibile su questo server.")
+
+def _convert_with_nam2clo(nam_path, timeout):
+    import subprocess
+    lib_dir = os.path.dirname(NAM2CLO_LIB)
+    env = dict(os.environ, LD_LIBRARY_PATH=f"{lib_dir}:/system/lib64")
+    with nam2clo_slots:
+        fd, out_path = tempfile.mkstemp(suffix='.clo', dir=CACHE_DIR)
+        os.close(fd)
+        try:
+            proc = subprocess.run(
+                [NAM2CLO_BIN, NAM2CLO_LIB, NAM_INPUT_WAV, nam_path, out_path, str(timeout)],
+                env=env, capture_output=True, text=True, timeout=timeout + 30
+            )
+            if proc.returncode != 0:
+                detail = (proc.stderr or '').strip().splitlines()
+                raise RuntimeError(detail[-1] if detail else f"nam2clo exit code {proc.returncode}")
+            with open(out_path, 'rb') as f:
+                clo = f.read()
+            validate_clo(clo)
+            return clo
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("Timeout conversione NAM -> CLO.")
+        finally:
+            try: os.unlink(out_path)
+            except OSError: pass
+
+def _convert_with_dll(nam_path, timeout):
+    """Windows: Sonicake Manager's 5868USB.dll, in-process."""
+    with clo_convert_lock:
+        ctx = (ctypes.c_uint8 * 0x1000)()
+        out = (ctypes.c_uint8 * CLO_SIZE)()
+        out_size, progress, total = ctypes.c_int(0), ctypes.c_int(0), ctypes.c_int(0)
+        fd, out_wav = tempfile.mkstemp(suffix='.wav', dir=CACHE_DIR)
+        os.close(fd)
+        try:
+            clo_convert_func(ctypes.addressof(ctx), NAM_INPUT_WAV.encode('mbcs'), out_wav.encode('mbcs'),
+                             nam_path.encode('mbcs'), ctypes.addressof(out), ctypes.addressof(out_size),
+                             ctypes.addressof(progress), ctypes.addressof(total))
+            deadline = time.time() + timeout
+            while out_size.value != CLO_SIZE:
+                if progress.value == -2 or total.value == -2:
+                    msg = (clo_err_func() or b'').decode('utf-8', errors='ignore').strip()
+                    raise RuntimeError(msg or "Conversione NAM -> CLO fallita.")
+                if time.time() > deadline:
+                    # Worker still owns ctx/out: keep them alive instead of freeing under it
+                    _abandoned_buffers.append((ctx, out, out_size, progress, total))
+                    raise RuntimeError("Timeout conversione NAM -> CLO.")
+                time.sleep(0.1)
+            # Worker writes the buffer before publishing the size; give it a beat to finish teardown
+            time.sleep(0.3)
+            clo = bytes(out)
+            validate_clo(clo)
+            return clo
+        finally:
+            try: os.unlink(out_wav)
+            except OSError: pass
+
+_abandoned_buffers = []
 
 # --- Routes ---
 
@@ -151,9 +241,9 @@ def health():
         "service": "sonicake-bridge-converter",
         "version": "1.1.0",
         "platform": sys.platform,
-        "compiler_available": convert_func is not None,
-        "cache_entries": len(os.listdir(CACHE_DIR)),
-        "verified_models": len(os.listdir(VERIFIED_DIR))
+        "compiler_available": COMPILER_AVAILABLE,
+        "compiler_backend": COMPILER_BACKEND,
+        "cache_entries": len(os.listdir(CACHE_DIR))
     })
 
 @app.route('/api/convert-nam', methods=['POST', 'OPTIONS'])
@@ -235,140 +325,35 @@ def convert_nam():
             download_name=f"{clean_name}.namb"
         )
 
-    # Case C: Neural Amp Modeler (.nam) input
-    if not convert_func:
-        return jsonify({"error": "Sonicake native library is not available on this server"}), 503
+    # Case C: Neural Amp Modeler (.nam) input -> CLO 8,840 -> Low Model 2,696 (same pipeline as Sonicake Manager)
+    if not COMPILER_AVAILABLE:
+        return jsonify({"error": "Convertitore NAM momentaneamente non disponibile."}), 503
 
-    cached_namb = os.path.join(CACHE_DIR, f"{file_hash}_{clean_name}.namb")
-    if not os.path.exists(cached_namb):
-        with tempfile.NamedTemporaryFile(suffix='.nam', delete=False) as tmp_in:
-            tmp_in_path = tmp_in.name
+    cached_low = os.path.join(CACHE_DIR, f"{file_hash}_{clean_name}.clo")
+    if not os.path.exists(cached_low):
+        fd, tmp_in_path = tempfile.mkstemp(suffix='.nam', dir=CACHE_DIR)
+        with os.fdopen(fd, 'wb') as tmp_in:
             tmp_in.write(model_bytes)
-
         try:
-            convert_nam_file(tmp_in_path, cached_namb, slim_ratio=1.0)
-            print(f"[OK] Converted NAM {clean_name} -> {os.path.getsize(cached_namb)} bytes")
+            t0 = time.time()
+            clo = convert_nam_to_clo(tmp_in_path)
+            low_bytes = convert_clo_to_low(clo)
+            with open(cached_low, 'wb') as f:
+                f.write(low_bytes)
+            print(f"[OK] Converted NAM {clean_name} -> CLO {len(clo)} -> Low Model {len(low_bytes)} bytes in {time.time() - t0:.1f}s")
         except Exception as e:
-            print(f"[!] Compilation error for '{clean_name}': {e}")
-            return jsonify({"error": f"Errore compilazione NAM: {str(e)}"}), 422
+            print(f"[!] NAM -> CLO conversion error for '{clean_name}': {e}")
+            return jsonify({"error": f"Errore conversione NAM: {str(e)}"}), 422
         finally:
-            if os.path.exists(tmp_in_path):
-                try: os.unlink(tmp_in_path)
-                except: pass
+            try: os.unlink(tmp_in_path)
+            except OSError: pass
 
     return send_file(
-        cached_namb,
+        cached_low,
         mimetype='application/octet-stream',
         as_attachment=True,
-        download_name=f"{clean_name}.namb"
+        download_name=f"{clean_name}.clo"
     )
-
-SONICAKE_APPDATA_CLO = r'C:\Users\andrea\AppData\Roaming\Sonicake\Sonicake Manager\clo\cloFile.clo'
-SONICAKE_APPDATA_LOG = r'C:\Users\andrea\AppData\Roaming\Sonicake\Sonicake Manager\logs\tone_import.log'
-
-def get_latest_imported_tone_name():
-    if os.path.exists(SONICAKE_APPDATA_LOG):
-        try:
-            with open(SONICAKE_APPDATA_LOG, 'r', encoding='utf-8', errors='ignore') as f:
-                lines = f.readlines()
-            for line in reversed(lines):
-                if 'toneName=' in line:
-                    part = line.split('toneName=')[1].split(',')[0].strip()
-                    if part: return part
-                if 'selected NAM file path=' in line and 'name=' in line:
-                    part = line.split('name=')[1].split(',')[0].replace('.nam', '').strip()
-                    if part: return part
-        except Exception:
-            pass
-    return "Clone Model"
-
-@app.route('/api/latest-clo', methods=['GET', 'OPTIONS'])
-def latest_clo_endpoint():
-    """Returns the latest CLO model imported in Sonicake Manager, converted to Low Model."""
-    if request.method == 'OPTIONS':
-        return Response(status=200)
-
-    if not os.path.exists(SONICAKE_APPDATA_CLO):
-        return jsonify({"error": "Nessun file CLO trovato in Sonicake Manager AppData."}), 404
-
-    try:
-        with open(SONICAKE_APPDATA_CLO, 'rb') as f:
-            raw_clo = f.read()
-
-        low_bytes = convert_clo_to_low(raw_clo)
-        out_path = os.path.join(CACHE_DIR, 'latest_imported_clone.clo')
-        with open(out_path, 'wb') as f:
-            f.write(low_bytes)
-
-        if request.args.get('info') == '1':
-            return jsonify({
-                "available": True,
-                "toneName": get_latest_imported_tone_name(),
-                "originalSize": len(raw_clo),
-                "lowModelSize": len(low_bytes),
-                "crc": hex(struct.unpack_from('<H', low_bytes, 8)[0])
-            })
-
-        return send_file(
-            out_path,
-            mimetype='application/octet-stream',
-            as_attachment=True,
-            download_name="latest_clone.clo"
-        )
-    except Exception as e:
-        return jsonify({"error": f"Errore lettura ultimo CLO: {str(e)}"}), 500
-
-@app.route('/api/verified-models', methods=['GET', 'OPTIONS'])
-def verified_models_list():
-    """Lists pre-compiled models guaranteed to work without freezing."""
-    if request.method == 'OPTIONS':
-        return Response(status=200)
-
-    models = [
-        {
-            "id": "petersburg_thunder",
-            "name": "Petersburg Thunder Drizzle",
-            "description": "Boutique Russian Tube Amp - Crunch / Lead dinamico e definito",
-            "size": 2696,
-            "url": "/api/verified-models/petersburg_thunder.clo"
-        },
-        {
-            "id": "slow30_high_gain",
-            "name": "Audio Assault Slow30 High Gain",
-            "description": "Slo-100 Modded High Gain Metal - Lead fluido e ricco di armoniche",
-            "size": 2696,
-            "url": "/api/verified-models/slow30_high_gain.clo"
-        },
-        {
-            "id": "marshall_1959",
-            "name": "Marshall 1959 Super Lead",
-            "description": "Vintage Plexi Super Lead (BJA Super Bowl Setting) - Punch leggendario",
-            "size": 2696,
-            "url": "/api/verified-models/marshall_1959.clo"
-        }
-    ]
-    return jsonify(models)
-
-@app.route('/api/verified-models/<filename>', methods=['GET'])
-def get_verified_model_file(filename):
-    clean = os.path.basename(filename)
-    path = os.path.join(VERIFIED_DIR, clean)
-    if not os.path.exists(path):
-        if not clean.endswith('.clo'):
-            path += '.clo'
-    if os.path.exists(path):
-        return send_file(path, mimetype='application/octet-stream', as_attachment=True, download_name=clean)
-    return jsonify({"error": f"Modello '{clean}' non trovato"}), 404
-
-@app.route('/api/hardware-slots', methods=['GET', 'OPTIONS'])
-def hardware_slots_endpoint():
-    if request.method == 'OPTIONS':
-        return Response(status=200)
-    data = {
-        "cloneSlots": ["Petersburg Thunder", "Audio Assault Slow30", "Slot 3 (Libero)", "Slot 4 (Libero)", "Slot 5 (Libero)"],
-        "irSlots": ["BlendOfAll", "User IR 2", "User IR 3", "User IR 4", "User IR 5"]
-    }
-    return jsonify(data)
 
 ACTIVE_PRESET_FILE = os.path.join(CACHE_DIR, 'active_preset.json')
 
@@ -402,6 +387,7 @@ if __name__ == '__main__':
     print(f"==================================================")
     print(f"  Sonicake Auto-Sync Converter Microservice v1.1")
     print(f"  Running on: http://0.0.0.0:{port}")
-    print(f"  Compiler Available: {convert_func is not None}")
+    print(f"  NAM -> CLO Converter: {COMPILER_BACKEND or 'non disponibile'}")
+    print(f"  NAM input WAV: {NAM_INPUT_WAV}")
     print(f"==================================================")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False, threaded=True)

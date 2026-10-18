@@ -1,0 +1,20 @@
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	# NAM compiler (conversions take a few seconds: generous timeouts)
+	handle /api/* {
+		reverse_proxy compiler:8080 {
+			transport http {
+				read_timeout 300s
+				write_timeout 300s
+			}
+		}
+	}
+
+	# Static single-page app built with `npm run build`
+	handle {
+		root * /srv/site
+		try_files {path} /index.html
+		file_server
+	}
+}

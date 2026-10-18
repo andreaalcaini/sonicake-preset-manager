@@ -29,6 +29,7 @@ pocketedit.html
 *.tmp
 prompt.txt
 prompt*.txt
+.claude/settings.local.json
 
 # Python
 __pycache__/
@@ -47,3 +48,7 @@ server/cache/*
 server/*.bin
 server/*.clo
 server/*.nam
+
+# Vendor ARM64 converter files (extracted from the SonicLink APK) and build outputs
+server/nam2clo/vendor/
+server/nam2clo/build/

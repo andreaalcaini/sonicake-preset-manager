@@ -1,0 +1,6 @@
+# Only what the Linux ARM64 compiler image needs (see Dockerfile)
+*
+!server.py
+!requirements.txt
+!nam2clo/build/
+!nam2clo/vendor/

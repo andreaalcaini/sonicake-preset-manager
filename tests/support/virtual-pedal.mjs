@@ -46,11 +46,16 @@ export class VirtualPedal {
    * @param {object} site       modules returned by loadSite()
    * @param {'usb'|'ble'|'ble5'} transport  usb = Web MIDI messages; ble = frames split in 20-byte
    *        notifications; ble5 = up to 5 frames per notification (large MTU)
+   * @param {object} [options]
+   * @param {number} [options.commitMs]  time the pedal needs to commit a flashed slot
+   * @param {'all'|'none'|number} [options.flashAck]  ACK every flash packet, none, or only the first N
    */
-  constructor(site, transport = 'usb', { commitMs = 2500 } = {}) {
+  constructor(site, transport = 'usb', { commitMs = 2500, flashAck = 'all' } = {}) {
     this.site = site;
     this.transport = transport;
     this.commitMs = commitMs;
+    this.flashAck = flashAck;
+    this.flashPacketsReceived = 0;
     const userNames = ['APP TEST', 'Creamy OD', 'Pure Clean', 'Creamy OD', 'Dark Wave', 'Pure Clean', 'Metal Riff'];
     this.presets = Array.from({ length: 100 }, (_, i) => {
       const name = i < 50 ? (userNames[i] || `User${i + 1}`) : `Fact${i - 49}`;
@@ -151,10 +156,12 @@ export class VirtualPedal {
       const now = performance.now();
       if (idx > 0) this.minGap = Math.min(this.minGap, now - this.lastFrameAt);
       this.lastFrameAt = now;
-      if (idx === 0) this.stream = { total, chunks: [] };
+      if (idx === 0) this.stream = { total, chunks: [], flash: payload[0] === 0x11 && (payload[1] === 0x25 || payload[1] === 0x21) };
       if (!this.stream) { this.errors.push('frame di stream senza intestazione'); return; }
       this.stream.chunks[idx] = payload.slice(0, len);
-      this.ack();
+      if (this.stream.flash) this.flashPacketsReceived++;
+      const ackThis = !this.stream.flash || this.flashAck === 'all' || (typeof this.flashAck === 'number' && idx < this.flashAck);
+      if (ackThis) this.ack();
       if (this.stream.chunks.filter(Boolean).length === total) {
         const data = Uint8Array.from(this.stream.chunks.flat());
         this.stream = null;

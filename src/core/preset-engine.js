@@ -1585,13 +1585,7 @@ export class PresetEngine {
 
     connection.log(`Inizio scrittura Flash: User IR ${slotIndex + 1} ("${name}") - ${total} pacchetti SysEx...`, 'info');
 
-    for (let i = 0; i < total; i++) {
-      await connection.writeRawBytes(packets[i]);
-      const percent = Math.round(((i + 1) / total) * 100);
-      onProgress(i + 1, total, percent);
-      // Transmission rate throttle (8ms safe interval aligns with captured official Sonicake engine rate)
-      await new Promise(r => setTimeout(r, 8));
-    }
+    await this.streamFlashPackets(packets, onProgress);
 
     // Wait for flash sector write completion (as observed in hardware capture: ~1.2s)
     await new Promise(r => setTimeout(r, 1200));
@@ -1606,6 +1600,36 @@ export class PresetEngine {
       : `User IR ${slotIndex + 1} scritto, ma la pedaliera non ha ancora confermato il nome: verifica con una sincronizzazione.`,
       committed ? 'success' : 'warning');
     return true;
+  }
+
+  /**
+   * Send the packets of a Clone AMP / User IR flash. The pedal ACKs every packet with [14 08 00]
+   * (captured on USB): each packet waits for its ACK (max 1 s), never less than 8 ms apart
+   * (DMA FIFO limit). A missing ACK mid-stream stops the write with an error instead of reporting
+   * a false success. A pedal that does not ACK even the first packet gets the fixed 8 ms pacing.
+   */
+  async streamFlashPackets(packets, onProgress = () => {}) {
+    const MIN_GAP_MS = 8;
+    const total = packets.length;
+    let waitAck = true;
+    let lastSent = -Infinity;
+    for (let i = 0; i < total; i++) {
+      const pause = MIN_GAP_MS - (performance.now() - lastSent);
+      if (pause > 0) await new Promise(r => setTimeout(r, pause));
+      const ack = waitAck
+        ? this.waitForFrame((f) => (f.payload[0] === 0x14 && f.payload[1] === 0x08 ? true : null), 1000, `conferma pacchetto ${i + 1}`).catch(() => false)
+        : null;
+      lastSent = performance.now();
+      await connection.writeRawBytes(packets[i]);
+      if (waitAck && !(await ack)) {
+        if (i > 0) {
+          throw new Error(`La pedaliera non ha confermato il pacchetto ${i + 1}/${total}: scrittura interrotta. Riprova.`);
+        }
+        waitAck = false;
+        connection.log('La pedaliera non conferma i pacchetti: invio a ritmo fisso (8 ms).', 'warning');
+      }
+      onProgress(i + 1, total, Math.round(((i + 1) / total) * 100));
+    }
   }
 
   /**
@@ -1662,13 +1686,7 @@ export class PresetEngine {
       await new Promise(r => setTimeout(r, 60));
     } catch (_) {}
 
-    for (let i = 0; i < total; i++) {
-      await connection.writeRawBytes(packets[i]);
-      const percent = Math.round(((i + 1) / total) * 100);
-      onProgress(i + 1, total, percent);
-      // Safe 8ms interval prevents DMA FIFO overrun on pedal MCU
-      await new Promise(r => setTimeout(r, 8));
-    }
+    await this.streamFlashPackets(packets, onProgress);
 
     // Wait for flash sector write completion (as observed in hardware capture: ~1.2s)
     await new Promise(r => setTimeout(r, 1200));

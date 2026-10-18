@@ -162,6 +162,7 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
 3. **Streaming SysEx e throttle DMA**:
    - Pacchetti da **19 byte** (146 per Clone AMP, 112 per IR), ognuno incapsulato in SysEx con CRC8 SMBus PEC (polinomio `0x07`).
    - Ritardo minimo di **8 ms** tra un pacchetto e l'altro.
+   - La pedaliera conferma ogni pacchetto del flash con `14 08 00` (catturato su USB): `streamFlashPackets()` attende la conferma (max 1 s) prima del pacchetto successivo. Se manca già al primo pacchetto torna al ritmo fisso di 8 ms; se manca a metà la scrittura si interrompe con un errore. Nessuna ritrasmissione: verificata solo per l'import dei preset. *(Introdotto il 2026-10-18, da confermare sulla pedaliera via USB e BLE.)*
    - Dopo l'ultimo pacchetto attendi **1,2 s** prima di qualsiasi altro comando (scrittura del settore SPI Flash).
 4. **Export / Import nativo dei preset (usato per lo swap)**: verificato sul traffico USB di Sonicake Manager, `buildStreamingFlashPackets()` lo riproduce 27/27 byte per byte.
    - Richiesta export: un frame con payload `12 4F <slot0> 00 00 00` (`slot0` 0-based, P02 = `01`).

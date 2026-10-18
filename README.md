@@ -93,7 +93,7 @@ L'applicazione utilizza le API native del W3C **Web MIDI** e **Web Bluetooth**.
 ### Installazione ed Esecuzione
 ```bash
 # 1. Clona il repository
-git clone https://github.com/TUO-USERNAME/sonicake-preset-manager.git
+git clone https://github.com/andreaalcaini/sonicake-preset-manager.git
 
 # 2. Entra nella cartella di progetto
 cd sonicake-preset-manager
@@ -132,25 +132,17 @@ La cartella `dist/` conterrà i file pronti per essere distribuiti su GitHub Pag
 
 ---
 
-## 📦 Come Pubblicare il Progetto su GitHub
+## 📦 Deploy in Produzione
 
-Per caricare il codice sul tuo account GitHub personale o dell'organizzazione:
+Ogni push su `master` compila con GitHub Actions l'immagine Docker multi-arch (`linux/amd64` + `linux/arm64`) con sito e compiler NAM, e la pubblica su `ghcr.io/andreaalcaini/sonicake-preset-manager`.
+
+Sul server bastano `docker-compose.yml`, un eventuale `.env` (vedi `.env.example`) e i file vendor Sonicake in `data/vendor/` (vedi [server/README.md](server/README.md)):
 
 ```bash
-# 1. Inizializza git (se non già presente) e aggiungi i file
-git init
-git add .
-git commit -m "feat: Sonicake Studio Preset Manager v1.0"
-
-# 2. Imposta il branch principale
-git branch -M main
-
-# 3. Collega il tuo repository remoto su GitHub
-git remote add origin https://github.com/TUO-USERNAME/sonicake-preset-manager.git
-
-# 4. Effettua il push
-git push -u origin main
+docker compose pull && docker compose up -d
 ```
+
+Il sito è esposto tramite Cloudflare Tunnel (rete `cloudflared-mesh`, alias `sonicake.mesh`). Architettura, porte e variabili: [STRUCTURE.md](STRUCTURE.md). Linee guida per agenti AI e sviluppatori: [AGENTS.md](AGENTS.md).
 
 ---
 

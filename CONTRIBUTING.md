@@ -14,7 +14,7 @@ This project is an open-source, community-driven desktop editor designed to prov
 
 2. **Clone the repository:**
    ```bash
-   git clone https://github.com/your-username/sonicake-preset-manager.git
+   git clone https://github.com/andreaalcaini/sonicake-preset-manager.git
    cd sonicake-preset-manager
    ```
 

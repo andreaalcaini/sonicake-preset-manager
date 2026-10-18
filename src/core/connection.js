@@ -21,6 +21,7 @@ export class SonicakeConnection {
     this.bleServer = null;
     this.bleCharacteristic = null;
     this.bleBuffer = []; // bytes of the SysEx frame being received over BLE
+    this.bleWatchedDevices = new WeakSet();
     this.SERVICE_UUID = '03b80e5a-ede8-4b33-a751-6ce34ec4c700';
     this.CHARACTERISTIC_UUID = '7772e5db-3868-4112-a1a9-f2669d106bf3';
 
@@ -132,6 +133,7 @@ export class SonicakeConnection {
       this.midiInput.onmidimessage = (event) => this.handleUsbMidiMessage(event);
 
       this.isConnected = true;
+      this.rememberConnection({ type: 'usb', name: selected.name });
       this.log(`Connected via USB MIDI: ${selected.name}`, 'success');
       this.notifyStatus();
       return true;
@@ -297,35 +299,114 @@ export class SonicakeConnection {
         });
       }
 
-      this.log(`Connecting to BLE device: ${this.bleDevice.name}...`, 'info');
-
-      this.bleDevice.addEventListener('gattserverdisconnected', () => {
-        this.log('Bluetooth device disconnected', 'warning');
-        this.disconnect();
-      });
-
-      this.bleServer = await this.bleDevice.gatt.connect();
-      const service = await this.bleServer.getPrimaryService(this.SERVICE_UUID);
-      this.bleCharacteristic = await service.getCharacteristic(this.CHARACTERISTIC_UUID);
-
-      this.bleBuffer = [];
-      await this.bleCharacteristic.startNotifications();
-      this.bleCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
-        const val = event.target.value;
-        if (!val) return;
-        this.handleBleNotification(new Uint8Array(val.buffer, val.byteOffset, val.byteLength));
-      });
-
-      this.connectionType = 'ble';
-      this.deviceName = this.bleDevice.name || 'Sonicake BLE';
-      this.isConnected = true;
-      this.log(`Connected via Bluetooth: ${this.deviceName}`, 'success');
-      this.notifyStatus();
+      await this.connectBleDevice(this.bleDevice);
       return true;
     } catch (err) {
       this.log(`Bluetooth connection failed: ${err.message}`, 'error');
       throw err;
     }
+  }
+
+  /** Open GATT on an already chosen / previously authorized Bluetooth device */
+  async connectBleDevice(device) {
+    this.bleDevice = device;
+    this.log(`Connecting to BLE device: ${device.name}...`, 'info');
+
+    // One disconnect listener per device, even when it is reconnected several times
+    if (!this.bleWatchedDevices.has(device)) {
+      this.bleWatchedDevices.add(device);
+      device.addEventListener('gattserverdisconnected', () => {
+        if (this.bleDevice !== device || !this.isConnected) return;
+        this.log('Bluetooth device disconnected', 'warning');
+        this.disconnect();
+      });
+    }
+
+    this.bleServer = await device.gatt.connect();
+    const service = await this.bleServer.getPrimaryService(this.SERVICE_UUID);
+    this.bleCharacteristic = await service.getCharacteristic(this.CHARACTERISTIC_UUID);
+
+    this.bleBuffer = [];
+    await this.bleCharacteristic.startNotifications();
+    this.bleCharacteristic.addEventListener('characteristicvaluechanged', (event) => {
+      const val = event.target.value;
+      if (!val) return;
+      this.handleBleNotification(new Uint8Array(val.buffer, val.byteOffset, val.byteLength));
+    });
+
+    this.connectionType = 'ble';
+    this.deviceName = device.name || 'Sonicake BLE';
+    this.isConnected = true;
+    this.rememberConnection({ type: 'ble', name: this.deviceName, bleId: device.id });
+    this.log(`Connected via Bluetooth: ${this.deviceName}`, 'success');
+    this.notifyStatus();
+    return true;
+  }
+
+  // --- Reconnect after a page reload ---
+  // The last successful connection is remembered until the user presses "Disconnetti".
+
+  rememberConnection(info) {
+    try { localStorage.setItem('sonicake_last_connection', JSON.stringify(info)); } catch (_) {}
+  }
+
+  forgetConnection() {
+    try { localStorage.removeItem('sonicake_last_connection'); } catch (_) {}
+  }
+
+  /**
+   * Single, silent attempt to reconnect the pedal used before the reload. USB reconnects only
+   * when MIDI permission is already granted (no prompt). Bluetooth needs getDevices() (devices
+   * this site was allowed to use) and waits at most 10 s for the pedal to advertise.
+   * Never loops or retries. Resolves true when connected.
+   */
+  async restoreLastConnection() {
+    let last = null;
+    try { last = JSON.parse(localStorage.getItem('sonicake_last_connection') || 'null'); } catch (_) {}
+    if (!last || this.isConnected) return false;
+
+    try {
+      if (last.type === 'usb') {
+        if (!navigator.requestMIDIAccess || !navigator.permissions?.query) return false;
+        const permission = await navigator.permissions.query({ name: 'midi', sysex: true }).catch(() => null);
+        if (permission?.state !== 'granted') return false;
+        this.log('Riconnessione alla pedaliera USB usata prima del ricaricamento...', 'info');
+        const pairs = await this.getAvailableUsbDevices();
+        const match = pairs.find(p => p.name === last.name) || pairs.find(p => /smart box|sonicake|sonic|qme/i.test(p.name));
+        if (!match) {
+          this.log('Pedaliera USB non trovata: collegala e premi USB.', 'warning');
+          return false;
+        }
+        return await this.connectUsb(match);
+      }
+
+      if (last.type === 'ble') {
+        if (!navigator.bluetooth?.getDevices) {
+          this.log('Il browser non permette di riconnettere il Bluetooth da solo: premi BLE per ricollegare la pedaliera.', 'info');
+          return false;
+        }
+        const devices = await navigator.bluetooth.getDevices();
+        const device = devices.find(d => d.id === last.bleId) || devices.find(d => d.name === last.name);
+        if (!device) return false;
+        this.log(`Riconnessione Bluetooth a ${device.name || last.name}...`, 'info');
+        try {
+          return await this.connectBleDevice(device);
+        } catch (_) {
+          if (!device.watchAdvertisements) throw new Error('pedaliera non raggiungibile');
+          // Not in range yet: wait once for its advertisement, then connect
+          const abort = new AbortController();
+          await new Promise((resolve, reject) => {
+            const timer = setTimeout(() => { abort.abort(); reject(new Error('pedaliera non trovata entro 10 s')); }, 10000);
+            device.addEventListener('advertisementreceived', () => { clearTimeout(timer); abort.abort(); resolve(); }, { once: true });
+            device.watchAdvertisements({ signal: abort.signal }).catch((err) => { clearTimeout(timer); reject(err); });
+          });
+          return await this.connectBleDevice(device);
+        }
+      }
+    } catch (err) {
+      this.log(`Riconnessione automatica non riuscita (${err.message}): premi USB o BLE.`, 'warning');
+    }
+    return false;
   }
 
   /**
@@ -438,9 +519,12 @@ export class SonicakeConnection {
   }
 
   /**
-   * Disconnect current active device
+   * Disconnect current active device.
+   * `forget: true` (the "Disconnetti" buttons) also stops the automatic reconnect after a
+   * reload; page unload and a pedal switched off keep it.
    */
-  disconnect() {
+  disconnect({ forget = false } = {}) {
+    if (forget) this.forgetConnection();
     if (this.connectionType === 'usb' && this.midiInput) {
       this.midiInput.onmidimessage = null;
       try { this.midiInput.close?.(); } catch (e) {}

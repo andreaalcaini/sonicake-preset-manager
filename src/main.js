@@ -119,12 +119,12 @@ class App {
     });
 
     btnDisconnect.addEventListener('click', () => {
-      connection.disconnect();
+      connection.disconnect({ forget: true });
     });
 
     const connBanner = document.getElementById('connBanner');
     const btnDisconnectMenu = document.getElementById('btnDisconnectMenu');
-    btnDisconnectMenu?.addEventListener('click', () => connection.disconnect());
+    btnDisconnectMenu?.addEventListener('click', () => connection.disconnect({ forget: true }));
 
     connection.onStatusChange((status) => {
       connLed.classList.toggle('connected', status.isConnected);
@@ -139,6 +139,10 @@ class App {
         setTimeout(() => presetEngine.runInitialSyncSequence(), 300);
       }
     });
+
+    // Reconnect the pedal that was connected before the page was reloaded (one silent attempt),
+    // once the whole UI (log console included) is set up
+    setTimeout(() => connection.restoreLastConnection(), 0);
 
     // 5. Tool Action Buttons
     document.getElementById('btnSyncHardware').addEventListener('click', () => {

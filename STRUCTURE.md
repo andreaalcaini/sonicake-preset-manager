@@ -29,7 +29,7 @@ sonicake-preset-manager/
 │   ├── config/
 │   │   └── features.js         # Feature flag (funzioni nascoste nel sito pubblicato)
 │   ├── core/
-│   │   ├── connection.js       # Trasporto MIDI & BLE, invio/ricezione SysEx, fix offset DataView Android
+│   │   ├── connection.js       # Trasporto MIDI & BLE, invio/ricezione SysEx, riconnessione dopo il ricaricamento
 │   │   ├── protocol.js         # Framing SysEx, CRC16 (VTSI), CRC8 SMBus PEC (0x07), convertitore Low Model
 │   │   ├── preset-engine.js    # State machine 50 preset, flash streaming (Clone AMP & IR), export/import, swap
 │   │   └── prst-parser.js      # Parser file .prst
@@ -38,6 +38,7 @@ sonicake-preset-manager/
 │   │   ├── ModuleEditor.js     # Editor effetti, toggle Factory/Clone, sostituzione Tone3000
 │   │   ├── SignalChain.js      # Routing e ordine della catena a 9 moduli
 │   │   ├── PresetList.js       # Gestione 50 preset (U01-U50)
+│   │   ├── PresetDropdown.js   # Menu a tendina della barra preset (desktop): ricerca, Utente/Fabbrica
 │   │   ├── PresetPickerDialog.js
 │   │   ├── SlotTransferModal.js
 │   │   └── ...                 # Tuner, Drums, Setlist, Share, Export/Import, Stage Mode, Help

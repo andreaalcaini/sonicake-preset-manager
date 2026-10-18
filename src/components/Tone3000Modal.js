@@ -626,7 +626,7 @@ export class Tone3000Modal {
 
         const selectedVar = this.selectedVariations[toneId];
         if (!selectedVar?.url) {
-          alert('Questa cattura non ha ancora un file scaricabile: attendi il caricamento dei file o scegline un'altra.');
+          alert("Questa cattura non ha ancora un file scaricabile: attendi il caricamento dei file o scegline un'altra.");
           return;
         }
 
@@ -694,7 +694,7 @@ export class Tone3000Modal {
 
         const selectedVar = this.selectedVariations[toneId];
         if (!selectedVar?.url) {
-          alert('Questa cattura non ha ancora un file scaricabile: attendi il caricamento dei file o scegline un'altra.');
+          alert("Questa cattura non ha ancora un file scaricabile: attendi il caricamento dei file o scegline un'altra.");
           return;
         }
 

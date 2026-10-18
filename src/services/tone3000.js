@@ -6,12 +6,18 @@
 const TONE3000_SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imd6eWJpdW9weGtkeGJ5dG5vamRzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzgwODIxNjUsImV4cCI6MjA1MzY1ODE2NX0.Gq66BJXjtLsqP2nAGXm9Xb9PAjoeZalWUj66K4nmVSU';
 const BASE_URL = 'https://api.tone3000.com/rest/v1';
 
-// Card fields: author (users), number of files (models), downloads and comments counters
+// Card fields and author (users). The counters are read in a second request (COUNTS_SELECT):
+// combined with a title search, models(count) exceeds Tone3000's statement timeout (HTTP 500)
 const TONE_SELECT = [
   'id', 'title', 'description', 'gear', 'images', 'platform', 'created_at', 'published_at', 'token',
-  'users!tones_user_id_fkey(username,display_name,avatar_url,is_verified)',
-  'models(count)', 'downloads(count)', 'comments(count)'
+  'users!tones_user_id_fkey(username,display_name,avatar_url,is_verified)'
 ].join(',');
+const COUNTS_SELECT = 'id,models(count),downloads(count),comments(count)';
+const API_HEADERS = {
+  'apikey': TONE3000_SUPABASE_KEY,
+  'Authorization': `Bearer ${TONE3000_SUPABASE_KEY}`,
+  'Accept': 'application/json'
+};
 
 export const GEAR_LABELS = {
   'amp': 'Amp Capture',
@@ -48,21 +54,17 @@ export class Tone3000Service {
         url += '&platform=in.(nam,ir)';
       }
 
-      const response = await fetch(url, {
-        headers: {
-          'apikey': TONE3000_SUPABASE_KEY,
-          'Authorization': `Bearer ${TONE3000_SUPABASE_KEY}`,
-          'Accept': 'application/json'
-        }
-      });
+      const response = await fetch(url, { headers: API_HEADERS });
 
       if (!response.ok) {
         throw new Error(`Tone3000 API HTTP ${response.status}`);
       }
 
       const data = await response.json();
+      const counts = await this.fetchToneCounts(data.map(item => item.id));
       return data.map(item => {
         const author = item.users || null;
+        const c = counts.get(item.id) || {};
         return {
           id: item.id,
           title: item.title,
@@ -81,15 +83,31 @@ export class Tone3000Service {
             avatar: author.avatar_url || null,
             verified: !!author.is_verified
           } : null,
-          downloads: countOf(item.downloads),
-          filesCount: countOf(item.models),
-          comments: countOf(item.comments)
+          downloads: countOf(c.downloads),
+          filesCount: countOf(c.models),
+          comments: countOf(c.comments)
         };
       });
     } catch (err) {
       console.warn('Tone3000 online search failed, falling back to curated library:', err);
       return this.getCuratedTones(query, gear);
     }
+  }
+
+  /** Files / downloads / comments counters for the given tone ids (empty map if unavailable) */
+  static async fetchToneCounts(ids) {
+    const counts = new Map();
+    if (!ids.length) return counts;
+    try {
+      const url = `${BASE_URL}/tones?select=${COUNTS_SELECT}&id=in.(${ids.join(',')})`;
+      const response = await fetch(url, { headers: API_HEADERS });
+      if (response.ok) {
+        for (const row of await response.json()) counts.set(row.id, row);
+      }
+    } catch (err) {
+      console.warn('Tone3000 counters unavailable:', err);
+    }
+    return counts;
   }
 
   /**

@@ -131,7 +131,7 @@ export function runEngineScenario(transport) {
       assert.equal(progress, 146);
       assert.equal(ascii(fl.data.subarray(74, 78)), 'VTSI');
       assert.equal(fl.data[78] | (fl.data[79] << 8), 2696);
-      assert.ok(pedal.minGap >= 7.5, `pausa minima ${pedal.minGap.toFixed(1)} ms`);
+      assert.ok(pedal.minGap >= 7.9, `pausa minima ${pedal.minGap.toFixed(1)} ms`);
       assert.equal(pedal.clone[3].name, 'My Marshall 59');
       assert.equal(E.cloneSlotNames[3], 'My Marshall 59');
 

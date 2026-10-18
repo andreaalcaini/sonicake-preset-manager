@@ -23,7 +23,7 @@ describe('flash con le conferme della pedaliera', () => {
     const t0 = performance.now();
     await E.streamFlashPackets(P.buildStreamingFlashPackets(P.buildIRPayload(0, 'Ack Cab', new Float32Array(512))));
     assert.equal(pedal.flashPacketsReceived, 112);
-    assert.ok(pedal.minGap >= 7.5, `pausa minima ${pedal.minGap.toFixed(1)} ms`);
+    assert.ok(pedal.minGap >= 7.9, `pausa minima ${pedal.minGap.toFixed(1)} ms`);
     assert.ok(performance.now() - t0 < 5000);
   });
 
@@ -33,7 +33,7 @@ describe('flash con le conferme della pedaliera', () => {
     logs.length = 0;
     await E.flashCloneToPedal(1, P.convertCLOToLowModel(fixture('test_low.clo')), 'No Ack Amp');
     assert.equal(pedal.flashes.at(-1)?.total, 146);
-    assert.ok(pedal.minGap >= 7.5, `pausa minima ${pedal.minGap.toFixed(1)} ms`);
+    assert.ok(pedal.minGap >= 7.9, `pausa minima ${pedal.minGap.toFixed(1)} ms`);
     assert.ok(logs.some(l => /ritmo fisso/.test(l)));
   });
 

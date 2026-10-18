@@ -1621,8 +1621,11 @@ export class PresetEngine {
     let waitAck = true;
     let lastSent = -Infinity;
     for (let i = 0; i < total; i++) {
-      const pause = MIN_GAP_MS - (performance.now() - lastSent);
-      if (pause > 0) await new Promise(r => setTimeout(r, pause));
+      // Never closer than 8 ms: re-check after the timer, which can fire slightly early
+      let elapsed;
+      while ((elapsed = performance.now() - lastSent) < MIN_GAP_MS) {
+        await new Promise(r => setTimeout(r, Math.ceil(MIN_GAP_MS - elapsed)));
+      }
       const ack = waitAck
         ? this.waitForFrame((f) => (f.payload[0] === 0x14 && f.payload[1] === 0x08 ? true : null), 1000, `conferma pacchetto ${i + 1}`).catch(() => false)
         : null;

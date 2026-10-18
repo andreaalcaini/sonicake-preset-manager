@@ -10,6 +10,8 @@ import { SignalChain } from './components/SignalChain.js';
 import { ModuleEditor } from './components/ModuleEditor.js';
 import { PresetList } from './components/PresetList.js';
 import { PresetDropdown } from './components/PresetDropdown.js';
+import { showUpdateBanner } from './components/UpdateBanner.js';
+import { startUpdateChecks } from './services/update-check.js';
 import { Tone3000Modal } from './components/Tone3000Modal.js';
 import { DrumMachineModal } from './components/DrumMachineModal.js';
 import { TunerModal } from './components/TunerModal.js';
@@ -67,6 +69,7 @@ class App {
     this.moduleEditor = moduleEditor;
     this.presetList = presetList;
     this.tone3000Modal = tone3000Modal;
+    this.presetEngine = presetEngine; // (debug console and interface tests)
     this.drumModal = drumModal;
     this.tunerModal = tunerModal;
     this.saveModal = saveModal;
@@ -146,6 +149,9 @@ class App {
     // Reconnect the pedal that was connected before the page was reloaded (one silent attempt),
     // once the whole UI (log console included) is set up
     setTimeout(() => connection.restoreLastConnection(), 0);
+
+    // Tell the user when a newer version of the site has been published (published site only)
+    startUpdateChecks(showUpdateBanner);
 
     // 5. Tool Action Buttons
     document.getElementById('btnSyncHardware').addEventListener('click', () => {

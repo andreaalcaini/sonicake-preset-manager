@@ -109,6 +109,7 @@ export class PresetEngine {
     this.namesAnswer = null; // payload of the [12 40] preset names answer
     this.hardwareSlotNames = { Clone: [], IR: [] }; // last slot names reported by the pedal
     this.pendingSlotWrite = null; // { type, idx, name } while a flashed slot is being committed
+    this.pedalWrites = 0; // Clone AMP / IR writes in progress (see isBusyWithPedal)
     this.isWaitingForPresetDump = false;
     this.isWaitingForPresetNumber = false;
     this.dumpPackets = [];
@@ -1585,20 +1586,26 @@ export class PresetEngine {
 
     connection.log(`Inizio scrittura Flash: User IR ${slotIndex + 1} ("${name}") - ${total} pacchetti SysEx...`, 'info');
 
-    await this.streamFlashPackets(packets, onProgress);
+    // Busy from the first packet to the commit check: an app update must not reload meanwhile
+    this.pedalWrites = (this.pedalWrites || 0) + 1;
+    try {
+      await this.streamFlashPackets(packets, onProgress);
 
-    // Wait for flash sector write completion (as observed in hardware capture: ~1.2s)
-    await new Promise(r => setTimeout(r, 1200));
+      // Wait for flash sector write completion (as observed in hardware capture: ~1.2s)
+      await new Promise(r => setTimeout(r, 1200));
 
-    // Update local name and persist metadata
-    this.replaceUserIR(slotIndex, name, false);
+      // Update local name and persist metadata
+      this.replaceUserIR(slotIndex, name, false);
 
-    // The pedal keeps committing for a while: wait until it reports the new slot name
-    const committed = await this.waitForSlotCommit('IR', slotIndex, name);
-    connection.log(committed
-      ? `Scrittura completata con successo! User IR ${slotIndex + 1} aggiornato in Flash.`
-      : `User IR ${slotIndex + 1} scritto, ma la pedaliera non ha ancora confermato il nome: verifica con una sincronizzazione.`,
-      committed ? 'success' : 'warning');
+      // The pedal keeps committing for a while: wait until it reports the new slot name
+      const committed = await this.waitForSlotCommit('IR', slotIndex, name);
+      connection.log(committed
+        ? `Scrittura completata con successo! User IR ${slotIndex + 1} aggiornato in Flash.`
+        : `User IR ${slotIndex + 1} scritto, ma la pedaliera non ha ancora confermato il nome: verifica con una sincronizzazione.`,
+        committed ? 'success' : 'warning');
+    } finally {
+      this.pedalWrites--;
+    }
     return true;
   }
 
@@ -1630,6 +1637,11 @@ export class PresetEngine {
       }
       onProgress(i + 1, total, Math.round(((i + 1) / total) * 100));
     }
+  }
+
+  /** True while the pedal is being written (Clone AMP / IR flash, preset import / swap / export) */
+  isBusyWithPedal() {
+    return (this.pedalWrites || 0) > 0 || !!this.rawTransferActive;
   }
 
   /**
@@ -1686,20 +1698,26 @@ export class PresetEngine {
       await new Promise(r => setTimeout(r, 60));
     } catch (_) {}
 
-    await this.streamFlashPackets(packets, onProgress);
+    // Busy from the first packet to the commit check: an app update must not reload meanwhile
+    this.pedalWrites = (this.pedalWrites || 0) + 1;
+    try {
+      await this.streamFlashPackets(packets, onProgress);
 
-    // Wait for flash sector write completion (as observed in hardware capture: ~1.2s)
-    await new Promise(r => setTimeout(r, 1200));
+      // Wait for flash sector write completion (as observed in hardware capture: ~1.2s)
+      await new Promise(r => setTimeout(r, 1200));
 
-    // Update local name and persist metadata
-    this.replaceCloneProfile(slotIndex, name, false);
+      // Update local name and persist metadata
+      this.replaceCloneProfile(slotIndex, name, false);
 
-    // The pedal keeps committing for a while: wait until it reports the new slot name
-    const committed = await this.waitForSlotCommit('Clone', slotIndex, name);
-    connection.log(committed
-      ? `Scrittura completata con successo! Clone AMP ${slotIndex + 1} memorizzato in Flash (${total} pacchetti).`
-      : `Clone AMP ${slotIndex + 1} scritto, ma la pedaliera non ha ancora confermato il nome: verifica con una sincronizzazione.`,
-      committed ? 'success' : 'warning');
+      // The pedal keeps committing for a while: wait until it reports the new slot name
+      const committed = await this.waitForSlotCommit('Clone', slotIndex, name);
+      connection.log(committed
+        ? `Scrittura completata con successo! Clone AMP ${slotIndex + 1} memorizzato in Flash (${total} pacchetti).`
+        : `Clone AMP ${slotIndex + 1} scritto, ma la pedaliera non ha ancora confermato il nome: verifica con una sincronizzazione.`,
+        committed ? 'success' : 'warning');
+    } finally {
+      this.pedalWrites--;
+    }
     return true;
   }
 

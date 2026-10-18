@@ -39,17 +39,20 @@ sonicake-preset-manager/
 │   │   ├── SignalChain.js      # Routing e ordine della catena a 9 moduli
 │   │   ├── PresetList.js       # Gestione 50 preset (U01-U50)
 │   │   ├── PresetDropdown.js   # Menu a tendina della barra preset (desktop): ricerca, Utente/Fabbrica
+│   │   ├── UpdateBanner.js     # Barra "aggiornamento disponibile" (non ricarica durante una scrittura)
+│   │   ├── ui-feedback.js      # Avvisi (notify), dialog di testo (askText) e conferma (askConfirm)
 │   │   ├── PresetPickerDialog.js
 │   │   ├── SlotTransferModal.js
 │   │   └── ...                 # Tuner, Drums, Setlist, Share, Export/Import, Stage Mode, Help
 │   ├── data/                   # Librerie comandi/moduli, lookup EQ, pattern batteria
 │   ├── services/
 │   │   ├── compiler-bridge.js  # Client del compiler (/api sulla stessa origine, NAM → Low Model 2.696 byte)
-│   │   └── tone3000.js         # Client REST Supabase di Tone3000
+│   │   ├── tone3000.js         # Client REST Supabase di Tone3000
+│   │   └── update-check.js     # Confronta la versione compilata con /version.json pubblicato
 │   ├── styles/                 # main.css, soniclink.css, tone3000.css, knobs.css, rack.css, drums-tuner.css
 │   └── utils/
 │       └── bundle-encoder.js   # Codifica link/bundle di condivisione
-├── public/                     # Asset statici, manifest PWA, service worker
+├── public/                     # Asset statici, manifest PWA, service worker (solo file statici in cache)
 ├── server/
 │   ├── server.py               # Flask: API compiler (+ sito statico se STATIC_DIR è impostata)
 │   ├── requirements.txt
@@ -160,6 +163,12 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 | `SONICAKE_NAM_INPUT_WAV` | auto (`/app/data/vendor/nam_input_wav.wav`) | WAV di eccitazione |
 | `NAM2CLO_CACHE_DIR` | — (`/tmp`) | Directory scratch di JUCE (letta da `juce_android_shim.cpp`) |
 | `NAM2CLO_WORKERS` / `NAM2CLO_TIMEOUT` | `2` / `180` | Vedi sopra |
+
+### Build del sito
+
+| Variabile | Default | Descrizione |
+|---|---|---|
+| `APP_VERSION` | `build-<data ISO>` | Versione compilata nel sito e scritta in `dist/version.json`. La CI passa lo SHA del commit (build arg del `Dockerfile`). Una pagina aperta legge `/version.json` all'avvio, ogni 5 minuti e quando torna visibile: se è diversa mostra "È disponibile un aggiornamento". Il service worker non mette mai in cache `/version.json`, `/api` e le richieste ad altri domini |
 | `SONICAKE_LIB_PATH` | — | Percorso alternativo di `5868USB.dll` (solo Windows) |
 | `MODEL_URL_HOSTS` | `api.tone3000.com` | Host (separati da virgola) da cui `/api/convert-nam` può scaricare modelli: solo `https`, niente redirect |
 | `MAX_MODEL_MB` | `25` | Dimensione massima di un modello scaricato o caricato (oltre: HTTP 413) |

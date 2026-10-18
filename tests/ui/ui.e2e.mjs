@@ -28,7 +28,7 @@ const MODELS = {
   9001: [{ id: 1, name: 'JCM800 Lead', tone_id: 9001, size: 'standard', model_url: 'https://api.tone3000.com/storage/v1/object/public/models/a.nam' }],
   9002: [] // a tone without downloadable files
 };
-const network = { failSearch: false };
+const network = { failSearch: false, publishedVersion: null };
 
 function mockNetwork(page) {
   return page.on('request', (req) => {
@@ -53,6 +53,8 @@ function mockNetwork(page) {
       return req.respond({ status: 404, body: '' });
     }
     if (url.pathname === '/api/health') return json({ status: 'ok', compiler_available: true, compiler_backend: 'nam2clo' });
+    // A newer build published on the server (otherwise the real version.json of this build)
+    if (url.pathname === '/version.json' && network.publishedVersion) return json({ version: network.publishedVersion });
     if (url.hostname !== 'localhost' && url.hostname !== '127.0.0.1') return req.abort();
     return req.continue();
   });
@@ -428,6 +430,48 @@ describe('riconnessione dopo il ricaricamento', () => {
     assert.equal(s.connected, false);
     assert.equal(s.calls.gattConnect, 0);
     assert.equal(s.calls.bleGetDevices, 1);
+  });
+});
+
+describe('avviso di aggiornamento', () => {
+  const banner = () => page.$('#slUpdateBanner');
+
+  it('nessun avviso quando la versione pubblicata è questa', async () => {
+    network.publishedVersion = null;
+    await load({}, null);
+    assert.equal(await banner(), null);
+  });
+
+  it('nuova versione pubblicata: compare l’avviso; "Più tardi" lo chiude', async () => {
+    network.publishedVersion = 'build-newer';
+    await load({}, null);
+    assert.ok(await banner(), 'avviso non mostrato');
+    const text = await page.$eval('#slUpdateBanner', e => e.textContent);
+    assert.match(text, /aggiornamento/i);
+    await page.click('#slUpdateBanner .btn-update-later');
+    assert.equal(await banner(), null);
+  });
+
+  it('"Aggiorna" non ricarica durante una scrittura sulla pedaliera, poi ricarica', async () => {
+    network.publishedVersion = 'build-newer-2';
+    await load({}, null);
+    assert.ok(await banner(), 'avviso non mostrato');
+    await page.evaluate(() => { window.__beforeReload = true; window.app.presetEngine.pedalWrites = 1; });
+    await page.click('#slUpdateBanner .btn-update-now');
+    await sleep(500);
+    const blocked = await page.evaluate(() => ({
+      stillHere: window.__beforeReload === true,
+      toast: [...document.querySelectorAll('.sl-toast')].at(-1)?.textContent || ''
+    }));
+    assert.ok(blocked.stillHere, 'ha ricaricato durante la scrittura');
+    assert.match(blocked.toast, /Scrittura sulla pedaliera in corso/);
+    await page.evaluate(() => { window.app.presetEngine.pedalWrites = 0; });
+    await Promise.all([
+      page.waitForNavigation({ waitUntil: 'networkidle0' }),
+      page.click('#slUpdateBanner .btn-update-now')
+    ]);
+    assert.equal(await page.evaluate(() => window.__beforeReload), undefined, 'la pagina non è stata ricaricata');
+    network.publishedVersion = null;
   });
 });
 

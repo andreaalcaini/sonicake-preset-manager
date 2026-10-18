@@ -1,9 +1,13 @@
 /**
  * Sonicake Studio Preset Manager - Service Worker
  * Enables offline caching and PWA installation for studio & gig environments without internet.
+ *
+ * Only the site's own static files are cached. Live data always comes from the network:
+ * /api (NAM compiler), /version.json (update check) and other origins (Tone3000).
  */
 
-const CACHE_NAME = 'sonicake-studio-v1';
+// v2: v1 also cached API and Tone3000 answers, which could show stale data first
+const CACHE_NAME = 'sonicake-studio-v2';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -31,10 +35,10 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Only handle HTTP/HTTPS GET requests
-  if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
-    return;
-  }
+  const url = new URL(event.request.url);
+  // Only same-origin GET requests for static files; everything else goes straight to the network
+  if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/api/') || url.pathname === '/version.json') return;
 
   // Network first with cache fallback for HTML navigation, stale-while-revalidate for assets
   if (event.request.mode === 'navigate') {

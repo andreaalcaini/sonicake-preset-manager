@@ -90,6 +90,22 @@ body { background-color: var(--sl-bg); }
 .sl-preset-bar[aria-expanded="true"] { background: var(--sl-control-hover); }
 .sl-preset-bar[aria-expanded="true"] .sl-preset-caret { transform: rotate(180deg); }
 
+/* "Update available" bar: above the mobile tab bar / the desktop log console */
+.sl-update-banner {
+  position: fixed;
+  z-index: 9000;
+  left: 12px;
+  right: 12px;
+  bottom: calc(var(--sl-tabbar-h) + env(safe-area-inset-bottom, 0px) + 12px);
+  padding: 14px;
+  background: var(--sl-surface);
+  border: 1px solid rgba(244, 122, 32, 0.55);
+  border-radius: 14px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+}
+@media (min-width: 640px) { .sl-update-banner { left: auto; right: 16px; width: 380px; } }
+@media (min-width: 1024px) { .sl-update-banner { bottom: 48px; } }
+
 /* Preset quick-switch dropdown (desktop, under the preset bar) */
 .sl-preset-dropdown {
   position: fixed;

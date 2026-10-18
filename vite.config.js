@@ -4,10 +4,32 @@ import { fileURLToPath } from 'node:url';
 
 const fromRoot = (p) => fileURLToPath(new URL(p, import.meta.url));
 
+// Build identifier: the commit SHA in CI (APP_VERSION build arg), otherwise the build time.
+// It is compiled into the app and written to dist/version.json: an open page compares the two
+// to tell the user that a newer version has been published.
+const APP_VERSION = process.env.APP_VERSION || `build-${new Date().toISOString()}`;
+
+/** Emit version.json next to index.html */
+const versionFile = () => ({
+  name: 'sonicake-version-file',
+  apply: 'build',
+  generateBundle() {
+    this.emitFile({
+      type: 'asset',
+      fileName: 'version.json',
+      source: JSON.stringify({ version: APP_VERSION, builtAt: new Date().toISOString() })
+    });
+  }
+});
+
 export default defineConfig({
   plugins: [
-    basicSsl()
+    basicSsl(),
+    versionFile()
   ],
+  define: {
+    __APP_VERSION__: JSON.stringify(APP_VERSION)
+  },
   server: {
     host: true, // Exposes server to local network (0.0.0.0)
     port: 5173,

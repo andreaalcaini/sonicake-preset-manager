@@ -21,6 +21,9 @@ FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Build identifier shown to open pages as "update available" (CI passes the commit SHA)
+ARG APP_VERSION=""
+ENV APP_VERSION=${APP_VERSION}
 RUN npm run build
 
 # 3. nam2clo + Android system-library stubs (the NDK ships x86_64 toolchains only;

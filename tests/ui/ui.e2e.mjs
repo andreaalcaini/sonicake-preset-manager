@@ -205,6 +205,33 @@ for (const vp of [{ label: 'desktop', width: 1366, height: 860 }, { label: 'smar
       assert.match(s.emptySelect, /Nessun file scaricabile/);
     });
 
+    it('ricerca Tone3000: la X cancella il testo e ricarica i risultati', async () => {
+      const r = await page.evaluate(async () => {
+        const overlay = document.getElementById('tone3000ModalOverlay');
+        const input = overlay.querySelector('.tone3000-input');
+        const clear = overlay.querySelector('.btn-clear-search');
+        const withText = { value: input.value, visible: !clear.classList.contains('hidden'), size: clear.getBoundingClientRect().width };
+        clear.click();
+        await new Promise(r => setTimeout(r, 1200));
+        const after = {
+          value: input.value,
+          hidden: clear.classList.contains('hidden'),
+          focused: document.activeElement === input,
+          query: window.app.tone3000Modal.searchQuery,
+          tones: window.app.tone3000Modal.tones.length
+        };
+        input.value = 'm';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        after.shownAgain = !clear.classList.contains('hidden');
+        clear.click();
+        await new Promise(r => setTimeout(r, 800));
+        return { withText, after };
+      });
+      assert.equal(r.withText.value, 'marshall');
+      assert.ok(r.withText.visible && r.withText.size >= 44, `X visibile e ≥ 44px (${r.withText.size}px)`);
+      assert.deepEqual(r.after, { value: '', hidden: true, focused: true, query: '', tones: 2, shownAgain: true });
+    });
+
     it('scrittura senza pedaliera: avviso nello stile del sito, chiudibile', async () => {
       const before = dialogs.length;
       await page.evaluate(() => document.querySelector('#tone3000ModalOverlay .btn-flash-tone[data-id="9001"]').click());

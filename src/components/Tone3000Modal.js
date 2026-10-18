@@ -452,7 +452,10 @@ export class Tone3000Modal {
             <circle cx="11" cy="11" r="8"></circle>
             <path d="m21 21-4.35-4.35"></path>
           </svg>
-          <input type="text" class="tone3000-input w-full pl-10 pr-4 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-500 focus:ring-1 focus:ring-orange-500/50 rounded-xl text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 outline-none transition-colors" placeholder="Cerca catture su Tone3000 (es. Marshall, Friedman, Peavey 5150, Fender Twin, Rectifier)..." value="${this.searchQuery}">
+          <input type="text" class="tone3000-input w-full pl-10 pr-12 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-500 focus:ring-1 focus:ring-orange-500/50 rounded-xl text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 outline-none transition-colors" placeholder="Cerca catture su Tone3000 (es. Marshall, Friedman, Peavey 5150, Fender Twin, Rectifier)..." value="${String(this.searchQuery).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">
+          <button type="button" class="btn-clear-search ${this.searchQuery ? '' : 'hidden'} absolute right-0 top-0 h-full w-11 flex items-center justify-center rounded-r-xl text-zinc-400 hover:text-white" title="Cancella la ricerca" aria-label="Cancella la ricerca">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+          </button>
         </div>
 
         <div class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
@@ -1199,13 +1202,24 @@ export class Tone3000Modal {
 
     // Search input with debounce
     const searchInput = this.overlay.querySelector('.tone3000-input');
+    const clearSearch = this.overlay.querySelector('.btn-clear-search');
     if (searchInput) {
       searchInput.addEventListener('input', (e) => {
         clearTimeout(this.debounceTimer);
         this.searchQuery = e.target.value;
+        clearSearch?.classList.toggle('hidden', !this.searchQuery);
         this.debounceTimer = setTimeout(() => this.fetchTones(), 400);
       });
     }
+    // Clear button: empty the search and show the latest captures again right away
+    clearSearch?.addEventListener('click', () => {
+      clearTimeout(this.debounceTimer);
+      this.searchQuery = '';
+      searchInput.value = '';
+      clearSearch.classList.add('hidden');
+      searchInput.focus();
+      this.fetchTones();
+    });
 
     // Gear category filter pills
     this.overlay.querySelectorAll('.gear-pill[data-gear]').forEach(pill => {

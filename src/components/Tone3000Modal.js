@@ -612,8 +612,10 @@ export class Tone3000Modal {
             alert(`Il profilo cassa IR ("${modelName}") non dispone di un file .wav con download diretto.\n\nPuoi caricare un file .wav dal computer o smartphone tramite la scheda "Slot Pedaliera".`);
             return;
           }
+          const irName = await this.askSlotName(modelName, `Slot User IR ${slotIndex + 1}`);
+          if (!irName) return;
           try {
-            this.showFlashProgressModal(`Download IR "${modelName}"`, `Scrittura nello slot User IR ${slotIndex + 1}`);
+            this.showFlashProgressModal(`Download IR "${irName}"`, `Scrittura nello slot User IR ${slotIndex + 1}`);
             const resp = await fetch(modelUrl);
             const arrayBuffer = await resp.arrayBuffer();
             const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
@@ -629,11 +631,11 @@ export class Tone3000Modal {
             const scale = maxVal > 0 ? (0.95 / maxVal) : 1.0;
             for (let i = 0; i < count; i++) samples[i] = channelData[i] * scale;
 
-            await presetEngine.flashIRToPedal(slotIndex, samples, modelName, (curr, tot, pct) => {
+            await presetEngine.flashIRToPedal(slotIndex, samples, irName, (curr, tot, pct) => {
               this.updateFlashProgress(curr, tot, pct);
             });
             await presetEngine.activateIRSlot(slotIndex, true);
-            this.hideFlashProgressModal(`User IR ${slotIndex + 1} ("${modelName}") memorizzato con successo!`);
+            this.hideFlashProgressModal(`User IR ${slotIndex + 1} ("${irName}") memorizzato con successo!`);
             this.render();
           } catch (err) {
             console.error('Flash IR failed:', err);
@@ -696,6 +698,91 @@ export class Tone3000Modal {
         btn.disabled = false;
         this.showDownloadNotice(payload.variationName, slotLabel, extName, false);
       });
+    });
+  }
+
+  /**
+   * Ask the name to store in the pedal slot before a flash. The field starts with the full
+   * capture name (the user shortens it); writing is enabled only within the pedal limit.
+   * Resolves with the cleaned name (printable ASCII, max 14 chars) or null if cancelled.
+   */
+  askSlotName(defaultName, slotLabel) {
+    const MAX = 14;
+    const ascii = (s) => String(s || '').replace(/[^\x20-\x7E]/g, '');
+    return new Promise((resolve) => {
+      const dialog = document.createElement('div');
+      dialog.className = 'fixed inset-0 z-[9999] bg-black/85 backdrop-blur-md flex items-center justify-center p-4';
+      dialog.innerHTML = `
+        <form class="bg-[#18191e] border border-orange-500/40 rounded-2xl p-5 max-w-sm w-full shadow-2xl space-y-4 text-zinc-100 font-sans">
+          <div>
+            <h3 class="text-base font-black text-white">Nome nella pedaliera</h3>
+            <p class="text-xs text-orange-400 font-medium mt-1">${slotLabel}</p>
+          </div>
+          <div class="space-y-1">
+            <div class="relative">
+              <input type="text" autocomplete="off" spellcheck="false" aria-label="Nome nella pedaliera"
+                class="slot-name-input w-full min-h-[44px] pl-3 pr-12 rounded-xl bg-zinc-950 border border-zinc-700 focus:border-orange-500 outline-none text-sm font-mono text-white" />
+              <button type="button" class="btn-clear-name absolute right-0 top-0 h-full w-11 flex items-center justify-center rounded-r-xl text-zinc-400 hover:text-white" title="Cancella tutto il nome" aria-label="Cancella tutto il nome">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+            <div class="flex justify-between gap-3 text-[11px]">
+              <span class="slot-name-hint text-zinc-500">Lettere, numeri e simboli semplici</span>
+              <span class="slot-name-count font-mono font-bold text-zinc-400 shrink-0">0/${MAX}</span>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" class="btn-cancel flex-1 min-h-[44px] rounded-xl border border-zinc-700 text-sm font-semibold text-zinc-300 hover:bg-zinc-800">Annulla</button>
+            <button type="submit" class="btn-write flex-1 min-h-[44px] rounded-xl bg-orange-500 hover:bg-orange-400 disabled:opacity-40 disabled:cursor-not-allowed text-sm font-bold text-zinc-950">Scrivi</button>
+          </div>
+        </form>
+      `;
+      document.body.appendChild(dialog);
+      const input = dialog.querySelector('.slot-name-input');
+      const count = dialog.querySelector('.slot-name-count');
+      const hint = dialog.querySelector('.slot-name-hint');
+      const write = dialog.querySelector('.btn-write');
+      const update = () => {
+        const len = input.value.length;
+        const name = input.value.trim();
+        const over = len - MAX;
+        count.textContent = `${len}/${MAX}`;
+        count.classList.toggle('text-rose-400', over > 0);
+        count.classList.toggle('text-zinc-400', over <= 0);
+        hint.textContent = over > 0
+          ? `Accorcia di ${over} ${over === 1 ? 'lettera' : 'lettere'}`
+          : (name ? 'Lettere, numeri e simboli semplici' : 'Scrivi un nome');
+        hint.classList.toggle('text-rose-400', over > 0);
+        hint.classList.toggle('text-zinc-500', over <= 0);
+        write.disabled = over > 0 || !name;
+      };
+      input.value = ascii(defaultName).trim();
+      update();
+      input.addEventListener('input', () => {
+        const cleaned = ascii(input.value);
+        if (cleaned !== input.value) input.value = cleaned;
+        update();
+      });
+      dialog.querySelector('.btn-clear-name').addEventListener('click', () => {
+        input.value = '';
+        update();
+        input.focus();
+      });
+      const close = (value) => {
+        document.removeEventListener('keydown', onKey);
+        dialog.remove();
+        resolve(value);
+      };
+      const onKey = (e) => { if (e.key === 'Escape') close(null); };
+      document.addEventListener('keydown', onKey);
+      dialog.querySelector('.btn-cancel').addEventListener('click', () => close(null));
+      dialog.querySelector('form').addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (write.disabled) return;
+        close(input.value.trim());
+      });
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
     });
   }
 
@@ -774,7 +861,8 @@ export class Tone3000Modal {
   }
 
   async processAndFlashWavFile(file, slotIndex) {
-    const cleanName = file.name.replace(/\.[^/.]+$/, '').trim().slice(0, 14);
+    const cleanName = await this.askSlotName(file.name.replace(/\.[^/.]+$/, ''), `Slot User IR ${slotIndex + 1}`);
+    if (!cleanName) return;
     this.showFlashProgressModal(`Caricamento IR "${cleanName}"`, `Scrittura nello slot User IR ${slotIndex + 1}`);
 
     try {
@@ -807,7 +895,8 @@ export class Tone3000Modal {
   }
 
   async processAndFlashCloFile(fileOrBytes, name, slotIndex) {
-    const cleanName = (name || 'Clone').trim().slice(0, 14);
+    const cleanName = await this.askSlotName(name || 'Clone', `Slot Clone AMP ${slotIndex + 1}`);
+    if (!cleanName) return;
     this.showFlashProgressModal(`Scrittura CLO "${cleanName}"`, `Scrittura nello slot Clone AMP ${slotIndex + 1}`);
 
     try {
@@ -834,7 +923,8 @@ export class Tone3000Modal {
   }
 
   async processAndFlashNam(namFileOrUrl, name, slotIndex) {
-    const cleanName = (name || 'Model').trim().slice(0, 14);
+    const cleanName = await this.askSlotName(name || 'Model', `Slot Clone AMP ${slotIndex + 1}`);
+    if (!cleanName) return;
     this.showFlashProgressModal(`Conversione NAM "${cleanName}"`, `Conversione in Clone AMP (~20s), poi scrittura nello slot ${slotIndex + 1}`);
 
     try {

@@ -25,7 +25,6 @@ import {
   decodeSelectedEffects,
   decodeParameterValues,
   decodeName,
-  parsePacketForNames,
   decodeNativeHardwareDump,
   decodeNativePresetNames
 } from './protocol.js';
@@ -603,15 +602,11 @@ export class PresetEngine {
 
     let allNames = [];
     const payload = this.reassembleTransportPayload(this.dumpPackets);
-    if (payload) {
-      try {
-        allNames = decodeNativePresetNames(payload);
-      } catch (e) {
-        console.warn('Native preset names decode failed:', e);
-      }
+    if (payload && payload[0] === 0x12 && payload[1] === 0x40) {
+      allNames = decodeNativePresetNames(payload);
     } else {
-      // No transport frames recognised: legacy scan of the raw packets
-      allNames = this.dumpPackets.flatMap(pkt => parsePacketForNames(pkt));
+      // Never guess names from an unrecognised answer: keep the current ones
+      connection.log('Risposta dei nomi preset non riconosciuta: nomi non aggiornati.', 'warning');
     }
     this.dumpPackets = [];
     this.nameFramesSeen.clear();

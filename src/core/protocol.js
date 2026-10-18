@@ -1018,9 +1018,10 @@ export function decodeNativeHardwareDump(payloadBytesOrHex) {
 }
 
 /**
- * Decode native hardware 50-preset names dump (20-byte stride)
+ * Decode the native preset names answer: [12 40] + 100 records of 20 bytes (U01-U50, F01-F50),
+ * name at offset 4 of each record. An empty record gives '' (the caller keeps its own name).
  * @param {string|Uint8Array} payloadBytesOrHex
- * @returns {Array<string>} Array of up to 50 preset name strings
+ * @returns {Array<string>} Up to 100 preset names
  */
 export function decodeNativePresetNames(payloadBytesOrHex) {
   let bytes = payloadBytesOrHex;
@@ -1041,7 +1042,7 @@ export function decodeNativePresetNames(payloadBytesOrHex) {
   }
 
   const names = [];
-  const maxSlots = Math.min(50, Math.floor((bytes.length - 2) / 20));
+  const maxSlots = Math.min(100, Math.floor((bytes.length - 2) / 20));
 
   for (let i = 0; i < maxSlots; i++) {
     const start = 2 + i * 20;
@@ -1051,7 +1052,7 @@ export function decodeNativePresetNames(payloadBytesOrHex) {
       if (b === 0) break;
       if (b >= 32 && b <= 126) name += String.fromCharCode(b);
     }
-    names.push(name.trim() || `User ${i + 1}`);
+    names.push(name.trim());
   }
 
   return names;

@@ -23,3 +23,6 @@ compiler server.
 
 `make_ui_assets.py` is the exception: it generates the site's original artwork in
 `frontend/public/assets/ui/` (`python tools/make_ui_assets.py frontend/public/assets/ui`).
+
+`make_synthetic_low_model.mjs` writes `frontend/test/fixtures/test_low.clo`: a synthetic Low Model in the
+real format (VTSI, sizes, CRC16) with pseudo-random weights, so the tests carry no creator's capture.

@@ -1,0 +1,22 @@
+# Reverse engineering tools
+
+One-off Python scripts used while reverse engineering the Sonicake protocol, Sonicake Manager
+(`5868USB.dll`, `app.so`) and the pedal answers. They are kept as a record of how the formats in
+[docs/PROTOCOL.md](../docs/PROTOCOL.md) were found; none of them is used by the site or by the
+compiler server.
+
+- Run them from the repository root (paths such as `tools/captures/names_dump.bin` are relative to it).
+- The captures they read and write (`*.bin`, `*.nam`, `*.clo`, `capture_*.json`) live in
+  `tools/captures/`, which is never committed: captures can contain preset names. The small ones the
+  automated tests need are in [`frontend/test/fixtures/`](../frontend/test/fixtures/).
+- Several scripts still use absolute paths of the machine they were written on, or of a Sonicake
+  Manager installation: adjust them before running.
+- `sniff_import.bat` / `sniff_import.py` record the SysEx traffic of Sonicake Manager (Windows) into
+  a new `tools/captures/capture_<date>.json`.
+
+| Prefix | Purpose |
+|---|---|
+| `analyze_*`, `compare_*`, `verify_*` | Compare captured transfers with what the site builds |
+| `disasm_*`, `find_*`, `search_*`, `inspect_*` | Look for functions and data in the vendor binaries |
+| `dump_*`, `parse_*`, `print_*`, `list_*`, `query_*`, `read_*` | Decode names, presets and module tables |
+| `decode_*`, `test_*` | Experiments on single formats (CRC, Low Model, reassembly) |

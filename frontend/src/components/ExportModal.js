@@ -219,7 +219,7 @@ export class ExportModal {
           const backupObj = presetEngine.exportAllPresetsBackupJson();
           const backupStr = JSON.stringify(backupObj, null, 2);
           const dateStr = new Date().toISOString().split('T')[0];
-          triggerDownload(backupStr, `Pedaliera_Studio_UserPresets_Backup_${dateStr}.json`, 'application/json');
+          triggerDownload(backupStr, `SonicStudio_UserPresets_Backup_${dateStr}.json`, 'application/json');
           this.showDownloadSuccess(backupCard, '✓ Backup Salvato!');
         } catch (err) {
           notify(`Errore backup: ${err.message}`, 'error');

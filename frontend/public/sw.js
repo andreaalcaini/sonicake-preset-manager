@@ -1,5 +1,5 @@
 /**
- * Pedaliera Studio - Service Worker
+ * SonicStudio - Service Worker
  * Enables offline caching and PWA installation for studio & gig environments without internet.
  *
  * Only the site's own static files are cached. Live data always comes from the network:
@@ -7,7 +7,7 @@
  */
 
 // v2: v1 also cached API and Tone3000 answers, which could show stale data first
-const CACHE_NAME = 'pedaliera-studio-v3';
+const CACHE_NAME = 'sonicstudio-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

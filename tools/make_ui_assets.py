@@ -1,4 +1,4 @@
-"""Generate the original UI artwork of Pedaliera Studio (no third-party graphics).
+"""Generate the original UI artwork of SonicStudio (no third-party graphics).
 
 Usage: python tools/make_ui_assets.py frontend/public/assets/ui
 """
@@ -111,12 +111,12 @@ ICONS = {
 }
 
 # Wordmark for the header
-LOGO = f'''<svg xmlns="http://www.w3.org/2000/svg" width="196" height="28" viewBox="0 0 196 28">
+LOGO = f'''<svg xmlns="http://www.w3.org/2000/svg" width="168" height="28" viewBox="0 0 168 28">
   <rect x="1" y="2" width="16" height="24" rx="3.5" fill="none" stroke="#F97316" stroke-width="2.4" />
   <circle cx="9" cy="9.5" r="2.6" fill="none" stroke="#F97316" stroke-width="2" />
   <circle cx="9" cy="19.5" r="3.2" fill="#F97316" />
-  <text x="25" y="20.5" font-size="17" {FONT} fill="#FFFFFF" textLength="104" lengthAdjust="spacingAndGlyphs">PEDALIERA</text>
-  <text x="135" y="20.5" font-size="17" {FONT} fill="#F97316" textLength="60" lengthAdjust="spacingAndGlyphs">STUDIO</text>
+  <text x="25" y="20.5" font-size="17" {FONT} fill="#FFFFFF" textLength="64" lengthAdjust="spacingAndGlyphs">SONIC</text>
+  <text x="93" y="20.5" font-size="17" {FONT} fill="#F97316" textLength="72" lengthAdjust="spacingAndGlyphs">STUDIO</text>
 </svg>
 '''
 

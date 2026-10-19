@@ -107,6 +107,14 @@ class App {
     // TONE3000 sign-in finished as a full-page redirect (the popup was blocked)
     this.finishTone3000Redirect(tone3000Modal);
 
+    // First visit: the name could be mistaken for an official Sonicake app
+    try {
+      if (!localStorage.getItem('sonicstudio_disclaimer_seen')) {
+        localStorage.setItem('sonicstudio_disclaimer_seen', '1');
+        notify('SonicStudio è un progetto indipendente e gratuito: non è un\'app ufficiale Sonicake e non è affiliato né approvato da Sonicake.', 'info', { duration: 12000 });
+      }
+    } catch (e) {}
+
     // 3. Header Preset Status Listeners
     const slotBadge = document.getElementById('headerSlotBadge');
     const presetNameText = document.getElementById('headerPresetName');
@@ -342,11 +350,11 @@ class App {
         deferredInstallPrompt.prompt();
         const { outcome } = await deferredInstallPrompt.userChoice;
         if (outcome === 'accepted') {
-          connection.log('Pedaliera Studio installato come App nativa!', 'success');
+          connection.log('SonicStudio installato come App nativa!', 'success');
         }
         deferredInstallPrompt = null;
       } else {
-        notify("Per installare Pedaliera Studio come App nativa:\n\n• Su Chrome / Edge PC: Clicca sull'icona di installazione nella barra degli indirizzi del browser.\n• Su Android / iOS: Apri il menu del browser e seleziona 'Aggiungi a schermata Home' / 'Installa app'.", 'info');
+        notify("Per installare SonicStudio come App nativa:\n\n• Su Chrome / Edge PC: Clicca sull'icona di installazione nella barra degli indirizzi del browser.\n• Su Android / iOS: Apri il menu del browser e seleziona 'Aggiungi a schermata Home' / 'Installa app'.", 'info');
       }
     });
 

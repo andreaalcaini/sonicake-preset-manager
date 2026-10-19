@@ -3,7 +3,7 @@
 Descrive l'architettura dei file, la topologia di rete, i container e le variabili d'ambiente del progetto.
 Mantenere aggiornato questo file ad ogni modifica strutturale o aggiunta di endpoint.
 
-**Pedaliera Studio** (progetto indipendente, non affiliato a Sonicake; libreria catture Powered by [TONE3000](https://www.tone3000.com)): web app progressiva (desktop e mobile) per **tutte le pedaliere multi-effetto Sonicake** (hardware di riferimento: QME-20 e Pocket Master). Comunica direttamente con la pedaliera via **Web MIDI** (USB) e **Web Bluetooth** (BLE), senza software proprietario.
+**SonicStudio** (progetto indipendente, non affiliato a Sonicake; libreria catture Powered by [TONE3000](https://www.tone3000.com)): web app progressiva (desktop e mobile) per **tutte le pedaliere multi-effetto Sonicake** (hardware di riferimento: QME-20 e Pocket Master). Comunica direttamente con la pedaliera via **Web MIDI** (USB) e **Web Bluetooth** (BLE), senza software proprietario.
 
 ---
 

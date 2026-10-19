@@ -1,6 +1,6 @@
 {
-  "name": "Pedaliera Studio",
-  "short_name": "Pedaliera Studio",
+  "name": "SonicStudio",
+  "short_name": "SonicStudio",
   "description": "Editor non ufficiale per pedaliere multi-effetto Sonicake: progetto indipendente, non affiliato a Sonicake",
   "start_url": "/",
   "scope": "/",

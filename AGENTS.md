@@ -142,7 +142,7 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
   - Chassis scuro: `#121316`, `#18191e` (`#141518`), bordi card `#2a2b32`.
   - Accento arancio: `#ff6600` / `#f97316` / `#ea580c`.
   - LED attivi verdi `#10b981`, marker IR ambra `#f59e0b`.
-- **Identità e marchi**: il prodotto si chiama **Pedaliera Studio**; "Sonicake" si cita solo per dire con quali pedaliere funziona. **Mai** logo, icone, grafica o file di Sonicake / SonicLink / Sonicake Manager nel repository o nel sito: la grafica è originale (`frontend/public/assets/ui/`, `tools/make_ui_assets.py`). L'avviso "progetto indipendente, non affiliato a Sonicake" resta visibile nel sito (menu Altro e Guida).
+- **Identità e marchi**: il prodotto si chiama **SonicStudio**; "Sonicake" si cita solo per dire con quali pedaliere funziona. **Mai** logo, icone, grafica o file di Sonicake / SonicLink / Sonicake Manager nel repository o nel sito: la grafica è originale (`frontend/public/assets/ui/`, `tools/make_ui_assets.py`). L'avviso "progetto indipendente, non affiliato a Sonicake" resta visibile nel sito (menu Altro e Guida).
 - **Bluetooth BLE**: logica essenziale e diretta (`connection.connectBLE()`), auto-reconnect differito, niente riconnessioni aggressive o polling che saturino lo stack Web Bluetooth.
 
 ---

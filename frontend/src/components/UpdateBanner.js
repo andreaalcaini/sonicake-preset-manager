@@ -20,7 +20,7 @@ export function showUpdateBanner(version) {
       <span class="mt-1.5 w-2.5 h-2.5 rounded-full bg-orange-400 shrink-0 animate-pulse"></span>
       <div class="flex-1 min-w-0">
         <div class="text-sm font-bold text-white">È disponibile un aggiornamento</div>
-        <div class="text-xs text-zinc-400 mt-0.5">Ricarica per usare la nuova versione di Pedaliera Studio. La pedaliera si ricollega da sola.</div>
+        <div class="text-xs text-zinc-400 mt-0.5">Ricarica per usare la nuova versione di SonicStudio. La pedaliera si ricollega da sola.</div>
       </div>
     </div>
     <div class="flex gap-2 mt-3">

@@ -13,7 +13,7 @@ export const T3K_MARK = '/assets/tone3000/t3k-mark.svg';
 
 // Publishable key (OAuth client_id) from tone3000.com/settings: public by design, safe in the
 // bundle. VITE_TONE3000_CLIENT_ID overrides it at build time; the global is for the UI tests.
-const BUILT_IN_CLIENT_ID = '';
+const BUILT_IN_CLIENT_ID = 't3k_pub_n39-GEQZmmkbVsf4087aSoNYPKEL4rPV';
 export const TONE3000_CLIENT_ID =
   globalThis.__T3K_CLIENT_ID__ || import.meta.env?.VITE_TONE3000_CLIENT_ID || BUILT_IN_CLIENT_ID;
 

@@ -10,7 +10,8 @@ import sys
 import ctypes
 import struct
 import tempfile
-import hashlib
+import io
+import re
 import json
 import threading
 import time
@@ -45,7 +46,7 @@ def too_large(_err):
 # --- Directories ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 # DATA_DIR is the persistent volume (/app/data in Docker, the repository's data/ in development):
-# conversion cache + vendor files
+# vendor files + cache/, the working folder of the conversions (temporary files only)
 DATA_DIR = os.environ.get('DATA_DIR', os.path.join(os.path.dirname(SCRIPT_DIR), 'data'))
 CACHE_DIR = os.path.join(DATA_DIR, 'cache')
 try:
@@ -57,6 +58,14 @@ except OSError as e:
     print(f"[!] Cache non scrivibile ({e}): uso una cache temporanea. Esegui: chown -R 1001:1001 data")
     CACHE_DIR = os.path.join(tempfile.gettempdir(), 'sonicake-cache')
     os.makedirs(CACHE_DIR, exist_ok=True)
+
+# Older versions kept every converted model here (<16 hex hash>_<name>.clo / .namb). Models can
+# come from TONE3000, whose API terms forbid caching or hosting catalog content: remove them.
+_LEGACY_CACHE = re.compile(r'^[0-9a-f]{16}_.+\.(clo|namb)$')
+for _entry in os.listdir(CACHE_DIR):
+    if _LEGACY_CACHE.match(_entry):
+        try: os.unlink(os.path.join(CACHE_DIR, _entry))
+        except OSError: pass
 # Built frontend (Vite dist/) served by this same process in the production image
 STATIC_DIR = os.environ.get('STATIC_DIR', '')
 # Developer-only endpoints (/api/active-preset): off on the production image unless asked for
@@ -277,8 +286,7 @@ def health():
         "version": "1.1.0",
         "platform": sys.platform,
         "compiler_available": COMPILER_AVAILABLE,
-        "compiler_backend": COMPILER_BACKEND,
-        "cache_entries": len(os.listdir(CACHE_DIR))
+        "compiler_backend": COMPILER_BACKEND
     })
 
 @app.route('/api/convert-nam', methods=['POST', 'OPTIONS'])
@@ -314,69 +322,49 @@ def convert_nam():
             "error": "Il file ricevuto non e un modello NAM ma una pagina web HTML."
         }), 400
 
-    file_hash = hashlib.sha256(model_bytes).hexdigest()[:16]
     clean_name = os.path.splitext(os.path.basename(model_name))[0].replace(' ', '_')
     clean_name = "".join(c for c in clean_name if c.isalnum() or c in ('_', '-')) or "model"
 
+    # Nothing is kept on the server: models (also the ones a user downloads from TONE3000, whose
+    # API terms forbid caching or hosting catalog content) only pass through a temporary file
+    # that is deleted right after the conversion, and the result is answered from memory
+    def reply(data, ext):
+        return send_file(io.BytesIO(data), mimetype='application/octet-stream',
+                         as_attachment=True, download_name=f"{clean_name}{ext}")
+
     # Case A: Input is CLO neural model (header 'VTSI')
     if model_bytes[:4] == b'VTSI':
-        cached_clo = os.path.join(CACHE_DIR, f"{file_hash}_{clean_name}.clo")
         try:
             low_bytes = convert_clo_to_low(model_bytes)
-            with open(cached_clo, 'wb') as f:
-                f.write(low_bytes)
             print(f"[OK] Converted CLO {clean_name} -> {len(low_bytes)} bytes Low Model")
-            return send_file(
-                cached_clo,
-                mimetype='application/octet-stream',
-                as_attachment=True,
-                download_name=f"{clean_name}.clo"
-            )
+            return reply(low_bytes, '.clo')
         except Exception as e:
             return jsonify({"error": f"Errore conversione CLO: {str(e)}"}), 422
 
-    # Case B: Input is compiled .namb binary (header 'BMAN')
+    # Case B: Input is compiled .namb binary (header 'BMAN'): answered as is
     if model_bytes[:4] == b'BMAN':
-        cached_namb = os.path.join(CACHE_DIR, f"{file_hash}_{clean_name}.namb")
-        if not os.path.exists(cached_namb):
-            with open(cached_namb, 'wb') as f:
-                f.write(model_bytes)
-        return send_file(
-            cached_namb,
-            mimetype='application/octet-stream',
-            as_attachment=True,
-            download_name=f"{clean_name}.namb"
-        )
+        return reply(model_bytes, '.namb')
 
     # Case C: Neural Amp Modeler (.nam) input -> CLO 8,840 -> Low Model 2,696 (same pipeline as Sonicake Manager)
     if not COMPILER_AVAILABLE:
         return jsonify({"error": "Convertitore NAM momentaneamente non disponibile."}), 503
 
-    cached_low = os.path.join(CACHE_DIR, f"{file_hash}_{clean_name}.clo")
-    if not os.path.exists(cached_low):
-        fd, tmp_in_path = tempfile.mkstemp(suffix='.nam', dir=CACHE_DIR)
-        with os.fdopen(fd, 'wb') as tmp_in:
-            tmp_in.write(model_bytes)
-        try:
-            t0 = time.time()
-            clo = convert_nam_to_clo(tmp_in_path)
-            low_bytes = convert_clo_to_low(clo)
-            with open(cached_low, 'wb') as f:
-                f.write(low_bytes)
-            print(f"[OK] Converted NAM {clean_name} -> CLO {len(clo)} -> Low Model {len(low_bytes)} bytes in {time.time() - t0:.1f}s")
-        except Exception as e:
-            print(f"[!] NAM -> CLO conversion error for '{clean_name}': {e}")
-            return jsonify({"error": f"Errore conversione NAM: {str(e)}"}), 422
-        finally:
-            try: os.unlink(tmp_in_path)
-            except OSError: pass
+    fd, tmp_in_path = tempfile.mkstemp(suffix='.nam', dir=CACHE_DIR)
+    with os.fdopen(fd, 'wb') as tmp_in:
+        tmp_in.write(model_bytes)
+    try:
+        t0 = time.time()
+        clo = convert_nam_to_clo(tmp_in_path)
+        low_bytes = convert_clo_to_low(clo)
+        print(f"[OK] Converted NAM {clean_name} -> CLO {len(clo)} -> Low Model {len(low_bytes)} bytes in {time.time() - t0:.1f}s")
+    except Exception as e:
+        print(f"[!] NAM -> CLO conversion error for '{clean_name}': {e}")
+        return jsonify({"error": f"Errore conversione NAM: {str(e)}"}), 422
+    finally:
+        try: os.unlink(tmp_in_path)
+        except OSError: pass
 
-    return send_file(
-        cached_low,
-        mimetype='application/octet-stream',
-        as_attachment=True,
-        download_name=f"{clean_name}.clo"
-    )
+    return reply(low_bytes, '.clo')
 
 ACTIVE_PRESET_FILE = os.path.join(CACHE_DIR, 'active_preset.json')
 

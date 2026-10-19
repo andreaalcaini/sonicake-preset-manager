@@ -27,6 +27,19 @@ class ServerSecurityTest(unittest.TestCase):
             self.assertEqual(res.status_code, 400, url)
         self.assertFalse(hasattr(server, 'requests'))
 
+    def test_keeps_no_model_on_the_server(self):
+        # TONE3000 API terms: no caching or hosting of catalog content. A CLO upload is converted
+        # and answered without leaving anything in the working folder.
+        clo_path = os.path.join(BACKEND, '..', 'frontend', 'test', 'fixtures', 'test_low.clo')
+        with open(clo_path, 'rb') as f:
+            clo = f.read()
+        before = set(os.listdir(server.CACHE_DIR))
+        res = self.client.post('/api/convert-nam', data={'file': (io.BytesIO(clo), 'Plexi.clo')}, content_type='multipart/form-data')
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(len(res.data), 2696)
+        self.assertEqual(set(os.listdir(server.CACHE_DIR)), before)
+        self.assertNotIn('cache_entries', self.client.get('/api/health').get_json())
+
     def test_rejects_web_pages(self):
         data = {'file': (io.BytesIO(b'<!doctype html><html></html>'), 'page.nam')}
         res = self.client.post('/api/convert-nam', data=data, content_type='multipart/form-data')

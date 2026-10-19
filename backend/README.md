@@ -15,7 +15,7 @@ npm run dev
 npm run dev:backend
 ```
 
-Il server risponde su `http://localhost:8080`; il dev server Vite inoltra `/api` a questa porta. La cache delle conversioni sta in `data/cache/`, come in produzione.
+Il server risponde su `http://localhost:8080`; il dev server Vite inoltra `/api` a questa porta. Le conversioni usano `data/cache/` solo per file temporanei, cancellati subito: il server non conserva modelli (termini dell'API TONE3000).
 Verifica: `curl http://localhost:8080/api/health` → `compiler_backend: "dll"`.
 
 ---

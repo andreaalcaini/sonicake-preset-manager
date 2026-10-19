@@ -1,8 +1,9 @@
 <div align="center">
 
-# 🎛️ Sonicake Studio Preset Manager
+# 🎛️ Pedaliera Studio
 
-**Editor visivo e Preset Manager moderno, gratuito e open-source per pedaliere Sonicake.**  
+**Editor visivo e Preset Manager gratuito e open-source per pedaliere multi-effetto Sonicake.**  
+*Progetto indipendente: non affiliato, sponsorizzato o approvato da Sonicake.*  
 *Gestisci la catena degli effetti, carica sulla pedaliera catture NAM e IR dalla libreria [TONE3000](https://www.tone3000.com) e controlla la tua pedaliera via USB o Bluetooth BLE da PC, Mac, tablet e smartphone.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg)](LICENSE)
@@ -20,7 +21,7 @@
 
 Le pedaliere **Sonicake** (tutta la gamma multi-effetto) offrono timbriche eccellenti con supporto ai profili **Neural Amp Modeler (.nam)** e risposte all'impulso **IR (.wav)**. Tuttavia, non dispongono di un editor desktop ufficiale completo e multipiattaforma.
 
-**Sonicake Studio Preset Manager** nasce per colmare questa esigenza: un'applicazione web nativa, velocissima, con estetica studio hardware (ispirata a *Quad Cortex*, *UAD* e *Ableton*), senza pubblicità e **100% gratuita**. 
+**Pedaliera Studio** nasce per colmare questa esigenza: un'applicazione web nativa, velocissima, con estetica studio hardware (ispirata a *Quad Cortex*, *UAD* e *Ableton*), senza pubblicità e **100% gratuita**. 
 
 Funziona direttamente dal browser sfruttando gli standard moderni **Web MIDI** e **Web Bluetooth**, senza dover installare driver o software di terze parti.
 
@@ -171,6 +172,9 @@ I contributi da parte della community di musicisti e sviluppatori sono i benvenu
 
 ## ⚖️ Disclaimer & Licenza
 
-* Questo software è un progetto open source sviluppato in modo indipendente dalla community e **non è affiliato, sponsorizzato o supportato da Sonicake Technology**.
-* Tutti i marchi, i loghi e i nomi di prodotto registrati appartengono ai rispettivi proprietari.
+* **Pedaliera Studio** è un progetto open source sviluppato in modo indipendente e **non è affiliato, sponsorizzato o approvato da Sonicake** (Changsha Sonicake Technology Co., Ltd.). Lo stesso avviso compare nel sito.
+* "Sonicake" e i nomi dei prodotti sono marchi dei rispettivi proprietari, citati solo per indicare con quali pedaliere funziona il software. Logo, icone e grafica del sito sono originali (`frontend/public/assets/ui/`, generati da `tools/make_ui_assets.py`).
+* Il repository non contiene software né file Sonicake: le librerie usate per la conversione NAM vanno prese dalla propria installazione di Sonicake Manager / SonicLink (vedi [backend/README.md](backend/README.md)).
+* La libreria di catture è fornita da [TONE3000](https://www.tone3000.com) tramite la sua [API pubblica](https://www.tone3000.com/api): catture, autori e licenze restano dei rispettivi creatori.
+* Tutti gli altri marchi appartengono ai rispettivi proprietari.
 * Rilasciato sotto licenza [MIT](LICENSE). Realizzato con passione per la community di chitarristi e bassisti! 🎸

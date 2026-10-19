@@ -3,7 +3,7 @@
 Descrive l'architettura dei file, la topologia di rete, i container e le variabili d'ambiente del progetto.
 Mantenere aggiornato questo file ad ogni modifica strutturale o aggiunta di endpoint.
 
-**Sonicake Preset Manager** (libreria catture Powered by [TONE3000](https://www.tone3000.com)): web app progressiva (desktop e mobile) per **tutte le pedaliere multi-effetto Sonicake** (hardware di riferimento: QME-20 e Pocket Master). Comunica direttamente con la pedaliera via **Web MIDI** (USB) e **Web Bluetooth** (BLE), senza software proprietario.
+**Pedaliera Studio** (progetto indipendente, non affiliato a Sonicake; libreria catture Powered by [TONE3000](https://www.tone3000.com)): web app progressiva (desktop e mobile) per **tutte le pedaliere multi-effetto Sonicake** (hardware di riferimento: QME-20 e Pocket Master). Comunica direttamente con la pedaliera via **Web MIDI** (USB) e **Web Bluetooth** (BLE), senza software proprietario.
 
 ---
 
@@ -11,7 +11,7 @@ Mantenere aggiornato questo file ad ogni modifica strutturale o aggiunta di endp
 
 - **Frontend**: ES Modules vanilla (nessun framework, latenza minima sugli stream MIDI).
 - **Bundler / dev server**: Vite + `@vitejs/plugin-basic-ssl` (HTTPS obbligatorio per Web MIDI e Web Bluetooth).
-- **Stile**: Tailwind CSS + CSS custom in `frontend/src/styles/`, fedele all'app ufficiale **SonicLink**.
+- **Stile**: Tailwind CSS + CSS custom in `frontend/src/styles/`, tema scuro da studio con grafica originale (`frontend/public/assets/ui/`, generata da `tools/make_ui_assets.py`).
 - **Compiler**: Python Flask (`backend/server.py`) per la conversione Neural Amp Modeler (`.nam`) → Clone AMP. In produzione lo stesso processo serve anche il sito compilato.
 - **Protocolli hardware**: Web MIDI API (`navigator.requestMIDIAccess`) e Web Bluetooth API (`navigator.bluetooth.requestDevice`).
 
@@ -55,7 +55,7 @@ sonicake-preset-manager/
 │   │   ├── styles/             # main.css, soniclink.css, tone3000.css, knobs.css, rack.css, drums-tuner.css
 │   │   └── utils/
 │   │       └── bundle-encoder.js   # Codifica link/bundle di condivisione
-│   ├── public/                 # Asset statici (loghi TONE3000 in assets/tone3000/), manifest PWA, service worker,
+│   ├── public/                 # Grafica originale (assets/ui/), loghi TONE3000 (assets/tone3000/), manifest PWA, service worker,
 │   │                           # tone3000-callback.html (ritorno del login TONE3000)
 │   ├── test/                   # Test automatici (girano anche in CI prima della build dell'immagine)
 │   │   ├── support/            # Pedaliera virtuale (risponde come quella vera) e scenario del motore
@@ -69,7 +69,6 @@ sonicake-preset-manager/
 ├── backend/                    # Compiler NAM → Clone AMP; in produzione serve anche il sito
 │   ├── server.py               # Flask: API compiler (+ sito statico se STATIC_DIR è impostata)
 │   ├── requirements.txt
-│   ├── 5868USB.dll             # Libreria nativa Sonicake (backend Windows)
 │   ├── nam2clo/                # Convertitore ARM64
 │   │   ├── nam2clo.c, juce_android_shim.cpp
 │   │   ├── stubs/              # Stub librerie Android + lib5868usb_link_stub.cpp (link in CI senza vendor)
@@ -79,6 +78,7 @@ sonicake-preset-manager/
 ├── docs/
 │   └── PROTOCOL.md             # Protocollo della pedaliera: frame, comandi, flash, export/import, rinomina
 ├── tools/                      # Script di reverse engineering (storici, non usati dal sito né dal server)
+│   ├── make_ui_assets.py       # Genera la grafica originale del sito (frontend/public/assets/ui/)
 │   └── captures/               # Catture locali dello sniffer e dump (mai committate)
 ├── data/                       # Volume runtime (/app/data in Docker, anche in sviluppo): cache/ + vendor/, mai committato
 ├── Dockerfile                  # Immagine unica multi-arch: sito Vite + API compiler (runtime bionic + nam2clo)
@@ -102,7 +102,7 @@ Identica a Sonicake Manager, verificata byte per byte.
 
 Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `compiler_backend`):
 
-- **Windows** (`dll`): `5868USB.dll` di Sonicake Manager in-process.
+- **Windows** (`dll`): `5868USB.dll` di Sonicake Manager in-process, presa dall'installazione locale di Sonicake Manager (o da `data/vendor/`). Mai nel repository.
 - **Linux ARM64** (`nam2clo`, produzione): la build Android della stessa libreria (`lib5868USB.so`, arm64) eseguita da `nam2clo` nel `Dockerfile`, che include un runtime bionic minimo (linker64 + libc/libm/libdl dall'immagine AOSP redroid) e stub per liblog/OpenSL ES/EGL/GLES/libandroid. `juce_android_shim.cpp` intercetta `juce::File::getSpecialLocation` (altrimenti risolto via JNI → crash senza Java VM). L'output è identico byte per byte all'app SonicLink; rispetto alla DLL Windows differisce di ~0,07% (float ARM vs x86). Un processo per conversione, `NAM2CLO_WORKERS` in parallelo.
 - **File vendor** (`lib5868USB.so`, `libc++_shared.so`, `nam_input_wav.wav`): estratti dall'APK SonicLink con `backend/nam2clo/extract-vendor.ps1` in `data/vendor/` e **montati a runtime**: mai committati, mai nell'immagine. In build `nam2clo` viene linkato contro `stubs/lib5868usb_link_stub.cpp`.
 - Su host amd64 il sito funziona e il compiler risulta offline (la libreria esiste solo per ARM64).
@@ -179,7 +179,7 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 |---|---|---|
 | `APP_VERSION` | `build-<data ISO>` | Versione compilata nel sito e scritta in `dist/version.json`. La CI passa lo SHA del commit (build arg del `Dockerfile`). Una pagina aperta legge `/version.json` all'avvio, ogni 5 minuti e quando torna visibile: se è diversa mostra "È disponibile un aggiornamento". Il service worker non mette mai in cache `/version.json`, `/api` e le richieste ad altri domini |
 | `VITE_TONE3000_CLIENT_ID` | chiave in `frontend/src/config/tone3000.js` | Publishable key TONE3000 (OAuth `client_id`, pubblica per natura). Gli indirizzi di ritorno `<origine>/tone3000-callback.html` (produzione e `https://localhost:5173`) vanno registrati sulla chiave in tone3000.com/settings |
-| `SONICAKE_LIB_PATH` | — | Percorso alternativo di `5868USB.dll` (solo Windows) |
+| `SONICAKE_LIB_PATH` | — | Percorso di `5868USB.dll` (solo Windows). Altrimenti `data/vendor/5868USB.dll` o l'installazione di Sonicake Manager |
 | `MAX_MODEL_MB` | `25` | Dimensione massima di un modello caricato (oltre: HTTP 413) |
 | `CORS_ORIGINS` | — (nessuno) | Origini esterne ammesse a chiamare `/api` (il sito usa la stessa origine e non ne ha bisogno) |
 | `SONICAKE_DEV_ENDPOINTS` | `1` in locale, `0` con `STATIC_DIR` | Abilita `/api/active-preset` (solo debug) |

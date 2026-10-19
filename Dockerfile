@@ -82,7 +82,8 @@ ENV PYTHONUNBUFFERED=1 \
     NAM2CLO_LIB=/app/data/vendor/lib5868USB.so \
     SONICAKE_NAM_INPUT_WAV=/app/data/vendor/nam_input_wav.wav \
     NAM2CLO_CACHE_DIR=/tmp \
-    NAM2CLO_WORKERS=2
+    NAM2CLO_WORKERS=2 \
+    HOST_REDIRECTS=sonicake.alcaini.it=sonicstudio.alcaini.it
 
 COPY --from=android /system/apex/com.android.runtime/bin/linker64 /system/bin/linker64
 COPY --from=android /system/apex/com.android.runtime/lib64/bionic/libc.so \

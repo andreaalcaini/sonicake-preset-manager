@@ -125,7 +125,7 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 
 - **Rete esterna:** `cloudflared-mesh` (creata da Cloudflared sull'host)
 - **Alias DNS interno:** `sonicake.mesh` (confermato dall'utente); risponde anche il nome del container `sonicake`
-- **Instradamento:** Public Hostname `sonicake.alcaini.it` → `http://sonicake.mesh:3000`. L'HTTPS richiesto da Web MIDI/Bluetooth è terminato da Cloudflare.
+- **Instradamento:** Public Hostname `sonicstudio.alcaini.it` → `http://sonicake.mesh:3000`. L'HTTPS richiesto da Web MIDI/Bluetooth è terminato da Cloudflare. Il vecchio `sonicake.alcaini.it` può puntare allo stesso servizio: l'app lo rimanda con un redirect permanente al nuovo indirizzo (`HOST_REDIRECTS`).
 
 ---
 
@@ -183,6 +183,7 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 | `MAX_MODEL_MB` | `25` | Dimensione massima di un modello caricato (oltre: HTTP 413) |
 | `CORS_ORIGINS` | — (nessuno) | Origini esterne ammesse a chiamare `/api` (il sito usa la stessa origine e non ne ha bisogno) |
 | `SONICAKE_DEV_ENDPOINTS` | `1` in locale, `0` con `STATIC_DIR` | Abilita `/api/active-preset` (solo debug) |
+| `HOST_REDIRECTS` | — (`sonicake.alcaini.it=sonicstudio.alcaini.it`) | Vecchi nomi host rimandati al nuovo (`vecchio=nuovo,…`): 301 per le pagine, 308 per le chiamate API |
 
 ### GitHub Actions (`Settings → Secrets and variables → Actions`)
 

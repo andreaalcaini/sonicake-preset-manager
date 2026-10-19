@@ -40,6 +40,17 @@ class ServerSecurityTest(unittest.TestCase):
         self.assertEqual(set(os.listdir(server.CACHE_DIR)), before)
         self.assertNotIn('cache_entries', self.client.get('/api/health').get_json())
 
+    def test_old_hostname_redirects_to_the_new_one(self):
+        with mock.patch.object(server, 'HOST_REDIRECTS', {'sonicake.alcaini.it': 'sonicstudio.alcaini.it'}):
+            res = self.client.get('/tone3000-callback.html?code=1&state=x', headers={'Host': 'sonicake.alcaini.it'})
+            self.assertEqual(res.status_code, 301)
+            self.assertEqual(res.headers['Location'], 'https://sonicstudio.alcaini.it/tone3000-callback.html?code=1&state=x')
+            post = self.client.post('/api/convert-nam', headers={'Host': 'sonicake.alcaini.it'})
+            self.assertEqual(post.status_code, 308)
+            # New hostname, mesh alias and local checks are served normally
+            for host in ('sonicstudio.alcaini.it', 'sonicake.mesh:3000', '127.0.0.1:3010'):
+                self.assertEqual(self.client.get('/api/health', headers={'Host': host}).status_code, 200, host)
+
     def test_rejects_web_pages(self):
         data = {'file': (io.BytesIO(b'<!doctype html><html></html>'), 'page.nam')}
         res = self.client.post('/api/convert-nam', data=data, content_type='multipart/form-data')

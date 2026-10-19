@@ -29,6 +29,23 @@ app.config['MAX_CONTENT_LENGTH'] = MAX_MODEL_BYTES + 64 * 1024  # uploads (+ mul
 # --- CORS: the site calls /api on its own origin; other origins only when listed ---
 CORS_ORIGINS = {o.strip() for o in os.environ.get('CORS_ORIGINS', '').split(',') if o.strip()}
 
+# --- Old public hostnames: permanent redirect to the new one ("old=new,old2=new") ---
+HOST_REDIRECTS = dict(
+    pair.strip().lower().split('=', 1)
+    for pair in os.environ.get('HOST_REDIRECTS', '').split(',') if '=' in pair
+)
+
+@app.before_request
+def redirect_old_hostnames():
+    host = (request.host or '').split(':')[0].lower()
+    target = HOST_REDIRECTS.get(host)
+    if not target:
+        return None
+    query = request.query_string.decode('latin-1')
+    # 301 for page loads, 308 keeps the method and body of API calls
+    return Response(status=301 if request.method in ('GET', 'HEAD') else 308,
+                    headers={'Location': f"https://{target}{request.path}{'?' + query if query else ''}"})
+
 @app.after_request
 def after_request(response):
     origin = request.headers.get('Origin')

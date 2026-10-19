@@ -4,7 +4,8 @@
 #
 # HTTPS (required by Web MIDI / Bluetooth) comes from the Cloudflare Tunnel: the container joins
 # the `cloudflared-mesh` network as sonicake.mesh and the tunnel's public hostname
-# sonicake.alcaini.it points to http://sonicake.mesh:3000. Port 3010 is bound to localhost only,
+# sonicstudio.alcaini.it points to http://sonicake.mesh:3000 (the old sonicake.alcaini.it may point
+# there too: the app redirects it, see HOST_REDIRECTS). Port 3010 is bound to localhost only,
 # for checks from the server itself. Optional settings: .env (see .env.example).
 services:
   app:

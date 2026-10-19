@@ -67,7 +67,7 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
 - Autenticazione con fallback `${{ secrets.GHCR_PAT || secrets.GITHUB_TOKEN }}`.
 - Cache GitHub Actions (`cache-from/to: type=gha`).
 
-**Progetto:** il workflow pubblica `ghcr.io/andreaalcaini/sonicake-preset-manager` (Public). I file vendor Sonicake (`lib5868USB.so`, `libc++_shared.so`, `nam_input_wav.wav`) sono proprietari: **non devono mai finire nell'immagine né nel repository**. Si montano a runtime da `./data/vendor`; in build `nam2clo` si linka contro `server/nam2clo/stubs/lib5868usb_link_stub.cpp`.
+**Progetto:** il workflow pubblica `ghcr.io/andreaalcaini/sonicake-preset-manager` (Public). I file vendor Sonicake (`lib5868USB.so`, `libc++_shared.so`, `nam_input_wav.wav`) sono proprietari: **non devono mai finire nell'immagine né nel repository**. Si montano a runtime da `./data/vendor`; in build `nam2clo` si linka contro `backend/nam2clo/stubs/lib5868usb_link_stub.cpp`.
 
 ### Regola d'oro Token GitHub (PAT):
 - ⚠️ **NON USARE Fine-Grained Tokens (`github_pat_...`)**: non sono supportati da GHCR per namespace utente e causano l'errore `denied: permission_denied: The token provided does not match expected scopes`.
@@ -109,7 +109,7 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
 - **Windows file locking:**
   Su Windows i binari in esecuzione bloccano il file su disco: ferma il processo prima di ricompilare (es. `server.py` tiene aperta `5868USB.dll`).
 - **Progetto: compiler "offline" in produzione:**
-  Mancano i file in `data/vendor/` (estraili con `server/nam2clo/extract-vendor.ps1`), la cache non è scrivibile (`chown -R 1001:1001 data`) oppure l'host è amd64 (la conversione funziona solo su arm64).
+  Mancano i file in `data/vendor/` (estraili con `backend/nam2clo/extract-vendor.ps1`), la cache non è scrivibile (`chown -R 1001:1001 data`) oppure l'host è amd64 (la conversione funziona solo su arm64).
 - **Progetto: conversioni lente in locale:**
   Su PC x86 l'immagine arm64 gira sotto QEMU: una conversione richiede ~4 minuti e supera il timeout di default. Per le prove alza `NAM2CLO_TIMEOUT`.
 
@@ -121,8 +121,7 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
   - Pragmatico, rapido e diretto. Riporta feedback dal campo reale (smartphone Android/iOS e PC: *"da telefono dà questo errore"*, *"la pedaliera si è bloccata"*).
   - Quando fissa una priorità (es. *"dai priorità a Tone3000"*), questa supera qualsiasi attività secondaria o refactoring estetico non richiesto.
   - Delega all'AI codice, reverse engineering, integrazione di rete e build: si aspetta soluzioni concrete, codice verificato e spiegazioni sintetiche.
-- **Mattia**: collaboratore su feature, test e documentazione con Claude Code, **senza hardware fisico**. Non rompere la compatibilità tra i due flussi.
-- **Agenti AI**: pair programming nel rispetto rigoroso delle regole hardware qui sotto.
+- **Agenti AI**: pair programming nel rispetto rigoroso delle regole hardware qui sotto. Senza pedaliera verificano le modifiche al protocollo con la pedaliera virtuale dei test.
 
 ---
 
@@ -131,7 +130,7 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
 1. Rispondi sempre in **italiano**, tono professionale, diretto e conciso.
 2. Niente spiegazioni ovvie: mostra cosa è stato fatto, come testarlo e quali decisioni servono.
 3. Se una scelta è logicamente evidente, implementala e segnalala in breve; chiedi solo su decisioni di prodotto, timbriche/audio o vincoli hardware non documentati. Per modifiche multi-file vale comunque la regola di pianificazione sopra.
-4. Prima di dichiarare concluso un compito: `npm run build` e `npm test` devono passare e `git status` deve essere in ordine. Chi non ha la pedaliera (Mattia) verifica le modifiche al protocollo con la pedaliera virtuale dei test.
+4. Prima di dichiarare concluso un compito: `npm run build` e `npm test` devono passare e `git status` deve essere in ordine. Chi non ha la pedaliera verifica le modifiche al protocollo con la pedaliera virtuale dei test.
 
 ---
 
@@ -152,10 +151,12 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
 > [!CAUTION]
 > Violare queste regole causa overflow della FIFO DMA dell'MCU, blocco della pedaliera, freeze del firmware o corruzione della flash. Verifica ogni modifica al protocollo su pacchetti catturati prima di chiedere ad Andrea di testarla.
 
+Il protocollo completo (framing, comandi, risposte, formati) è in [docs/PROTOCOL.md](docs/PROTOCOL.md); qui restano i vincoli da non violare.
+
 1. **Formato Low Model Clone AMP (2.696 byte)**:
    - La flash interna (verificato su QME-20) accetta **solo** il Low Model da 2.696 byte (mai `.namb` grezzi da 7.980 o 55.636 byte: crash immediato).
    - Formato: magic `VTSI`, dimensione `2696` a offset `0x04`, `extendSize = 2560` a offset `0x14`, `layerSize = 512` a offset `0x84`, CRC16 calcolato dall'offset 12 e salvato a offset `0x08`.
-   - Conversione nel browser: `convertCLOToLowModel()` in `src/core/protocol.js`.
+   - Conversione nel browser: `convertCLOToLowModel()` in `frontend/src/core/protocol.js`.
 2. **Marker del payload**:
    - **Clone AMP**: payload totale **2.770 byte**. Byte 0 = `0x11`, **Byte 1 = `0x25`**, Byte 6 = `slotIndex` (0-4, banchi 901-905), Byte 10-41 = nome (ASCII, padding a zero), Byte 74-2770 = Low Model.
    - **User IR**: payload totale **2.122 byte**. Byte 0 = `0x11`, **Byte 1 = `0x21`**, Byte 6 = `slotIndex` (0-4, banchi 416-420), Byte 74-2122 = 512 campioni float 32 bit normalizzati a 48 kHz.
@@ -172,14 +173,15 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
    - Swap = export A + export B, import B→A, import A→B (`presetEngine.swapPresets`); i byte si copiano intatti, mai ricostruiti dai parametri decodificati.
 5. **Routing della catena**: `DRV-AMP-IR-EQ` è un blocco fisso (mai diviso o riordinato). Si muovono solo NR, FX1, FX2, DLY, RVB, che scavalcano il blocco come unità: 6 unità → le 720 voci di `chainOrderCommands`. Usa `moveChainModule()` (`protocol.js`); `setChainOrder()` rifiuta qualsiasi routing non presente nella libreria.
 6. **Protezione dei preset**: i 10 slot di memoria interni (5 Clone AMP + 5 IR) stanno in banchi flash separati. Scriverli **non deve mai** toccare, modificare o sovrascrivere i 50 preset utente (U01-U50).
-7. **Rinomina degli slot Clone AMP / IR** (catturata da Sonicake Manager "Rename Clone" / "Rename IR" il 2026-10-19, `tests/fixtures/slot_rename_capture.json`): messaggio di 22 byte `11 26 <slot> 00 00 0F` (Clone) oppure `11 22 <slot> 00 10 0A` (IR) + nome in 16 byte con padding a zero, inviato in 2 frame con ACK `14 08 00` per frame. Cambia solo il nome, la cattura non viene riscritta. Nome **massimo 10 caratteri**, come nelle app ufficiali. Funzione: `buildSlotRenamePayload()` (riproduce la cattura byte per byte).
+7. **Rinomina degli slot Clone AMP / IR** (catturata da Sonicake Manager "Rename Clone" / "Rename IR" il 2026-10-19, `frontend/test/fixtures/slot_rename_capture.json`): messaggio di 22 byte `11 26 <slot> 00 00 0F` (Clone) oppure `11 22 <slot> 00 10 0A` (IR) + nome in 16 byte con padding a zero, inviato in 2 frame con ACK `14 08 00` per frame. Cambia solo il nome, la cattura non viene riscritta. Nome **massimo 10 caratteri**, come nelle app ufficiali. Funzione: `buildSlotRenamePayload()` (riproduce la cattura byte per byte).
 
 ---
 
 ## 🌿 Progetto: Git
 
-- **Mai tracciare**: `prompt.txt` / `prompt*.txt`, `dist/`, `server/cache/*`, `data/*` (tranne `.gitkeep`), `.env`, `__pycache__` e virtualenv, file vendor Sonicake (`data/vendor/`, `server/nam2clo/vendor/`, `server/nam2clo/build/`).
+- **Mai tracciare**: `prompt.txt` / `prompt*.txt`, `dist/`, `data/*` (tranne `.gitkeep`), `tools/captures/` (catture locali, possono contenere i nomi dei preset), `.env`, `__pycache__` e virtualenv, file vendor Sonicake (`data/vendor/`, `backend/nam2clo/vendor/`, `backend/nam2clo/build/`).
 - Commit atomici e descrittivi (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`).
+- **Nessuna attribuzione AI nei commit e nelle PR**: niente `Co-Authored-By: Claude …` né "Generated with Claude Code". L'unico autore è Andrea (GitHub mostra i co-autori tra i contributors).
 - Branch principale: `master`, sincronizzato con `origin/master`.
 
 ---
@@ -187,7 +189,7 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
 ## ✅ Progetto: Checklist prima di ogni consegna
 
 - [ ] `npm run build` passa (exit code 0, controllato davvero: non filtrare l'output con `grep` prima di committare)?
-- [ ] `npm run test:all` passa? Ogni modifica al protocollo ha un test nella pedaliera virtuale (`tests/support/virtual-pedal.mjs`) prima di chiedere ad Andrea di provarla sull'hardware.
+- [ ] `npm run test:all` passa? Ogni modifica al protocollo ha un test nella pedaliera virtuale (`frontend/test/support/virtual-pedal.mjs`) prima di chiedere ad Andrea di provarla sull'hardware.
 - [ ] `STRUCTURE.md`, `.env.example` e la documentazione del protocollo riflettono lo stato reale?
 - [ ] Nessuna modifica altera la dimensione fissa di 2.696 byte dei Clone AMP o i timing SysEx?
 - [ ] L'interfaccia mobile resta fluida e senza scrollbar orizzontali?

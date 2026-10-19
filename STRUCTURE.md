@@ -11,8 +11,8 @@ Mantenere aggiornato questo file ad ogni modifica strutturale o aggiunta di endp
 
 - **Frontend**: ES Modules vanilla (nessun framework, latenza minima sugli stream MIDI).
 - **Bundler / dev server**: Vite + `@vitejs/plugin-basic-ssl` (HTTPS obbligatorio per Web MIDI e Web Bluetooth).
-- **Stile**: Tailwind CSS + CSS custom in `src/styles/`, fedele all'app ufficiale **SonicLink**.
-- **Compiler**: Python Flask (`server/server.py`) per la conversione Neural Amp Modeler (`.nam`) → Clone AMP. In produzione lo stesso processo serve anche il sito compilato.
+- **Stile**: Tailwind CSS + CSS custom in `frontend/src/styles/`, fedele all'app ufficiale **SonicLink**.
+- **Compiler**: Python Flask (`backend/server.py`) per la conversione Neural Amp Modeler (`.nam`) → Clone AMP. In produzione lo stesso processo serve anche il sito compilato.
 - **Protocolli hardware**: Web MIDI API (`navigator.requestMIDIAccess`) e Web Bluetooth API (`navigator.bluetooth.requestDevice`).
 
 ---
@@ -23,37 +23,48 @@ Mantenere aggiornato questo file ad ogni modifica strutturale o aggiunta di endp
 sonicake-preset-manager/
 ├── .github/
 │   └── workflows/
-│       └── deploy.yml          # CI/CD: immagine multi-arch (amd64/arm64) su GHCR
-├── src/
-│   ├── main.js                 # Bootstrap app, scorciatoie, wiring dei modali
-│   ├── config/
-│   │   └── features.js         # Feature flag (funzioni nascoste nel sito pubblicato)
-│   ├── core/
-│   │   ├── connection.js       # Trasporto MIDI & BLE, invio/ricezione SysEx, riconnessione dopo il ricaricamento
-│   │   ├── protocol.js         # Framing SysEx, CRC16 (VTSI), CRC8 SMBus PEC (0x07), convertitore Low Model
-│   │   ├── preset-engine.js    # State machine 50 preset, flash streaming (Clone AMP & IR), export/import, swap
-│   │   └── prst-parser.js      # Parser file .prst
-│   ├── components/
-│   │   ├── Tone3000Modal.js    # Memory Manager (10 slot), Cloud Explorer, Drag&Drop, progress SysEx
-│   │   ├── ModuleEditor.js     # Editor effetti, toggle Factory/Clone, sostituzione Tone3000
-│   │   ├── SignalChain.js      # Routing e ordine della catena a 9 moduli
-│   │   ├── PresetList.js       # Gestione 50 preset (U01-U50)
-│   │   ├── PresetDropdown.js   # Menu a tendina della barra preset (desktop): ricerca, Utente/Fabbrica
-│   │   ├── UpdateBanner.js     # Barra "aggiornamento disponibile" (non ricarica durante una scrittura)
-│   │   ├── ui-feedback.js      # Avvisi (notify), dialog di testo (askText) e conferma (askConfirm)
-│   │   ├── PresetPickerDialog.js
-│   │   ├── SlotTransferModal.js
-│   │   └── ...                 # Tuner, Drums, Setlist, Share, Export/Import, Stage Mode, Help
-│   ├── data/                   # Librerie comandi/moduli, lookup EQ, pattern batteria
-│   ├── services/
-│   │   ├── compiler-bridge.js  # Client del compiler (/api sulla stessa origine, NAM → Low Model 2.696 byte)
-│   │   ├── tone3000.js         # Client REST Supabase di Tone3000
-│   │   └── update-check.js     # Confronta la versione compilata con /version.json pubblicato
-│   ├── styles/                 # main.css, soniclink.css, tone3000.css, knobs.css, rack.css, drums-tuner.css
-│   └── utils/
-│       └── bundle-encoder.js   # Codifica link/bundle di condivisione
-├── public/                     # Asset statici, manifest PWA, service worker (solo file statici in cache)
-├── server/
+│       └── deploy.yml          # CI/CD: test, poi immagine multi-arch (amd64/arm64) su GHCR
+├── frontend/                   # Web app (workspace npm @sonicake/frontend)
+│   ├── index.html
+│   ├── src/
+│   │   ├── main.js             # Bootstrap app, scorciatoie, wiring dei modali
+│   │   ├── config/
+│   │   │   └── features.js     # Feature flag (funzioni nascoste nel sito pubblicato)
+│   │   ├── core/
+│   │   │   ├── connection.js   # Trasporto MIDI & BLE, invio/ricezione SysEx, riconnessione dopo il ricaricamento
+│   │   │   ├── protocol.js     # Framing SysEx, CRC16 (VTSI), CRC8 SMBus PEC (0x07), convertitore Low Model
+│   │   │   ├── preset-engine.js # State machine 50 preset, flash streaming (Clone AMP & IR), export/import, swap
+│   │   │   └── prst-parser.js  # Parser file .prst
+│   │   ├── components/
+│   │   │   ├── Tone3000Modal.js    # Memory Manager (10 slot), Cloud Explorer, Drag&Drop, progress SysEx
+│   │   │   ├── ModuleEditor.js     # Editor effetti, toggle Factory/Clone, sostituzione Tone3000
+│   │   │   ├── SignalChain.js      # Routing e ordine della catena a 9 moduli
+│   │   │   ├── PresetList.js       # Gestione 50 preset (U01-U50)
+│   │   │   ├── PresetDropdown.js   # Menu a tendina della barra preset (desktop): ricerca, Utente/Fabbrica
+│   │   │   ├── UpdateBanner.js     # Barra "aggiornamento disponibile" (non ricarica durante una scrittura)
+│   │   │   ├── ui-feedback.js      # Avvisi (notify), dialog di testo (askText) e conferma (askConfirm)
+│   │   │   ├── PresetPickerDialog.js
+│   │   │   ├── SlotTransferModal.js
+│   │   │   └── ...                 # Tuner, Drums, Setlist, Share, Export/Import, Stage Mode, Help
+│   │   ├── data/               # Librerie comandi/moduli, lookup EQ, pattern batteria
+│   │   ├── services/
+│   │   │   ├── compiler-bridge.js  # Client del compiler (/api sulla stessa origine, NAM → Low Model 2.696 byte)
+│   │   │   ├── tone3000.js         # Client REST Supabase di Tone3000
+│   │   │   └── update-check.js     # Confronta la versione compilata con /version.json pubblicato
+│   │   ├── styles/             # main.css, soniclink.css, tone3000.css, knobs.css, rack.css, drums-tuner.css
+│   │   └── utils/
+│   │       └── bundle-encoder.js   # Codifica link/bundle di condivisione
+│   ├── public/                 # Asset statici, manifest PWA, service worker (solo file statici in cache)
+│   ├── test/                   # Test automatici (girano anche in CI prima della build dell'immagine)
+│   │   ├── support/            # Pedaliera virtuale (risponde come quella vera) e scenario del motore
+│   │   ├── engine/             # Scenario completo su USB, BLE a frame spezzati, BLE a 5 frame per notifica
+│   │   ├── protocol/           # Libreria comandi (CRC8), routing catena, formati binari vs catture, .prst
+│   │   ├── ui/                 # Chrome headless sulla build, rete e hardware simulati
+│   │   └── fixtures/           # Piccole catture reali del protocollo (committate)
+│   ├── vite.config.js          # Dev server (HTTPS basicSsl, esposizione LAN, proxy /api → 8080), version.json
+│   ├── tailwind.config.js, postcss.config.js
+│   └── package.json
+├── backend/                    # Compiler NAM → Clone AMP; in produzione serve anche il sito
 │   ├── server.py               # Flask: API compiler (+ sito statico se STATIC_DIR è impostata)
 │   ├── requirements.txt
 │   ├── 5868USB.dll             # Libreria nativa Sonicake (backend Windows)
@@ -61,23 +72,19 @@ sonicake-preset-manager/
 │   │   ├── nam2clo.c, juce_android_shim.cpp
 │   │   ├── stubs/              # Stub librerie Android + lib5868usb_link_stub.cpp (link in CI senza vendor)
 │   │   └── extract-vendor.ps1  # Estrae i file vendor dall'APK SonicLink in data/vendor/
-│   ├── cache/                  # Cache conversioni in sviluppo locale (non committata)
-│   └── tools/                  # Script di reverse engineering (storici, non usati dal sito né dal server)
-├── tests/                      # Test automatici (girano anche in CI prima della build dell'immagine)
-│   ├── support/                # Pedaliera virtuale (risponde come quella vera) e scenario del motore
-│   ├── engine/                 # Scenario completo su USB, BLE a frame spezzati, BLE a 5 frame per notifica
-│   ├── protocol/               # Libreria comandi (CRC8), routing catena, formati binari vs catture, .prst
-│   ├── server/                 # Limiti di sicurezza del compiler (Python unittest)
-│   ├── ui/                     # Chrome headless sulla build, rete e hardware simulati
-│   └── fixtures/               # Piccole catture reali del protocollo (committate)
-├── data/                       # Volume runtime (/app/data): cache/ + vendor/, mai committato
+│   ├── test/                   # Limiti di sicurezza del compiler (Python unittest)
+│   └── README.md
+├── docs/
+│   └── PROTOCOL.md             # Protocollo della pedaliera: frame, comandi, flash, export/import, rinomina
+├── tools/                      # Script di reverse engineering (storici, non usati dal sito né dal server)
+│   └── captures/               # Catture locali dello sniffer e dump (mai committate)
+├── data/                       # Volume runtime (/app/data in Docker, anche in sviluppo): cache/ + vendor/, mai committato
 ├── Dockerfile                  # Immagine unica multi-arch: sito Vite + API compiler (runtime bionic + nam2clo)
 ├── .dockerignore               # Build context dell'immagine
+├── .gitattributes              # Fine riga LF, binari marcati
 ├── docker-compose.yml          # Servizio di produzione sulla rete cloudflared-mesh
 ├── .env.example                # Template variabili d'ambiente di docker compose
-├── vite.config.js              # Dev server (HTTPS basicSsl, esposizione LAN, proxy /api → 8080)
-├── start.bat                   # Avvio locale Windows (compiler + Vite)
-└── package.json
+└── package.json                # Workspace npm: dev (compiler + sito insieme), build, test
 ```
 
 ---
@@ -88,14 +95,14 @@ Identica a Sonicake Manager, verificata byte per byte.
 
 1. `.nam` (`model_url` di Tone3000 o file locale) → `POST /api/convert-nam`.
 2. `namConvertCloDataWithProcess(ctx, inWav, outWav, namPath, cloOut, int* outSize, int* progress, int* total)` riproduce `nam_input_wav.wav` attraverso il modello e ricava un **CLO da 8.840 byte** (~15-20 s, worker asincrono; completato quando `*outSize == 8840`, errore quando progress/total `== -2`).
-3. `convert_clo_to_low()` → **Low Model da 2.696 byte** (identico all'upload catturato di Sonicake Manager `server/transfer2_clone.bin`).
+3. `convert_clo_to_low()` → **Low Model da 2.696 byte** (identico all'upload catturato di Sonicake Manager `frontend/test/fixtures/transfer2_clone.bin`).
 4. Frontend `buildClonePayload()` + `flashCloneToPedal()` → 146 pacchetti SysEx.
 
 Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `compiler_backend`):
 
 - **Windows** (`dll`): `5868USB.dll` di Sonicake Manager in-process.
 - **Linux ARM64** (`nam2clo`, produzione): la build Android della stessa libreria (`lib5868USB.so`, arm64) eseguita da `nam2clo` nel `Dockerfile`, che include un runtime bionic minimo (linker64 + libc/libm/libdl dall'immagine AOSP redroid) e stub per liblog/OpenSL ES/EGL/GLES/libandroid. `juce_android_shim.cpp` intercetta `juce::File::getSpecialLocation` (altrimenti risolto via JNI → crash senza Java VM). L'output è identico byte per byte all'app SonicLink; rispetto alla DLL Windows differisce di ~0,07% (float ARM vs x86). Un processo per conversione, `NAM2CLO_WORKERS` in parallelo.
-- **File vendor** (`lib5868USB.so`, `libc++_shared.so`, `nam_input_wav.wav`): estratti dall'APK SonicLink con `server/nam2clo/extract-vendor.ps1` in `data/vendor/` e **montati a runtime**: mai committati, mai nell'immagine. In build `nam2clo` viene linkato contro `stubs/lib5868usb_link_stub.cpp`.
+- **File vendor** (`lib5868USB.so`, `libc++_shared.so`, `nam_input_wav.wav`): estratti dall'APK SonicLink con `backend/nam2clo/extract-vendor.ps1` in `data/vendor/` e **montati a runtime**: mai committati, mai nell'immagine. In build `nam2clo` viene linkato contro `stubs/lib5868usb_link_stub.cpp`.
 - Su host amd64 il sito funziona e il compiler risulta offline (la libreria esiste solo per ARM64).
 
 ---
@@ -125,13 +132,13 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 | Porta | Dove | Servizio |
 |---|---|---|
 | `5173` | sviluppo locale (HTTPS, `0.0.0.0`) | Vite dev server, proxy `/api` → `127.0.0.1:8080` |
-| `8080` | sviluppo locale | `python server/server.py` |
+| `8080` | sviluppo locale | `backend/server.py` (`npm run dev` o `npm run dev:backend`) |
 | `3000` | container `sonicake` | Sito + API, raggiunto da Cloudflared come `sonicake.mesh:3000` |
 | `3010` | host di produzione, solo `127.0.0.1` | Verifiche locali (`curl http://127.0.0.1:3010/api/health`) |
 
 ---
 
-## 🔗 Endpoint API (`server/server.py`)
+## 🔗 Endpoint API (`backend/server.py`)
 
 | Metodo | Path | Descrizione |
 |---|---|---|
@@ -151,12 +158,12 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 | `NAM2CLO_WORKERS` | `2` | Conversioni NAM in parallelo |
 | `NAM2CLO_TIMEOUT` | `180` | Timeout in secondi di una conversione |
 
-### Applicazione (`server/server.py`, impostate nel `Dockerfile`)
+### Applicazione (`backend/server.py`, impostate nel `Dockerfile`)
 
 | Variabile | Default (container) | Descrizione |
 |---|---|---|
 | `PORT` | `8080` (`3000`) | Porta del server Flask |
-| `DATA_DIR` | `server/` (`/app/data`) | Volume persistente: `cache/` (fallback su `/tmp` se non scrivibile) |
+| `DATA_DIR` | `data/` del repository (`/app/data`) | Volume persistente: `cache/` (fallback su `/tmp` se non scrivibile) |
 | `STATIC_DIR` | — (`/app/static`) | Sito compilato servito dallo stesso processo |
 | `NAM2CLO_BIN` | — (`/opt/nam2clo/nam2clo`) | Convertitore ARM64 |
 | `NAM2CLO_LIB` | — (`/app/data/vendor/lib5868USB.so`) | Libreria vendor montata |
@@ -186,15 +193,16 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 ## 🛠️ Comandi
 
 ```bash
-npm run dev                 # Vite HTTPS su 0.0.0.0:5173 (LAN/mobile)
-npm run build               # Build di produzione in dist/
+npm install                 # Dipendenze (workspace: root + frontend)
+npm run dev                 # Compiler :8080 + Vite HTTPS su 0.0.0.0:5173 (LAN/mobile), insieme
+npm run dev:frontend        # Solo il sito
+npm run dev:backend         # Solo il compiler (python backend/server.py)
+npm run build               # Build di produzione in frontend/dist/
 npm run preview             # Anteprima della build
-python server/server.py     # Compiler locale su :8080 (necessario per .nam → Clone AMP)
-start.bat                   # Windows: compiler + Vite in un colpo
 
 # Test (nessuna pedaliera necessaria)
 npm test                    # Motore + protocollo contro la pedaliera virtuale (~15 s)
-npm run test:server         # Limiti di sicurezza del compiler (Python)
+npm run test:backend        # Limiti di sicurezza del compiler (Python)
 npm run test:ui             # Build + Chrome headless (CHROME_PATH per un browser non standard)
 npm run test:all            # Tutto quanto sopra
 

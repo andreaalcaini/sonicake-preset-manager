@@ -9,7 +9,8 @@ This project is an open-source, community-driven desktop editor designed to prov
 ## 🛠️ Development Setup
 
 1. **Prerequisites:**
-   - [Node.js](https://nodejs.org/) (version 18 or newer recommended).
+   - [Node.js](https://nodejs.org/) 22 or newer.
+   - [Python](https://www.python.org/) 3.12+ for the NAM compiler (`pip install -r backend/requirements.txt`).
    - Google Chrome, Microsoft Edge, Brave, or Opera (required for Web MIDI and Web Bluetooth support).
 
 2. **Clone the repository:**
@@ -27,11 +28,11 @@ This project is an open-source, community-driven desktop editor designed to prov
    ```bash
    npm run dev
    ```
-   Open `http://localhost:5173` in your browser.
+   Starts the NAM compiler (`backend/`, port 8080) and the site (`frontend/`) together. Open `https://localhost:5173` in your browser.
 
 5. **Build for production:**
    ```bash
-   npm run build
+   npm run build      # site in frontend/dist/
    ```
 
 6. **Run the tests (no pedal needed):**
@@ -39,7 +40,7 @@ This project is an open-source, community-driven desktop editor designed to prov
    npm test              # engine + protocol against a virtual pedal
    npm run test:all      # + compiler server (Python) + interface (headless Chrome)
    ```
-   CI runs the same tests before publishing the Docker image. AI agents and contributors: read [AGENTS.md](AGENTS.md) and [STRUCTURE.md](STRUCTURE.md) first.
+   CI runs the same tests before publishing the Docker image. AI agents and contributors: read [AGENTS.md](AGENTS.md), [STRUCTURE.md](STRUCTURE.md) and, for anything that talks to the pedal, [docs/PROTOCOL.md](docs/PROTOCOL.md) first.
 
 ---
 

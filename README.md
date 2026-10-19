@@ -84,34 +84,46 @@ L'applicazione utilizza le API native del W3C **Web MIDI** e **Web Bluetooth**.
 
 ---
 
+## 🗂️ Repository
+
+| Percorso | Contenuto |
+|---|---|
+| [`frontend/`](frontend/) | Web app (Vite, ES modules, PWA): editor, Tone3000, protocollo Web MIDI / Web Bluetooth; test con la pedaliera virtuale in [`frontend/test/`](frontend/test/) |
+| [`backend/`](backend/) | Compiler NAM → Clone AMP (Flask) che in produzione serve anche il sito. [Guida](backend/README.md) |
+| [`docs/PROTOCOL.md`](docs/PROTOCOL.md) | Protocollo della pedaliera: frame SysEx, comandi, flash, export/import, rinomina |
+| [`tools/`](tools/) | Script di reverse engineering (storici, non usati dal sito) |
+| [`data/`](data/) | Volume runtime: cache delle conversioni e file vendor (mai committato) |
+
+Architettura, porte e variabili d'ambiente: [STRUCTURE.md](STRUCTURE.md). Linee guida per agenti AI e sviluppatori: [AGENTS.md](AGENTS.md).
+
+---
+
 ## 🚀 Avvio Rapido & Sviluppo Locale
 
 ### Prerequisiti
-- [Node.js](https://nodejs.org/) (versione 18 o superiore consigliata)
-- `npm`
+- [Node.js](https://nodejs.org/) 22 o superiore, con `npm`
+- [Python](https://www.python.org/) 3.12+ per il compiler NAM (`pip install -r backend/requirements.txt`)
 
 ### Installazione ed Esecuzione
 ```bash
-# 1. Clona il repository
 git clone https://github.com/andreaalcaini/sonicake-preset-manager.git
-
-# 2. Entra nella cartella di progetto
 cd sonicake-preset-manager
-
-# 3. Installa le dipendenze
 npm install
-
-# 4. Avvia il server di sviluppo locale
-npm run dev
+npm run dev        # compiler (:8080) + sito con hot reload (https://localhost:5173)
 ```
 
-Apri `http://localhost:5173` nel tuo browser.
+Il sito usa HTTPS anche in locale (obbligatorio per Web MIDI e Web Bluetooth) ed è raggiungibile dagli altri dispositivi della rete. Solo il sito: `npm run dev:frontend`; solo il compiler: `npm run dev:backend`.
+
+### Test (nessuna pedaliera necessaria)
+```bash
+npm test           # motore e protocollo contro la pedaliera virtuale
+npm run test:all   # + compiler (Python) + interfaccia (Chrome headless)
+```
 
 ### Build per la Produzione
 ```bash
-npm run build
+npm run build      # sito in frontend/dist/
 ```
-La cartella `dist/` conterrà i file pronti per essere distribuiti su GitHub Pages, Vercel, Netlify o qualsiasi server web statico.
 
 ---
 
@@ -136,13 +148,13 @@ La cartella `dist/` conterrà i file pronti per essere distribuiti su GitHub Pag
 
 Ogni push su `master` compila con GitHub Actions l'immagine Docker multi-arch (`linux/amd64` + `linux/arm64`) con sito e compiler NAM, e la pubblica su `ghcr.io/andreaalcaini/sonicake-preset-manager`.
 
-Sul server bastano `docker-compose.yml`, un eventuale `.env` (vedi `.env.example`) e i file vendor Sonicake in `data/vendor/` (vedi [server/README.md](server/README.md)):
+Sul server bastano `docker-compose.yml`, un eventuale `.env` (vedi `.env.example`) e i file vendor Sonicake in `data/vendor/` (vedi [backend/README.md](backend/README.md)):
 
 ```bash
 docker compose pull && docker compose up -d
 ```
 
-Il sito è esposto tramite Cloudflare Tunnel (rete `cloudflared-mesh`, alias `sonicake.mesh`). Architettura, porte e variabili: [STRUCTURE.md](STRUCTURE.md). Linee guida per agenti AI e sviluppatori: [AGENTS.md](AGENTS.md).
+Il sito è esposto tramite Cloudflare Tunnel (rete `cloudflared-mesh`, alias `sonicake.mesh`).
 
 ---
 

@@ -13,21 +13,37 @@
  * - Never touches or alters the 50 user working presets
  */
 
-import { Tone3000Service } from '../services/tone3000.js';
+import { tone3000 } from '../services/tone3000.js';
 import { presetEngine, SLOT_RENAME_MAX } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
 import { CompilerBridgeService } from '../services/compiler-bridge.js';
 import { convertCLOToLowModel } from '../core/protocol.js';
 import { notify, askText } from './ui-feedback.js';
 
+const T3K_LOGO = '/assets/tone3000/tone3000-logo.svg';
+const T3K_MARK = '/assets/tone3000/t3k-mark.svg';
+
+// TONE3000 lists of the free API tier
+const LIBRARY_TABS = [
+  ['trending', 'Di tendenza'],
+  ['latest', 'Ultimi'],
+  ['favorited', 'Preferiti'],
+  ['downloaded', 'Scaricati'],
+  ['created', 'Creati']
+];
+const FILTERABLE_TABS = new Set(['favorited', 'downloaded', 'created']);
+
 export class Tone3000Modal {
   constructor(overlayElement) {
     this.overlay = overlayElement;
     this.activeTab = 'memory'; // 'memory' or 'browse'
-    this.searchQuery = '';
-    this.currentGear = 'all';
+    this.libraryTab = 'trending';
+    this.searchQuery = ''; // title filter of the favorited / downloaded / created lists
     this.tones = [];
+    this.hiddenTones = 0; // tones the pedal cannot load (e.g. NAM A2 only), left out of the list
+    this.selectedTone = null; // tone picked with "Sfoglia TONE3000" (Select flow)
     this.isLoading = false;
+    this.authBusy = false;
     this.debounceTimer = null;
     this.selectedTargetType = 'amp'; // 'amp' or 'cab'
     this.selectedTargetSlot = 0; // 0 to 4
@@ -35,6 +51,14 @@ export class Tone3000Modal {
     this.selectedVariations = {};
     this.variationsCache = {};
     this.bridgeStatus = { available: false };
+
+    // Sign-in / sign-out (also from another tab): show the right library view
+    tone3000.onChange(() => {
+      if (this.overlay.classList.contains('active') && this.activeTab === 'browse') {
+        this.render();
+        if (tone3000.isConnected()) this.fetchTones();
+      }
+    });
 
     this.checkBridgeStatus();
     this.render();
@@ -54,45 +78,51 @@ export class Tone3000Modal {
     this.checkBridgeStatus();
     this.render();
     this.overlay.classList.add('active');
-    if (this.tones.length === 0) {
-      this.fetchTones();
-    }
   }
 
   openForReplacement({ targetType = 'amp' } = {}) {
-    this.activeTab = 'browse';
     this.selectedTargetType = targetType === 'amp' ? 'amp' : 'cab';
-    this.currentGear = targetType === 'amp' ? 'amp' : 'cab';
     this.selectedTargetSlot = 0;
     this.applyToCurrentPreset = true;
+    this.openLibrary();
+  }
+
+  /** Library tab, with the lists loaded when signed in to TONE3000 */
+  openLibrary() {
+    this.activeTab = 'browse';
     this.checkBridgeStatus();
     this.render();
     this.overlay.classList.add('active');
-    this.fetchTones();
+    if (tone3000.isConnected()) this.fetchTones();
   }
 
   close() {
     this.overlay.classList.remove('active');
   }
 
+  /** TONE3000 list for the target slot: NAM captures for Clone AMP, IR files for User IR */
   async fetchTones() {
-    // Only the latest search may update the grid (typing fires several searches)
+    if (!tone3000.isConnected()) return;
+    // Only the latest request may update the grid (typing in the filter fires several)
     const request = (this.searchRequest = (this.searchRequest || 0) + 1);
     this.isLoading = true;
     this.searchError = null;
     this.renderGrid();
 
     try {
-      const tones = await Tone3000Service.searchTones({
-        query: this.searchQuery,
-        gear: this.currentGear,
-        limit: 24
+      const wantIr = this.selectedTargetType === 'cab';
+      const { tones } = await tone3000.listTones(this.libraryTab, {
+        query: FILTERABLE_TABS.has(this.libraryTab) ? this.searchQuery : '',
+        gear: wantIr && this.libraryTab !== 'latest' ? 'cab' : ''
       });
       if (request !== this.searchRequest) return;
-      this.tones = tones;
+      const forTarget = tones.filter(t => (t.format === 'ir') === wantIr);
+      this.tones = forTarget.filter(t => t.supported);
+      this.hiddenTones = forTarget.length - this.tones.length;
     } catch (err) {
       if (request !== this.searchRequest) return;
       this.tones = [];
+      this.hiddenTones = 0;
       this.searchError = err.message;
     } finally {
       if (request === this.searchRequest) {
@@ -100,6 +130,55 @@ export class Tone3000Modal {
         this.renderGrid();
       }
     }
+  }
+
+  /**
+   * "Sfoglia TONE3000" (and "Continua" on the partnership splash): the Select flow. The user
+   * signs in if needed and browses the full catalog on TONE3000; the picked tone opens at the
+   * top of the library, ready to be written.
+   */
+  async browseTone3000() {
+    if (this.authBusy) return;
+    this.authBusy = true;
+    this.render();
+    try {
+      const wantIr = this.selectedTargetType === 'cab';
+      const { toneId } = await tone3000.startFlow({ prompt: 'select_tone', format: wantIr ? 'ir' : 'nam' });
+      this.authBusy = false;
+      if (toneId) await this.showSelectedTone(toneId);
+      else {
+        this.render();
+        if (tone3000.isConnected()) this.fetchTones();
+      }
+    } catch (err) {
+      this.authBusy = false;
+      this.render();
+      notify(err.message, 'error');
+    }
+  }
+
+  /** Show a tone picked on TONE3000 at the top of the library */
+  async showSelectedTone(toneId) {
+    this.activeTab = 'browse';
+    try {
+      const tone = await tone3000.getTone(toneId);
+      if (tone.format === 'ir') this.selectedTargetType = 'cab';
+      else if (tone.format === 'nam') this.selectedTargetType = 'amp';
+      this.selectedTone = tone;
+    } catch (err) {
+      notify(err.message, 'error');
+    }
+    this.render();
+    this.fetchTones();
+    if (this.selectedTone) {
+      this.overlay.querySelector(`.tone-card[data-id="${this.selectedTone.id}"]`)?.scrollIntoView({ block: 'nearest' });
+    }
+  }
+
+  /** All tones on screen (the picked one first) */
+  visibleTones() {
+    const list = this.tones.filter(t => !this.selectedTone || t.id !== this.selectedTone.id);
+    return this.selectedTone ? [this.selectedTone, ...list] : list;
   }
 
   /** Enable / disable the write and download buttons of a tone card */
@@ -120,11 +199,11 @@ export class Tone3000Modal {
     let models = this.variationsCache[toneId];
     if (!models) {
       try {
-        models = await Tone3000Service.getToneModels(toneId);
+        models = await tone3000.listModels(toneId);
         this.variationsCache[toneId] = models;
       } catch (err) {
         // Not cached: the next render tries again
-        selectEl.innerHTML = '<option value="">File non disponibili: riprova più tardi</option>';
+        selectEl.innerHTML = `<option value="">${this.escapeHtml(err.status === 429 ? err.message : 'File non disponibili: riprova più tardi')}</option>`;
         this.selectedVariations[toneId] = null;
         this.setToneActionsEnabled(toneId, false);
         return;
@@ -147,7 +226,7 @@ export class Tone3000Modal {
 
     selectEl.innerHTML = models.map((m, idx) => `
       <option value="${idx}">
-        ${idx + 1}. ${m.name}
+        ${idx + 1}. ${this.escapeHtml(m.name)}
       </option>
     `).join('');
 
@@ -287,8 +366,8 @@ export class Tone3000Modal {
                         NAM ${i + 1}
                       </span>
                       <div class="min-w-0">
-                        <div class="text-xs sm:text-sm font-bold text-zinc-100 truncate" title="${name}">${name}</div>
-                        
+                        <div class="text-xs sm:text-sm font-bold text-zinc-100 truncate" title="${this.escapeHtml(name)}">${this.escapeHtml(name)}</div>
+                        ${this.renderSlotSource(presetEngine.cloneSlotMetadata[i], rawName)}
                       </div>
                     </div>
 
@@ -299,7 +378,7 @@ export class Tone3000Modal {
                           In Riproduzione
                         </span>
                       ` : `
-                        
+
                       `}
                     </div>
                   </div>
@@ -358,8 +437,8 @@ export class Tone3000Modal {
                         IR ${i + 1}
                       </span>
                       <div class="min-w-0">
-                        <div class="text-xs sm:text-sm font-bold text-zinc-100 truncate" title="${name}">${name}</div>
-                        
+                        <div class="text-xs sm:text-sm font-bold text-zinc-100 truncate" title="${this.escapeHtml(name)}">${this.escapeHtml(name)}</div>
+                        ${this.renderSlotSource(presetEngine.irSlotMetadata[i], name)}
                       </div>
                     </div>
 
@@ -425,14 +504,14 @@ export class Tone3000Modal {
             <optgroup label="Amplificatori Clone">
               ${cloneNames.map((name, i) => `
                 <option value="amp:${i}" ${!isCab && i === this.selectedTargetSlot ? 'selected' : ''}>
-                  Clone ${i + 1}: ${name}
+                  Clone ${i + 1}: ${this.escapeHtml(name)}
                 </option>
               `).join('')}
             </optgroup>
             <optgroup label="Casse IR">
               ${irNames.map((name, i) => `
                 <option value="cab:${i}" ${isCab && i === this.selectedTargetSlot ? 'selected' : ''}>
-                  IR ${i + 1}: ${name}
+                  IR ${i + 1}: ${this.escapeHtml(name)}
                 </option>
               `).join('')}
             </optgroup>
@@ -445,30 +524,105 @@ export class Tone3000Modal {
         </label>
       </div>
 
-      <!-- Search Input & Filter Pills -->
-      <div class="space-y-2">
-        <div class="relative">
-          <svg class="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="11" cy="11" r="8"></circle>
-            <path d="m21 21-4.35-4.35"></path>
-          </svg>
-          <input type="text" class="tone3000-input w-full pl-10 pr-12 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-500 focus:ring-1 focus:ring-orange-500/50 rounded-xl text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 outline-none transition-colors" placeholder="Cerca catture su Tone3000 (es. Marshall, Friedman, Peavey 5150, Fender Twin, Rectifier)..." value="${String(this.searchQuery).replace(/&/g, '&amp;').replace(/"/g, '&quot;')}">
-          <button type="button" class="btn-clear-search ${this.searchQuery ? '' : 'hidden'} absolute right-0 top-0 h-full w-11 flex items-center justify-center rounded-r-xl text-zinc-400 hover:text-white" title="Cancella la ricerca" aria-label="Cancella la ricerca">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      ${this.renderLibraryPanel()}
+    `;
+  }
+
+  /**
+   * TONE3000 part of the library, following the API design requirements: partnership splash
+   * before sign-in, then the signed-in user, a persistent "Sfoglia TONE3000" (Select flow) and
+   * the bounded lists.
+   */
+  renderLibraryPanel() {
+    const esc = (v) => this.escapeHtml(v);
+    if (!tone3000.isConfigured()) {
+      return `
+        <div class="p-5 bg-[#18191d] border border-zinc-800 rounded-xl flex flex-col items-center gap-3 text-center">
+          <img src="${T3K_LOGO}" alt="TONE3000" class="h-7 w-auto">
+          <p class="text-sm text-zinc-300 max-w-md">La libreria TONE3000 non è ancora attiva su questo sito. Puoi comunque caricare file <strong>.nam</strong> e <strong>.wav</strong> dalla scheda "Sulla pedaliera".</p>
+        </div>
+      `;
+    }
+
+    if (!tone3000.isConnected()) {
+      return `
+        <div class="t3k-splash p-5 sm:p-8 bg-[#18191d] border border-zinc-800 rounded-xl flex flex-col items-center gap-4 text-center">
+          <div class="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 max-w-full">
+            <img src="/assets/images/logo_sonicake.svg" alt="Sonicake" class="h-5 sm:h-6 w-auto max-w-[45%]" onerror="this.remove()">
+            <span class="text-zinc-500 text-lg" aria-hidden="true">×</span>
+            <img src="${T3K_LOGO}" alt="TONE3000" class="h-5 sm:h-6 w-auto max-w-[45%]">
+          </div>
+          <p class="text-sm sm:text-base text-zinc-200 max-w-lg leading-relaxed">
+            Sonicake Preset Manager collabora con TONE3000 per darti accesso a una vasta libreria di catture Neural Amp Modeler (NAM) e IR di vera strumentazione analogica, create da una comunità globale di musicisti.
+          </p>
+          <button type="button" class="btn-t3k-continue min-h-[44px] px-6 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-sm font-black disabled:opacity-60" ${this.authBusy ? 'disabled' : ''}>
+            ${this.authBusy ? 'Accesso in corso nella finestra TONE3000…' : 'Continua'}
+          </button>
+          <p class="text-[11px] text-zinc-500 max-w-md">Accedi con la tua email TONE3000 (ricevi un codice di 6 cifre). Il tuo account resta su TONE3000: questo sito conserva solo l'accesso, in questo browser.</p>
+        </div>
+      `;
+    }
+
+    const user = tone3000.user;
+    const tabs = LIBRARY_TABS.map(([id, label]) => `
+      <button type="button" class="t3k-tab min-h-[40px] px-3.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${this.libraryTab === id ? 'bg-orange-500 text-black shadow-sm' : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'}" data-tab="${id}">${label}</button>
+    `).join('');
+
+    return `
+      <div class="space-y-2.5">
+        <div class="flex flex-wrap items-center justify-between gap-2.5 p-2.5 bg-[#18191d] border border-zinc-800 rounded-xl">
+          <div class="flex items-center gap-2.5 min-w-0">
+            <img src="${T3K_LOGO}" alt="TONE3000" class="h-5 sm:h-6 w-auto shrink-0">
+            ${user ? `
+              <span class="flex items-center gap-1.5 min-w-0 text-xs text-zinc-300">
+                ${user.avatar_url ? `<img src="${esc(user.avatar_url)}" alt="" class="w-6 h-6 rounded-full object-cover shrink-0 bg-zinc-800">` : ''}
+                <span class="truncate">@${esc(user.username || '')}</span>
+              </span>
+            ` : ''}
+            <button type="button" class="btn-t3k-logout text-[11px] text-zinc-500 hover:text-zinc-200 underline shrink-0 min-h-[32px]">Esci</button>
+          </div>
+          <button type="button" class="btn-t3k-browse min-h-[44px] px-4 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-sm font-black flex items-center gap-2 disabled:opacity-60" ${this.authBusy ? 'disabled' : ''}>
+            <img src="${T3K_MARK}" alt="" class="h-4 w-auto">
+            <span>${this.authBusy ? 'Finestra TONE3000 aperta…' : 'Sfoglia TONE3000'}</span>
           </button>
         </div>
 
-        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-          ${[
-            ['all', 'Tutti'], ['amp', 'Amp'], ['amp-cab', 'Amp + Cab'], ['pedal', 'Pedali'], ['outboard', 'Outboard'], ['cab', 'Cab IR']
-          ].map(([gear, label]) => `
-            <button class="gear-pill min-h-[36px] px-3.5 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${this.currentGear === gear ? 'bg-orange-500 text-black shadow-sm' : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-800'}" data-gear="${gear}">${label}</button>
-          `).join('')}
-        </div>
-      </div>
+        <div class="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">${tabs}</div>
 
-      <!-- Tones Grid Container -->
-      <div class="tones-grid-container flex-1 overflow-y-auto min-h-[300px]"></div>
+        ${FILTERABLE_TABS.has(this.libraryTab) ? `
+          <div class="relative">
+            <svg class="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <path d="m21 21-4.35-4.35"></path>
+            </svg>
+            <input type="text" class="tone3000-input w-full pl-10 pr-12 py-2.5 bg-zinc-950 border border-zinc-800 focus:border-orange-500 focus:ring-1 focus:ring-orange-500/50 rounded-xl text-xs sm:text-sm text-zinc-100 placeholder-zinc-500 outline-none transition-colors" placeholder="Filtra per titolo…" value="${esc(this.searchQuery)}">
+            <button type="button" class="btn-clear-search ${this.searchQuery ? '' : 'hidden'} absolute right-0 top-0 h-full w-11 flex items-center justify-center rounded-r-xl text-zinc-400 hover:text-white" title="Cancella il filtro" aria-label="Cancella il filtro">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        ` : ''}
+
+        <div class="tones-grid-container flex-1 overflow-y-auto min-h-[300px]"></div>
+      </div>
+    `;
+  }
+
+  /**
+   * TONE3000 origin of a slot (image + T3K mark + tone, as the API design requires for loaded
+   * tones). Only while the slot still holds that capture: another app may have overwritten it.
+   */
+  renderSlotSource(meta, slotName) {
+    if (!meta || meta.source !== 'tone3000' || !slotName) return '';
+    const stored = String(meta.variationName || '');
+    const same = stored && (slotName === stored || slotName.startsWith(stored) || stored.startsWith(slotName));
+    if (!same) return '';
+    const esc = (v) => this.escapeHtml(v);
+    return `
+      <a href="${esc(meta.pageUrl || '#')}" target="_blank" rel="noopener" class="mt-1 flex items-center gap-1.5 min-w-0 text-[11px] text-zinc-400 hover:text-zinc-200" title="Apri su TONE3000">
+        ${meta.image ? `<img src="${esc(meta.image)}" alt="" loading="lazy" class="w-6 h-6 rounded object-cover shrink-0 bg-zinc-800">` : ''}
+        <img src="${T3K_MARK}" alt="TONE3000" class="h-3 w-auto shrink-0">
+        <span class="truncate">${esc(meta.toneTitle || '')}${meta.creator ? ` · @${esc(meta.creator)}` : ''}</span>
+      </a>
     `;
   }
 
@@ -494,24 +648,27 @@ export class Tone3000Modal {
     return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   }
 
-  /** Tone3000-style capture card: image, title, capture type, downloads, files, author */
+  /** TONE3000 tone card (design requirements): image, title, gear type, format, creator, branding */
   renderToneCard(tone) {
     const esc = (v) => this.escapeHtml(v);
-    const isIr = tone.platform === 'ir' || tone.gear === 'cab';
+    const isIr = tone.format === 'ir';
     const author = tone.author;
+    const picked = this.selectedTone && this.selectedTone.id === tone.id;
     const fallbackIcon = isIr ? '/assets/images/ir_on.svg' : (tone.gear === 'pedal' ? '/assets/images/drv_on.svg' : '/assets/images/amp_on.svg');
 
     return `
-      <div class="tone-card p-3 bg-[#18191d] border border-zinc-800 hover:border-orange-500/40 rounded-xl flex flex-col gap-3 transition-all" data-id="${tone.id}">
+      <div class="tone-card p-3 bg-[#18191d] border ${picked ? 'border-orange-500/70' : 'border-zinc-800 hover:border-orange-500/40'} rounded-xl flex flex-col gap-3 transition-all" data-id="${tone.id}">
+        ${picked ? '<div class="text-[11px] font-bold uppercase tracking-wider text-orange-400">Scelto su TONE3000</div>' : ''}
         <div class="flex gap-3 sm:gap-4 min-w-0">
-          <a href="${tone.url}" target="_blank" rel="noopener" class="shrink-0 w-24 h-24 sm:w-28 sm:h-28 rounded-lg overflow-hidden bg-zinc-900 flex items-center justify-center" title="Apri su Tone3000">
+          <a href="${esc(tone.url)}" target="_blank" rel="noopener" class="relative shrink-0 w-24 h-24 sm:w-28 sm:h-28 rounded-lg overflow-hidden bg-zinc-900 flex items-center justify-center" title="Apri su TONE3000">
             ${tone.image
               ? `<img src="${esc(tone.image)}" alt="" loading="lazy" class="w-full h-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('img'),{src:'${fallbackIcon}',className:'w-12 h-auto opacity-80'}))">`
               : `<img src="${fallbackIcon}" alt="" class="w-12 h-auto opacity-80">`}
+            <img src="${T3K_MARK}" alt="TONE3000" class="absolute bottom-1 right-1 h-3.5 w-auto drop-shadow">
           </a>
 
           <div class="min-w-0 flex-1 flex flex-col gap-1.5">
-            <a href="${tone.url}" target="_blank" rel="noopener" class="text-sm sm:text-base font-bold text-white leading-snug line-clamp-2 hover:text-orange-300" title="${esc(tone.title)}">${esc(tone.title)}</a>
+            <a href="${esc(tone.url)}" target="_blank" rel="noopener" class="text-sm sm:text-base font-bold text-white leading-snug line-clamp-2 hover:text-orange-300" title="${esc(tone.title)}">${esc(tone.title)}</a>
 
             <div class="flex items-center gap-2 text-xs sm:text-sm text-zinc-400">
               <span class="truncate">${esc(tone.gearLabel || 'Capture')}</span>
@@ -523,30 +680,25 @@ export class Tone3000Modal {
                 <svg class="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                 ${this.formatCount(tone.downloads)}
               </span>
-              <span class="flex items-center gap-1.5" title="File disponibili">
+              <span class="flex items-center gap-1.5" title="File utilizzabili dalla pedaliera">
                 <svg class="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
                 <span id="varCountBadge-${tone.id}">${this.formatCount(tone.filesCount)}</span>
               </span>
-              ${typeof tone.comments === 'number' ? `
-                <span class="flex items-center gap-1.5" title="Commenti">
-                  <svg class="w-4 h-4 text-zinc-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z"/></svg>
-                  ${this.formatCount(tone.comments)}
-                </span>
-              ` : ''}
             </div>
 
             ${author ? `
-              <div class="flex items-center gap-2 text-xs sm:text-sm text-zinc-300 min-w-0">
+              <a href="${esc(author.url || tone.url)}" target="_blank" rel="noopener" class="flex items-center gap-2 text-xs sm:text-sm text-zinc-300 min-w-0 hover:text-white">
                 ${author.avatar
                   ? `<img src="${esc(author.avatar)}" alt="" loading="lazy" class="w-6 h-6 rounded-full object-cover shrink-0 bg-zinc-800">`
                   : `<span class="w-6 h-6 rounded-full bg-zinc-700 text-[11px] font-bold text-zinc-200 flex items-center justify-center shrink-0">${esc(author.name.charAt(0).toUpperCase())}</span>`}
-                <span class="truncate">${esc(author.name)}</span>
+                <span class="truncate">@${esc(author.username || author.name)}</span>
                 ${author.verified ? `<svg class="w-4 h-4 shrink-0 text-orange-400" viewBox="0 0 24 24" fill="currentColor" aria-label="Verificato"><path d="M12 2l2.4 2.2 3.2-.4.9 3.1 2.9 1.5-1 3.1 1 3.1-2.9 1.5-.9 3.1-3.2-.4L12 22l-2.4-2.2-3.2.4-.9-3.1-2.9-1.5 1-3.1-1-3.1 2.9-1.5.9-3.1 3.2.4z"/><path d="m8.5 12.2 2.4 2.4 4.6-4.8" fill="none" stroke="#18191d" stroke-width="2"/></svg>` : ''}
                 <span class="text-zinc-500 shrink-0">${this.formatAge(tone.publishedAt)}</span>
-              </div>
+              </a>
             ` : ''}
           </div>
         </div>
+        ${picked && tone.description ? `<p class="text-xs text-zinc-400 line-clamp-3 whitespace-pre-line">${esc(tone.description)}</p>` : ''}
 
         <!-- Files of this capture -->
         <div class="flex items-center gap-2">
@@ -575,21 +727,30 @@ export class Tone3000Modal {
     const gridContainer = this.overlay.querySelector('.tones-grid-container');
     if (!gridContainer) return;
 
-    if (this.isLoading) {
+    const tones = this.visibleTones();
+    const kind = this.selectedTargetType === 'cab' ? 'IR' : 'catture NAM';
+    const discoverMore = `
+      <button type="button" class="btn-t3k-discover w-full min-h-[44px] mt-3 p-3 rounded-xl border border-dashed border-zinc-700 hover:border-orange-500/60 text-xs sm:text-sm text-zinc-300 hover:text-white flex items-center justify-center gap-2">
+        <img src="${T3K_MARK}" alt="" class="h-4 w-auto">
+        <span>Scopri tutto il catalogo su TONE3000</span>
+      </button>
+    `;
+
+    if (this.isLoading && tones.length === 0) {
       gridContainer.innerHTML = `
         <div class="text-center py-16 text-orange-400 font-bold text-xs sm:text-sm flex flex-col items-center gap-2">
           <div class="w-7 h-7 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div>
-          <span>Ricerca catture Tone3000 in corso...</span>
+          <span>Caricamento da TONE3000…</span>
         </div>
       `;
       return;
     }
 
-    if (this.searchError) {
+    if (this.searchError && tones.length === 0) {
       gridContainer.innerHTML = `
         <div class="text-center py-14 px-4 flex flex-col items-center gap-3">
-          <div class="text-sm font-bold text-rose-300">Ricerca non riuscita</div>
-          <div class="text-xs text-zinc-400 max-w-sm">${this.searchError}</div>
+          <div class="text-sm font-bold text-rose-300">Elenco non disponibile</div>
+          <div class="text-xs text-zinc-400 max-w-sm">${this.escapeHtml(this.searchError)}</div>
           <button type="button" class="btn-retry-search min-h-[44px] px-5 rounded-xl bg-orange-500 hover:bg-orange-400 text-sm font-bold text-zinc-950">Riprova</button>
         </div>
       `;
@@ -597,22 +758,29 @@ export class Tone3000Modal {
       return;
     }
 
-    if (this.tones.length === 0) {
+    if (tones.length === 0) {
+      const filtered = FILTERABLE_TABS.has(this.libraryTab) && this.searchQuery.trim();
       gridContainer.innerHTML = `
-        <div class="text-center py-16 text-zinc-500 text-xs sm:text-sm">
-          Nessuna cattura trovata per "${this.searchQuery}". Prova a cercare un'altra marca (es. Marshall, Fender, 5150, Mesa).
+        <div class="text-center py-12 px-4 text-zinc-400 text-xs sm:text-sm">
+          ${filtered ? `Nessun risultato per "${this.escapeHtml(this.searchQuery)}".` : `Nessuna ${kind} in questo elenco.`}
+          ${this.hiddenTones ? `<div class="mt-1 text-zinc-500">${this.hiddenTones} non compatibili con la pedaliera (NAM A2) nascoste.</div>` : ''}
         </div>
+        ${discoverMore}
       `;
+      gridContainer.querySelector('.btn-t3k-discover').addEventListener('click', () => this.browseTone3000());
       return;
     }
 
     gridContainer.innerHTML = `
       <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
-        ${this.tones.map(tone => this.renderToneCard(tone)).join('')}
+        ${tones.map(tone => this.renderToneCard(tone)).join('')}
       </div>
+      ${this.hiddenTones ? `<p class="mt-2 text-[11px] text-zinc-500">${this.hiddenTones} non compatibili con la pedaliera (solo NAM A2) nascoste.</p>` : ''}
+      ${discoverMore}
     `;
+    gridContainer.querySelector('.btn-t3k-discover').addEventListener('click', () => this.browseTone3000());
 
-    this.tones.forEach(tone => {
+    tones.forEach(tone => {
       this.loadToneVariations(tone);
     });
 
@@ -620,7 +788,7 @@ export class Tone3000Modal {
     gridContainer.querySelectorAll('.btn-flash-tone').forEach(btn => {
       btn.addEventListener('click', async () => {
         const toneId = btn.dataset.id;
-        const tone = this.tones.find(t => String(t.id) === String(toneId));
+        const tone = tones.find(t => String(t.id) === String(toneId));
         if (!tone) return;
 
         if (!connection.isConnected) {
@@ -635,65 +803,25 @@ export class Tone3000Modal {
         }
 
         const modelName = selectedVar.name || tone.title;
-        let targetType = this.selectedTargetType;
-        let slotIndex = this.selectedTargetSlot;
-        if (tone.gear === 'cab' || tone.gear === 'ir') {
-          targetType = 'cab';
-        }
+        const targetType = tone.format === 'ir' ? 'cab' : 'amp';
+        // The slot list holds Clone AMP and User IR slots: a tone of the other kind goes to slot 1
+        const slotIndex = targetType === this.selectedTargetType ? this.selectedTargetSlot : 0;
+        const source = this.toneSource(tone, selectedVar);
+        const download = () => tone3000.fetchModelFile(selectedVar.url);
 
-        const modelUrl = selectedVar.url;
-
-        // IR Path
         if (targetType === 'cab') {
-          if (!modelUrl || (!modelUrl.toLowerCase().includes('.wav') && !modelUrl.toLowerCase().includes('/ir/') && !modelUrl.toLowerCase().includes('/models/'))) {
-            notify(`Il profilo cassa IR ("${modelName}") non dispone di un file .wav con download diretto.\n\nPuoi caricare un file .wav dal computer o smartphone tramite la scheda "Slot Pedaliera".`, 'warning');
-            return;
-          }
-          const irName = await this.askSlotName(modelName, `Slot User IR ${slotIndex + 1}`);
-          if (!irName) return;
-          try {
-            this.showFlashProgressModal(`Download IR "${irName}"`, `Scrittura nello slot User IR ${slotIndex + 1}`);
-            const resp = await fetch(modelUrl);
-            const arrayBuffer = await resp.arrayBuffer();
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
-            const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-            const channelData = audioBuffer.getChannelData(0);
-
-            const samples = new Float32Array(512);
-            const count = Math.min(512, channelData.length);
-            let maxVal = 0;
-            for (let i = 0; i < count; i++) {
-              if (Math.abs(channelData[i]) > maxVal) maxVal = Math.abs(channelData[i]);
-            }
-            const scale = maxVal > 0 ? (0.95 / maxVal) : 1.0;
-            for (let i = 0; i < count; i++) samples[i] = channelData[i] * scale;
-
-            await presetEngine.flashIRToPedal(slotIndex, samples, irName, (curr, tot, pct) => {
-              this.updateFlashProgress(curr, tot, pct);
-            });
-            await presetEngine.activateIRSlot(slotIndex, true);
-            this.hideFlashProgressModal(`User IR ${slotIndex + 1} ("${irName}") memorizzato con successo!`);
-            this.render();
-          } catch (err) {
-            console.error('Flash IR failed:', err);
-            notify(`Errore caricamento IR: ${err.message}`, 'error');
-            this.hideFlashProgressModal();
-          }
-          return;
-        }
-
-        // Clone AMP Path
-        if (targetType === 'amp') {
-          await this.processAndFlashNam(modelUrl, modelName, slotIndex);
+          await this.processAndFlashWavFile(download, slotIndex, { name: modelName, source });
+        } else {
+          await this.processAndFlashNam(download, modelName, slotIndex, { source });
         }
       });
     });
 
-    // Download-only button handler
+    // Download-only button: save the file on the device (nothing is written to the pedal)
     gridContainer.querySelectorAll('.btn-load-tone').forEach(btn => {
       btn.addEventListener('click', async () => {
         const toneId = btn.dataset.id;
-        const tone = this.tones.find(t => String(t.id) === String(toneId));
+        const tone = tones.find(t => String(t.id) === String(toneId));
         if (!tone) return;
 
         const selectedVar = this.selectedVariations[toneId];
@@ -702,40 +830,38 @@ export class Tone3000Modal {
           return;
         }
 
-        const payload = {
-          ...tone,
-          toneTitle: tone.title,
-          variationName: selectedVar.name,
-          title: selectedVar.name,
-          modelId: selectedVar.id,
-          modelUrl: selectedVar.url,
-          size: selectedVar.size || 'standard'
-        };
-
-        let targetType = this.selectedTargetType;
-        let slotIndex = this.selectedTargetSlot;
-        if (tone.gear === 'cab' || tone.gear === 'ir') targetType = 'cab';
-
-        const slotLabel = targetType === 'amp' ? `NAM ${slotIndex + 1}` : `User IR ${slotIndex + 1}`;
-        const extName = targetType === 'amp' ? '.nam' : '.wav';
-
+        const label = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = `<div class="w-3 h-3 border-2 border-orange-500 border-t-transparent rounded-full animate-spin"></div><span>Download...</span>`;
-        await this.downloadModelFile(payload, targetType);
-
-        if (targetType === 'amp') {
-          presetEngine.replaceCloneProfile(slotIndex, payload, this.applyToCurrentPreset);
-          if (this.applyToCurrentPreset) await presetEngine.activateCloneSlot(slotIndex, true);
-        } else {
-          presetEngine.replaceUserIR(slotIndex, payload, this.applyToCurrentPreset);
-          if (this.applyToCurrentPreset) await presetEngine.activateIRSlot(slotIndex, true);
+        try {
+          const blob = await tone3000.fetchModelFile(selectedVar.url);
+          const ext = tone.format === 'ir' ? '.wav' : '.nam';
+          CompilerBridgeService.downloadBlob(blob, `${selectedVar.name.replace(/[\\/:*?"<>|]/g, '_').trim()}${ext}`);
+          this.showDownloadNotice(selectedVar.name, ext);
+        } catch (err) {
+          notify(err.message, 'error');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = label;
         }
-
-        btn.textContent = `✓ Salvato nei Download!`;
-        btn.disabled = false;
-        this.showDownloadNotice(payload.variationName, slotLabel, extName, false);
       });
     });
+  }
+
+  /** What to remember about a slot written from TONE3000 (shown with the TONE3000 mark) */
+  toneSource(tone, model) {
+    return {
+      source: 'tone3000',
+      toneId: tone.id,
+      toneTitle: tone.title,
+      modelId: model.id,
+      pageUrl: tone.url,
+      image: tone.image,
+      gear: tone.gear,
+      gearLabel: tone.gearLabel,
+      format: tone.format,
+      creator: tone.author ? tone.author.username || tone.author.name : null
+    };
   }
 
   /**
@@ -830,12 +956,19 @@ export class Tone3000Modal {
     }
   }
 
-  async processAndFlashWavFile(file, slotIndex) {
-    const cleanName = await this.askSlotName(file.name.replace(/\.[^/.]+$/, ''), `Slot User IR ${slotIndex + 1}`);
+  /**
+   * Write an IR into a User IR slot. `fileOrLoader`: a File, or a function returning the file
+   * (TONE3000 download, started only after the name is confirmed). `source`: TONE3000 origin.
+   */
+  async processAndFlashWavFile(fileOrLoader, slotIndex, { name = null, source = null } = {}) {
+    const defaultName = name || fileOrLoader.name.replace(/\.[^/.]+$/, '');
+    const cleanName = await this.askSlotName(defaultName, `Slot User IR ${slotIndex + 1}`);
     if (!cleanName) return;
-    this.showFlashProgressModal(`Caricamento IR "${cleanName}"`, `Scrittura nello slot User IR ${slotIndex + 1}`);
+    const remote = typeof fileOrLoader === 'function';
+    this.showFlashProgressModal(`${remote ? 'Download' : 'Caricamento'} IR "${cleanName}"`, `Scrittura nello slot User IR ${slotIndex + 1}`);
 
     try {
+      const file = remote ? await fileOrLoader() : fileOrLoader;
       const arrayBuffer = await file.arrayBuffer();
       const audioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 48000 });
       const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
@@ -853,6 +986,7 @@ export class Tone3000Modal {
       await presetEngine.flashIRToPedal(slotIndex, samples, cleanName, (curr, tot, pct) => {
         this.updateFlashProgress(curr, tot, pct);
       });
+      if (source) presetEngine.replaceUserIR(slotIndex, { ...source, variationName: cleanName }, false);
 
       await presetEngine.activateIRSlot(slotIndex, true);
       this.hideFlashProgressModal(`User IR ${slotIndex + 1} ("${cleanName}") memorizzato con successo!`);
@@ -892,18 +1026,19 @@ export class Tone3000Modal {
     }
   }
 
-  async processAndFlashNam(namFileOrUrl, name, slotIndex) {
+  /**
+   * Convert a .nam capture and write it into a Clone AMP slot. `namFileOrLoader`: a File, or a
+   * function returning it (TONE3000 download, started after the name is confirmed).
+   */
+  async processAndFlashNam(namFileOrLoader, name, slotIndex, { source = null } = {}) {
     const cleanName = await this.askSlotName(name || 'Model', `Slot Clone AMP ${slotIndex + 1}`);
     if (!cleanName) return;
-    this.showFlashProgressModal(`Conversione NAM "${cleanName}"`, `Conversione in Clone AMP (~20s), poi scrittura nello slot ${slotIndex + 1}`);
+    const remote = typeof namFileOrLoader === 'function';
+    this.showFlashProgressModal(`${remote ? 'Download e conversione' : 'Conversione'} NAM "${cleanName}"`, `Conversione in Clone AMP (~20s), poi scrittura nello slot ${slotIndex + 1}`);
 
     try {
-      let res;
-      if (typeof namFileOrUrl === 'string') {
-        res = await CompilerBridgeService.convertNam({ url: namFileOrUrl, name: cleanName });
-      } else {
-        res = await CompilerBridgeService.convertNam({ file: namFileOrUrl, name: cleanName });
-      }
+      const file = remote ? await namFileOrLoader() : namFileOrLoader;
+      const res = await CompilerBridgeService.convertNam({ file, name: cleanName });
 
       const arrayBuffer = await res.blob.arrayBuffer();
       const binaryData = new Uint8Array(arrayBuffer);
@@ -914,6 +1049,7 @@ export class Tone3000Modal {
         await presetEngine.flashCloneToPedal(slotIndex, lowModel, cleanName, (curr, tot, pct) => {
           this.updateFlashProgress(curr, tot, pct);
         });
+        if (source) presetEngine.replaceCloneProfile(slotIndex, { ...source, variationName: cleanName }, false);
         await presetEngine.activateCloneSlot(slotIndex, true);
         this.hideFlashProgressModal(`Clone AMP ${slotIndex + 1} ("${cleanName}") memorizzato con successo!`);
         this.render();
@@ -926,7 +1062,9 @@ export class Tone3000Modal {
       console.error('NAM convert/flash failed:', err);
       this.hideFlashProgressModal();
       const offline = /Failed to fetch|NetworkError|HTTP 50[24]/i.test(err.message);
-      if (offline) {
+      if (err.name === 'Tone3000Error') {
+        notify(err.message, 'error');
+      } else if (offline) {
         notify(import.meta.env?.DEV
           ? 'Server di conversione NAM non raggiungibile. Avvia "npm run dev:backend" sul PC con Sonicake Manager installato.'
           : 'Il servizio di conversione NAM non è raggiungibile in questo momento: riprova tra qualche minuto.', 'error');
@@ -936,7 +1074,7 @@ export class Tone3000Modal {
     }
   }
 
-  showDownloadNotice(variationName, slotLabel, extName, compiledSuccess = false) {
+  showDownloadNotice(variationName, extName) {
     const existing = this.overlay.querySelector('.download-notice-toast');
     if (existing) existing.remove();
 
@@ -951,7 +1089,7 @@ export class Tone3000Modal {
           <button class="text-zinc-400 hover:text-white btn-close-toast text-xs">✕</button>
         </div>
         <p class="text-[11px] text-zinc-300 leading-relaxed">
-          La variazione <strong>${variationName}</strong> è pronta sul tuo dispositivo.
+          La variazione <strong>${this.escapeHtml(variationName)}</strong> è pronta sul tuo dispositivo.
         </p>
       </div>
     `;
@@ -961,44 +1099,6 @@ export class Tone3000Modal {
     if (bodyEl) {
       bodyEl.prepend(toast);
     }
-  }
-
-  async downloadModelFile(payload, targetType) {
-    const ext = targetType === 'amp' ? '.nam' : '.wav';
-    const cleanFileName = (payload.variationName || payload.title || 'Tone3000_Model')
-      .replace(/[\\/:*?"<>|]/g, '_')
-      .trim() + ext;
-
-    const fileUrl = payload.modelUrl || payload.url;
-    if (fileUrl && fileUrl.startsWith('http')) {
-      try {
-        const resp = await fetch(fileUrl);
-        if (resp.ok) {
-          const blob = await resp.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = blobUrl;
-          a.download = cleanFileName;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 3000);
-          return true;
-        }
-      } catch (e) {
-        console.warn('Fetch download failed, falling back to direct anchor:', e);
-      }
-
-      const a = document.createElement('a');
-      a.href = fileUrl;
-      a.download = cleanFileName;
-      a.target = '_blank';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      return true;
-    }
-    return false;
   }
 
   attachDragAndDropListeners() {
@@ -1059,22 +1159,33 @@ export class Tone3000Modal {
       });
     }
     if (tabBtnBrowse) {
-      tabBtnBrowse.addEventListener('click', () => {
-        this.activeTab = 'browse';
-        this.render();
-        this.fetchTones();
-      });
+      tabBtnBrowse.addEventListener('click', () => this.openLibrary());
     }
 
-    // Memory Tab: slot Tone3000 search buttons
+    // Memory Tab: slot TONE3000 buttons (library for that slot)
     this.overlay.querySelectorAll('.btn-slot-search-tone3000').forEach(btn => {
       btn.addEventListener('click', () => {
-        const type = btn.dataset.type;
-        const slot = parseInt(btn.dataset.slot, 10);
-        this.activeTab = 'browse';
-        this.selectedTargetType = type;
-        this.selectedTargetSlot = slot;
-        this.currentGear = type === 'amp' ? 'amp' : 'cab';
+        this.selectedTargetType = btn.dataset.type;
+        this.selectedTargetSlot = parseInt(btn.dataset.slot, 10);
+        this.openLibrary();
+      });
+    });
+
+    // Library: TONE3000 sign-in (partnership splash), Select flow, sign-out, lists
+    this.overlay.querySelectorAll('.btn-t3k-continue, .btn-t3k-browse').forEach(btn => {
+      btn.addEventListener('click', () => this.browseTone3000());
+    });
+    this.overlay.querySelector('.btn-t3k-logout')?.addEventListener('click', () => {
+      this.selectedTone = null;
+      this.tones = [];
+      tone3000.logout();
+      notify('Disconnesso da TONE3000.', 'info');
+    });
+    this.overlay.querySelectorAll('.t3k-tab[data-tab]').forEach(tab => {
+      tab.addEventListener('click', () => {
+        if (this.libraryTab === tab.dataset.tab) return;
+        this.libraryTab = tab.dataset.tab;
+        this.tones = [];
         this.render();
         this.fetchTones();
       });
@@ -1177,8 +1288,14 @@ export class Tone3000Modal {
     if (targetSelector) {
       targetSelector.addEventListener('change', (e) => {
         const [type, slotStr] = e.target.value.split(':');
+        const kindChanged = type !== this.selectedTargetType;
         this.selectedTargetType = type;
         this.selectedTargetSlot = parseInt(slotStr, 10);
+        // Clone AMP slots list NAM captures, User IR slots list IR files
+        if (kindChanged) {
+          this.tones = [];
+          this.fetchTones();
+        }
       });
     }
 
@@ -1211,7 +1328,7 @@ export class Tone3000Modal {
         this.debounceTimer = setTimeout(() => this.fetchTones(), 400);
       });
     }
-    // Clear button: empty the search and show the latest captures again right away
+    // Clear button: empty the filter and show the whole list again right away
     clearSearch?.addEventListener('click', () => {
       clearTimeout(this.debounceTimer);
       this.searchQuery = '';
@@ -1219,16 +1336,6 @@ export class Tone3000Modal {
       clearSearch.classList.add('hidden');
       searchInput.focus();
       this.fetchTones();
-    });
-
-    // Gear category filter pills
-    this.overlay.querySelectorAll('.gear-pill[data-gear]').forEach(pill => {
-      pill.addEventListener('click', () => {
-        this.currentGear = pill.dataset.gear;
-        this.overlay.querySelectorAll('.gear-pill[data-gear]').forEach(p => p.classList.remove('active'));
-        pill.classList.add('active');
-        this.fetchTones();
-      });
     });
   }
 }

@@ -28,6 +28,7 @@ import { BackingTrackModal } from './components/BackingTrackModal.js';
 import { decodePresetBundle } from './utils/bundle-encoder.js';
 import { FEATURES, applyFeatureFlags } from './config/features.js';
 import { notify } from './components/ui-feedback.js';
+import { tone3000 } from './services/tone3000.js';
 
 class App {
   constructor() {
@@ -35,6 +36,26 @@ class App {
     this.initShortcuts();
     this.initDragAndDrop();
     this.checkSharedUrlOnLaunch();
+  }
+
+  /** Back from a TONE3000 redirect flow (/tone3000-callback.html → /?tone3000=1): finish it */
+  async finishTone3000Redirect(tone3000Modal) {
+    const params = new URLSearchParams(location.search);
+    if (!params.has('tone3000')) return;
+    params.delete('tone3000');
+    history.replaceState(null, '', `${location.pathname}${params.toString() ? `?${params}` : ''}${location.hash}`);
+    try {
+      const result = await tone3000.completePendingRedirect();
+      if (!result) return;
+      if (result.toneId) {
+        tone3000Modal.overlay.classList.add('active');
+        await tone3000Modal.showSelectedTone(result.toneId);
+      } else {
+        tone3000Modal.openLibrary();
+      }
+    } catch (err) {
+      notify(err.message, 'error');
+    }
   }
 
   initUI() {
@@ -82,6 +103,9 @@ class App {
     this.helpModal = helpModal;
     this.importBundleModal = importBundleModal;
     this.shareModal = shareModal;
+
+    // TONE3000 sign-in finished as a full-page redirect (the popup was blocked)
+    this.finishTone3000Redirect(tone3000Modal);
 
     // 3. Header Preset Status Listeners
     const slotBadge = document.getElementById('headerSlotBadge');

@@ -1,8 +1,8 @@
 /**
  * Sonicake Compiler Bridge Client Service
  * Connects the web frontend to the NAM compiler (server.py) on the same origin.
- * Converts Tone3000 NAM captures into hardware-ready 2,696-byte Low Model .clo binaries
- * and normalizes Cabinet IRs.
+ * Converts NAM captures (local files or downloaded from TONE3000) into hardware-ready
+ * 2,696-byte Low Model .clo binaries.
  */
 
 
@@ -28,36 +28,24 @@ export class CompilerBridgeService {
   }
 
   /**
-   * Convert a Neural Amp Modeler (.nam) profile into a 2,696-byte Low Model .clo (~15-20s server side)
+   * Convert a Neural Amp Modeler (.nam) profile into a 2,696-byte Low Model .clo (~15-20s server side).
+   * TONE3000 models are downloaded by the browser with the user's token and sent here as a file.
    * @param {Object} options
-   * @param {string} [options.url] Direct download URL for the .nam model
-   * @param {Blob|File} [options.file] Local .nam file
+   * @param {Blob|File} options.file The .nam file
    * @param {string} options.name Name of the model
    * @returns {Promise<{ blob: Blob, fileName: string, size: number }>}
    */
-  static async convertNam({ url, file, name }) {
-    const baseUrl = this.getServerUrl();
-    const endpoint = `${baseUrl}/api/convert-nam`;
-
-    let response;
+  static async convertNam({ file, name }) {
+    if (!file) throw new Error('Nessun file .nam da convertire.');
+    const endpoint = `${this.getServerUrl()}/api/convert-nam`;
     const cleanName = (name || 'Sonicake_Model').replace(/[\\/:*?"<>|]/g, '_').trim();
 
-    if (file) {
-      const formData = new FormData();
-      formData.append('file', file, `${cleanName}.nam`);
-      response = await fetch(endpoint, {
-        method: 'POST',
-        body: formData
-      });
-    } else if (url) {
-      response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, name: cleanName })
-      });
-    } else {
-      throw new Error('Either file or url must be provided for conversion');
-    }
+    const formData = new FormData();
+    formData.append('file', file, `${cleanName}.nam`);
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      body: formData
+    });
 
     if (!response.ok) {
       let errMsg = `HTTP ${response.status}`;

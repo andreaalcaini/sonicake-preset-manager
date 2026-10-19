@@ -19,38 +19,68 @@ const CHROME = process.env.CHROME_PATH || [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 ].find(p => existsSync(p));
 
-// ---- Mocked network ----
-const TONES = [
-  { id: 9001, title: 'Marshall JCM800 Test', description: '', gear: 'amp', images: [], platform: 'nam', created_at: '2026-10-01T00:00:00Z', published_at: '2026-10-01T00:00:00Z', token: 't', users: { username: 'tester', display_name: 'Tester', avatar_url: null, is_verified: false } },
-  { id: 9002, title: 'Marshall Silver Jubilee', description: '', gear: 'amp', images: [], platform: 'nam', created_at: '2026-10-01T00:00:00Z', published_at: '2026-10-01T00:00:00Z', token: 't', users: null }
-];
-const MODELS = {
-  9001: [{ id: 1, name: 'JCM800 Lead', tone_id: 9001, size: 'standard', model_url: 'https://api.tone3000.com/storage/v1/object/public/models/a.nam' }],
-  9002: [] // a tone without downloadable files
+// ---- Mocked network: the official TONE3000 API (OAuth + endpoints of the free tier) ----
+const T3K = 'https://www.tone3000.com';
+const tone = (id, title, extra = {}) => ({
+  id, title, description: `${title} description`, gear: 'amp', format: 'nam', images: [], published_at: '2026-10-01T00:00:00Z',
+  a1_models_count: 1, a2_models_count: 0, custom_models_count: 0, irs_count: 0, models_count: 1, downloads_count: 1234, favorites_count: 5,
+  user: { id: 'u1', username: 'tester', display_name: null, avatar_url: null, is_verified: false, url: `${T3K}/tester` },
+  url: `${T3K}/tones/t-${id}`, ...extra
+});
+const TONES = {
+  9001: tone(9001, 'Marshall JCM800 Test'),
+  9002: tone(9002, 'Marshall Silver Jubilee'),
+  9003: tone(9003, 'Only A2 Capture', { a1_models_count: 0, a2_models_count: 1 }), // the pedal cannot load A2
+  9004: tone(9004, 'Greenback 4x12', { gear: 'cab', format: 'ir', a1_models_count: 0, irs_count: 1 })
 };
-const network = { failSearch: false, publishedVersion: null };
+const MODELS = {
+  9001: [{ id: 1, name: 'JCM800 Lead', tone_id: 9001, size: 'standard', model_url: `${T3K}/api/v1/models/1/file`, architecture_version: '1' }],
+  9002: [], // a tone without downloadable files
+  9004: [{ id: 4, name: 'GB 57', tone_id: 9004, size: 'standard', model_url: `${T3K}/api/v1/models/4/file`, architecture_version: null }]
+};
+const network = { failList: false, publishedVersion: null, legacyCalls: 0, tokenRequests: [], fileAuth: [] };
 
 function mockNetwork(page) {
   return page.on('request', (req) => {
     const url = new URL(req.url());
-    // Cross-origin answers need CORS headers (and the apikey header triggers a preflight)
-    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' };
+    const cors = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS' };
     const json = (body, status = 200) => req.respond({ status, contentType: 'application/json', headers: cors, body: JSON.stringify(body) });
+    // The old unofficial access (TONE3000's internal database) must never come back
     if (url.hostname === 'api.tone3000.com') {
+      network.legacyCalls++;
+      return req.abort();
+    }
+    if (url.origin === T3K) {
       if (req.method() === 'OPTIONS') return req.respond({ status: 204, headers: cors, body: '' });
-      if (url.pathname.endsWith('/tones')) {
-        if (network.failSearch) return json({ message: 'statement timeout' }, 500);
-        if ((url.searchParams.get('select') || '').startsWith('id,models(count)')) {
-          return json(TONES.map(t => ({ id: t.id, models: [{ count: MODELS[t.id].length }], downloads: [{ count: 5 }], comments: [{ count: 0 }] })));
-        }
-        const q = (url.searchParams.get('title') || '').replace(/^ilike\.\*|\*$/g, '').toLowerCase();
-        return json(TONES.filter(t => !q || t.title.toLowerCase().includes(q)));
+      const p = url.pathname;
+      if (p === '/api/v1/oauth/authorize') {
+        // TONE3000 signs the user in, they pick tone 9001, back to the registered redirect_uri
+        const back = new URL(url.searchParams.get('redirect_uri'));
+        back.search = new URLSearchParams({ code: 'CODE1', state: url.searchParams.get('state'), tone_id: '9001' }).toString();
+        return req.respond({ status: 302, headers: { Location: back.toString() }, body: '' });
       }
-      if (url.pathname.endsWith('/models')) {
-        const id = Number((url.searchParams.get('tone_id') || '').replace('eq.', ''));
-        return json(MODELS[id] || []);
+      if (p === '/api/v1/oauth/token') {
+        network.tokenRequests.push(Object.fromEntries(new URLSearchParams(req.postData() || '')));
+        return json({ access_token: 'AT', refresh_token: 'RT', expires_in: 3600, token_type: 'bearer' });
       }
-      return req.respond({ status: 404, body: '' });
+      const auth = req.headers().authorization;
+      if (auth !== 'Bearer AT') return json({ error: 'unauthorized' }, 401);
+      if (p === '/api/v1/user') return json({ id: 'u1', username: 'andrea', display_name: null, avatar_url: null, is_verified: false });
+      if (/^\/api\/v1\/tones\/(trending|latest|favorited|downloaded|created)$/.test(p)) {
+        if (network.failList) return json({ error: 'server error' }, 500);
+        const q = (url.searchParams.get('query') || '').toLowerCase();
+        let list = Object.values(TONES).filter(t => !q || t.title.toLowerCase().includes(q));
+        if (url.searchParams.get('gear') === 'cab') list = list.filter(t => t.gear === 'cab');
+        return json({ data: list, page: 1, page_size: 24, total: list.length, total_pages: 1 });
+      }
+      const toneMatch = p.match(/^\/api\/v1\/tones\/(\d+)$/);
+      if (toneMatch) return TONES[toneMatch[1]] ? json(TONES[toneMatch[1]]) : json({ error: 'not found' }, 404);
+      if (p === '/api/v1/models') return json({ data: MODELS[url.searchParams.get('tone_id')] || [], page: 1, total_pages: 1 });
+      if (/^\/api\/v1\/models\/\d+\/file$/.test(p)) {
+        network.fileAuth.push(auth);
+        return req.respond({ status: 200, headers: cors, contentType: 'application/octet-stream', body: '{"version":"0.5.0"}' });
+      }
+      return json({ error: 'not found' }, 404);
     }
     if (url.pathname === '/api/health') return json({ status: 'ok', compiler_available: true, compiler_backend: 'nam2clo' });
     // A newer build published on the server (otherwise the real version.json of this build)
@@ -104,6 +134,8 @@ before(async () => {
   await page.setRequestInterception(true);
   mockNetwork(page);
   await page.evaluateOnNewDocument(fakeHardware);
+  // Test publishable key (the site reads it before its own modules run)
+  await page.evaluateOnNewDocument(() => { window.__T3K_CLIENT_ID__ = 't3k_pub_test'; });
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
   page.on('dialog', d => { dialogs.push(d.message()); d.dismiss(); });
@@ -206,53 +238,142 @@ for (const vp of [{ label: 'desktop', width: 1366, height: 860 }, { label: 'smar
       }
     });
 
-    it('cerca su Tone3000 e disattiva le catture senza file', async () => {
+    it('TONE3000 senza accesso: presentazione, nessuna richiesta, mai il vecchio accesso', async () => {
+      await page.evaluate(() => { localStorage.removeItem('sonicake_t3k_tokens'); localStorage.removeItem('sonicake_t3k_user'); });
+      network.legacyCalls = 0;
       await openTone3000Library();
-      const s = await page.evaluate(async () => {
-        const input = document.querySelector('#tone3000ModalOverlay .tone3000-input');
-        input.value = 'marshall';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        await new Promise(r => setTimeout(r, 1500));
-        const modal = window.app.tone3000Modal;
-        const btn = (id) => document.querySelector(`#tone3000ModalOverlay .btn-flash-tone[data-id="${id}"]`);
+      const s = await page.evaluate(() => {
+        const o = document.getElementById('tone3000ModalOverlay');
+        const btn = o.querySelector('.btn-t3k-continue');
         return {
-          titles: modal.tones.map(t => t.title),
-          withFiles: btn(9001)?.disabled,
-          withoutFiles: btn(9002)?.disabled,
-          emptySelect: document.querySelector('#varSelect-9002')?.textContent.trim()
+          splash: !!o.querySelector('.t3k-splash'),
+          logo: !!o.querySelector('.t3k-splash img[alt="TONE3000"]'),
+          copy: o.querySelector('.t3k-splash').textContent.includes('Neural Amp Modeler (NAM)'),
+          button: btn?.textContent.trim(),
+          buttonHeight: btn?.getBoundingClientRect().height,
+          cards: o.querySelectorAll('.tone-card').length
         };
       });
-      assert.deepEqual(s.titles, ['Marshall JCM800 Test', 'Marshall Silver Jubilee']);
-      assert.equal(s.withFiles, false);
-      assert.equal(s.withoutFiles, true);
-      assert.match(s.emptySelect, /Nessun file scaricabile/);
+      assert.ok(s.splash && s.logo && s.copy);
+      assert.equal(s.button, 'Continua');
+      assert.ok(s.buttonHeight >= 44, `Continua ${s.buttonHeight}px`);
+      assert.equal(s.cards, 0);
+      assert.equal(network.legacyCalls, 0);
     });
 
-    it('ricerca Tone3000: la X cancella il testo e ricarica i risultati', async () => {
-      const r = await page.evaluate(async () => {
-        const overlay = document.getElementById('tone3000ModalOverlay');
-        const input = overlay.querySelector('.tone3000-input');
-        const clear = overlay.querySelector('.btn-clear-search');
-        const withText = { value: input.value, visible: !clear.classList.contains('hidden'), size: clear.getBoundingClientRect().width };
-        clear.click();
-        await new Promise(r => setTimeout(r, 1200));
-        const after = {
-          value: input.value,
-          hidden: clear.classList.contains('hidden'),
-          focused: document.activeElement === input,
-          query: window.app.tone3000Modal.searchQuery,
-          tones: window.app.tone3000Modal.tones.length
+    it('accesso (OAuth PKCE): il tone scelto su TONE3000 si apre in cima alla libreria', async () => {
+      network.tokenRequests = [];
+      // Popup blocked: the same flow runs as a full-page redirect and comes back to the site
+      await page.evaluate(() => { window.open = () => null; });
+      await page.click('#tone3000ModalOverlay .btn-t3k-continue');
+      await page.waitForFunction(() => window.app?.tone3000Modal?.selectedTone?.id === 9001
+        && document.querySelector('#tone3000ModalOverlay.active .tone-card[data-id="9001"]'), { timeout: 15000 });
+      await sleep(600);
+      const s = await page.evaluate(() => {
+        const o = document.getElementById('tone3000ModalOverlay');
+        return {
+          url: location.search,
+          first: o.querySelector('.tone-card')?.dataset.id,
+          picked: o.querySelector('.tone-card').textContent.includes('Scelto su TONE3000'),
+          user: o.textContent.includes('@andrea'),
+          browse: !!o.querySelector('.btn-t3k-browse'),
+          tabs: [...o.querySelectorAll('.t3k-tab')].map(b => b.textContent.trim()),
+          tokens: JSON.parse(localStorage.getItem('sonicake_t3k_tokens') || 'null')
         };
-        input.value = 'm';
-        input.dispatchEvent(new Event('input', { bubbles: true }));
-        after.shownAgain = !clear.classList.contains('hidden');
-        clear.click();
-        await new Promise(r => setTimeout(r, 800));
-        return { withText, after };
       });
-      assert.equal(r.withText.value, 'marshall');
-      assert.ok(r.withText.visible && r.withText.size >= 44, `X visibile e ≥ 44px (${r.withText.size}px)`);
-      assert.deepEqual(r.after, { value: '', hidden: true, focused: true, query: '', tones: 2, shownAgain: true });
+      const tokenReq = network.tokenRequests.at(-1);
+      assert.equal(tokenReq.grant_type, 'authorization_code');
+      assert.equal(tokenReq.code, 'CODE1');
+      assert.equal(tokenReq.client_id, 't3k_pub_test');
+      assert.match(tokenReq.redirect_uri, /\/tone3000-callback\.html$/);
+      assert.ok(tokenReq.code_verifier?.length >= 43, 'code_verifier PKCE');
+      assert.equal(s.url, '', 'parametri tolti dall’indirizzo');
+      assert.equal(s.first, '9001');
+      assert.ok(s.picked && s.user && s.browse);
+      assert.deepEqual(s.tabs, ['Di tendenza', 'Ultimi', 'Preferiti', 'Scaricati', 'Creati']);
+      assert.equal(s.tokens.access_token, 'AT');
+      assert.equal(network.legacyCalls, 0);
+    });
+
+    it('elenchi: solo catture caricabili (no NAM A2), IR per gli slot IR, file scaricato con il token', async () => {
+      const r = await page.evaluate(async () => {
+        const modal = window.app.tone3000Modal;
+        modal.selectedTone = null;
+        await modal.fetchTones();
+        await new Promise(r => setTimeout(r, 500));
+        const ids = () => [...document.querySelectorAll('#tone3000ModalOverlay .tone-card')].map(c => Number(c.dataset.id));
+        const amp = { ids: ids(), hidden: modal.hiddenTones, emptyFiles: document.querySelector('#varSelect-9002')?.textContent.trim(), flashDisabled: document.querySelector('.btn-flash-tone[data-id="9002"]')?.disabled };
+        const selector = document.querySelector('#tone3000ModalOverlay .target-slot-selector');
+        selector.value = 'cab:2';
+        selector.dispatchEvent(new Event('change', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 800));
+        const cab = { ids: ids() };
+        document.querySelector('.btn-load-tone[data-id="9004"]').click();
+        await new Promise(r => setTimeout(r, 800));
+        selector.value = 'amp:0';
+        selector.dispatchEvent(new Event('change', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 800));
+        return { amp, cab };
+      });
+      assert.deepEqual(r.amp.ids, [9001, 9002]);
+      assert.equal(r.amp.hidden, 1, 'la cattura solo A2 è nascosta');
+      assert.match(r.amp.emptyFiles, /Nessun file scaricabile/);
+      assert.equal(r.amp.flashDisabled, true);
+      assert.deepEqual(r.cab.ids, [9004]);
+      assert.deepEqual(network.fileAuth.slice(-1), ['Bearer AT']);
+    });
+
+    it('popup: il risultato arriva dalla pagina di ritorno (BroadcastChannel)', async () => {
+      const r = await page.evaluate(async () => {
+        let opened;
+        window.open = (u) => { opened = new URL(u); return { closed: false }; };
+        const modal = window.app.tone3000Modal;
+        const flow = modal.browseTone3000();
+        await new Promise(r => setTimeout(r, 200));
+        const busy = document.querySelector('.btn-t3k-browse').disabled;
+        new BroadcastChannel('t3k_oauth').postMessage({ type: 't3k_oauth_callback', code: 'CODE2', state: opened.searchParams.get('state'), tone_id: '9002', canceled: false });
+        await flow;
+        await new Promise(r => setTimeout(r, 300));
+        return {
+          prompt: opened.searchParams.get('prompt'),
+          format: opened.searchParams.get('format'),
+          pkce: opened.searchParams.get('code_challenge_method'),
+          busy,
+          picked: modal.selectedTone?.id,
+          first: document.querySelector('#tone3000ModalOverlay .tone-card')?.dataset.id
+        };
+      });
+      assert.equal(r.prompt, 'select_tone');
+      assert.equal(r.format, 'nam');
+      assert.equal(r.pkce, 'S256');
+      assert.ok(r.busy, 'pulsante bloccato mentre la finestra è aperta');
+      assert.equal(r.picked, 9002);
+      assert.equal(r.first, '9002');
+      assert.equal(network.tokenRequests.at(-1).code, 'CODE2');
+    });
+
+    it('filtro dei preferiti: la X svuota e ricarica', async () => {
+      const r = await page.evaluate(async () => {
+        const o = document.getElementById('tone3000ModalOverlay');
+        window.app.tone3000Modal.selectedTone = null;
+        o.querySelector('.t3k-tab[data-tab="favorited"]').click();
+        await new Promise(r => setTimeout(r, 600));
+        const input = o.querySelector('.tone3000-input');
+        input.value = 'jubilee';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        await new Promise(r => setTimeout(r, 1200));
+        const filtered = [...o.querySelectorAll('.tone-card')].map(c => c.dataset.id);
+        const clear = o.querySelector('.btn-clear-search');
+        const size = clear.getBoundingClientRect().width;
+        clear.click();
+        await new Promise(r => setTimeout(r, 1000));
+        return { filtered, size, value: input.value, focused: document.activeElement === input, after: window.app.tone3000Modal.tones.length };
+      });
+      assert.deepEqual(r.filtered, ['9002']);
+      assert.ok(r.size >= 44, `X ${r.size}px`);
+      assert.equal(r.value, '');
+      assert.ok(r.focused);
+      assert.equal(r.after, 2);
     });
 
     it('scrittura senza pedaliera: avviso nello stile del sito, chiudibile', async () => {
@@ -300,26 +421,32 @@ for (const vp of [{ label: 'desktop', width: 1366, height: 860 }, { label: 'smar
       assert.ok(r.listed);
     });
 
-    it('ricerca fallita: messaggio di errore e Riprova (nessuna libreria finta)', async () => {
-      network.failSearch = true;
+    it('elenco non disponibile: messaggio di errore e Riprova; Esci torna alla presentazione', async () => {
+      await openTone3000Library();
+      network.failList = true;
       const errorsBefore = errors.length;
       const failed = await page.evaluate(async () => {
         await window.app.tone3000Modal.fetchTones();
         const grid = document.querySelector('#tone3000ModalOverlay .tones-grid-container');
         return { text: grid.textContent, retry: !!grid.querySelector('.btn-retry-search'), tones: window.app.tone3000Modal.tones.length };
       });
-      network.failSearch = false;
+      network.failList = false;
       // Chrome logs the simulated HTTP 500 itself: expected here, not a site error
       errors.splice(errorsBefore, errors.length - errorsBefore, ...errors.slice(errorsBefore).filter(e => !/status of 500/.test(e)));
-      assert.match(failed.text, /Ricerca non riuscita/);
+      assert.match(failed.text, /Elenco non disponibile/);
       assert.ok(failed.retry);
       assert.equal(failed.tones, 0);
-      const retried = await page.evaluate(async () => {
+      const after = await page.evaluate(async () => {
         document.querySelector('#tone3000ModalOverlay .btn-retry-search').click();
         await new Promise(r => setTimeout(r, 1200));
-        return window.app.tone3000Modal.tones.length;
+        const retried = window.app.tone3000Modal.tones.length;
+        document.querySelector('#tone3000ModalOverlay .btn-t3k-logout').click();
+        await new Promise(r => setTimeout(r, 300));
+        return { retried, splash: !!document.querySelector('#tone3000ModalOverlay .t3k-splash'), tokens: localStorage.getItem('sonicake_t3k_tokens') };
       });
-      assert.equal(retried, 2);
+      assert.ok(after.retried > 0);
+      assert.ok(after.splash);
+      assert.equal(after.tokens, null);
       await closeTone3000();
     });
 

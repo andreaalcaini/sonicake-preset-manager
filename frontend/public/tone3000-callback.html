@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <title>TONE3000 · Sonicake</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #121316; color: #e4e4e7; font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+    main { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; box-sizing: border-box; text-align: center; }
+    img { width: 180px; height: auto; }
+    a { color: #f97316; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/assets/tone3000/tone3000-logo.svg" alt="TONE3000">
+    <p id="msg">Accesso completato, ritorno a Sonicake…</p>
+  </main>
+  <script>
+    // Redirect target of the TONE3000 OAuth flow (see frontend/src/services/tone3000.js).
+    // Popup: relay the result to the opener tab and close. Full-page flow (popup blocked):
+    // keep the result for the app and go back to it.
+    (function () {
+      var p = new URLSearchParams(location.search);
+      var msg = {
+        type: 't3k_oauth_callback',
+        code: p.get('code'),
+        state: p.get('state'),
+        error: p.get('error'),
+        tone_id: p.get('tone_id'),
+        canceled: p.get('canceled') === 'true'
+      };
+      var popup = false;
+      try { popup = sessionStorage.getItem('t3k_popup_mode') === '1' || (!!window.opener && sessionStorage.getItem('t3k_redirect_flow') !== '1'); } catch (e) {}
+      if (popup) {
+        try { if (window.opener) window.opener.postMessage(msg, location.origin); } catch (e) {}
+        try { var bc = new BroadcastChannel('t3k_oauth'); bc.postMessage(msg); bc.close(); } catch (e) {}
+        setTimeout(function () {
+          window.close();
+          document.getElementById('msg').innerHTML = 'Accesso completato: puoi chiudere questa finestra e tornare a <a href="/">Sonicake</a>.';
+        }, 300);
+      } else {
+        try { sessionStorage.setItem('t3k_pending_callback', JSON.stringify(msg)); } catch (e) {}
+        location.replace('/?tone3000=1');
+      }
+    })();
+  </script>
+</body>
+</html>

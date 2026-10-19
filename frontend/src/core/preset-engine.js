@@ -34,6 +34,15 @@ import { PrstParser } from './prst-parser.js';
 /** Longest name the official apps allow when renaming a Clone AMP / User IR slot */
 export const SLOT_RENAME_MAX = 10;
 
+/** TONE3000 origin of a slot (shown with the TONE3000 mark in the memory view) */
+const slotSourceFields = (tone) => (tone && tone.source === 'tone3000' ? {
+  source: 'tone3000',
+  image: tone.image || null,
+  format: tone.format || null,
+  gearLabel: tone.gearLabel || null,
+  creator: tone.creator || null
+} : {});
+
 export class PresetEngine {
   constructor() {
     this.signatureToFxIdMaps = buildSignatureToFxIdMaps();
@@ -1348,7 +1357,8 @@ export class PresetEngine {
         modelUrl: tone.modelUrl || tone.url || null,
         pageUrl: tone.pageUrl || tone.url || null,
         gear: tone.gear || 'amp',
-        description: tone.description || ''
+        description: tone.description || '',
+        ...slotSourceFields(tone)
       };
     } else {
       this.cloneSlotMetadata[idx] = {
@@ -1402,7 +1412,8 @@ export class PresetEngine {
         modelUrl: tone.modelUrl || tone.url || null,
         pageUrl: tone.pageUrl || tone.url || null,
         gear: tone.gear || 'cab',
-        description: tone.description || ''
+        description: tone.description || '',
+        ...slotSourceFields(tone)
       };
     } else {
       this.irSlotMetadata[idx] = {
@@ -1667,8 +1678,11 @@ export class PresetEngine {
     this.pedalWrites = (this.pedalWrites || 0) + 1;
     try {
       await this.streamFlashPackets(buildStreamingFlashPackets(buildSlotRenamePayload(type, idx, name)));
-      if (type === 'Clone') this.replaceCloneProfile(idx, name, false);
-      else this.replaceUserIR(idx, name, false);
+      // Same capture, new name: a TONE3000 origin stays with the slot
+      const meta = (type === 'Clone' ? this.cloneSlotMetadata : this.irSlotMetadata)[idx];
+      const renamed = meta && meta.source === 'tone3000' ? { ...meta, variationName: name } : name;
+      if (type === 'Clone') this.replaceCloneProfile(idx, renamed, false);
+      else this.replaceUserIR(idx, renamed, false);
       const confirmed = await this.waitForSlotCommit(type, idx, name);
       connection.log(confirmed
         ? `${label} rinominato in "${name}".`

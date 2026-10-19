@@ -14,55 +14,23 @@ sys.modules['sonicake_server'] = server
 spec.loader.exec_module(server)
 
 
-class FakeResponse:
-    def __init__(self, status=200, body=b'', headers=None, redirect=False):
-        self.status_code = status
-        self.ok = 200 <= status < 300
-        self.is_redirect = redirect
-        self.headers = headers or {}
-        self._body = body
-
-    def iter_content(self, size):
-        for i in range(0, len(self._body), size):
-            yield self._body[i:i + size]
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        return False
-
-
 class ServerSecurityTest(unittest.TestCase):
     def setUp(self):
         self.client = server.app.test_client()
 
-    def convert_url(self, url):
-        return self.client.post('/api/convert-nam', json={'url': url, 'name': 'x'})
+    def test_never_downloads_urls(self):
+        # TONE3000 models are downloaded by the browser with the user's login: the server
+        # refuses any URL (no SSRF surface) and has no HTTP client at all
+        for url in ['https://www.tone3000.com/api/v1/models/1/download', 'https://169.254.169.254/latest/meta-data',
+                    'file:///etc/passwd', 'http://127.0.0.1:3000/api/health']:
+            res = self.client.post('/api/convert-nam', json={'url': url, 'name': 'x'})
+            self.assertEqual(res.status_code, 400, url)
+        self.assertFalse(hasattr(server, 'requests'))
 
-    def test_rejects_urls_outside_tone3000(self):
-        for url in ['http://api.tone3000.com/m.nam', 'https://evil.example/m.nam',
-                    'https://169.254.169.254/latest/meta-data', 'file:///etc/passwd',
-                    'https://api.tone3000.com.evil.example/m.nam', 'https://user@127.0.0.1/m.nam']:
-            with mock.patch.object(server.requests, 'get') as get:
-                res = self.convert_url(url)
-                self.assertEqual(res.status_code, 400, url)
-                get.assert_not_called()
-
-    def test_does_not_follow_redirects(self):
-        with mock.patch.object(server.requests, 'get', return_value=FakeResponse(302, redirect=True)) as get:
-            res = self.convert_url('https://api.tone3000.com/storage/v1/object/public/models/a.nam')
-        self.assertEqual(res.status_code, 502)
-        self.assertFalse(get.call_args.kwargs['allow_redirects'])
-
-    def test_stops_oversized_downloads(self):
-        big = b'{' + b'0' * (server.MAX_MODEL_BYTES + 10)
-        # Declared size too big
-        with mock.patch.object(server.requests, 'get', return_value=FakeResponse(200, b'', {'Content-Length': str(len(big))})):
-            self.assertEqual(self.convert_url('https://api.tone3000.com/a.nam').status_code, 413)
-        # Size not declared: stopped while streaming
-        with mock.patch.object(server.requests, 'get', return_value=FakeResponse(200, big)):
-            self.assertEqual(self.convert_url('https://api.tone3000.com/a.nam').status_code, 413)
+    def test_rejects_web_pages(self):
+        data = {'file': (io.BytesIO(b'<!doctype html><html></html>'), 'page.nam')}
+        res = self.client.post('/api/convert-nam', data=data, content_type='multipart/form-data')
+        self.assertEqual(res.status_code, 400)
 
     def test_rejects_oversized_uploads(self):
         data = {'file': (io.BytesIO(b'0' * (server.MAX_MODEL_BYTES + 100 * 1024)), 'big.nam')}

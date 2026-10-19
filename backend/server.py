@@ -14,16 +14,14 @@ import hashlib
 import json
 import threading
 import time
-from urllib.parse import urlparse
-import requests
 from flask import Flask, request, jsonify, send_file, Response
 from werkzeug.exceptions import RequestEntityTooLarge
 
 app = Flask(__name__)
 
 # --- Limits for the public server ---
-# Remote models are downloaded only from these hosts (Tone3000 storage), never other URLs
-MODEL_URL_HOSTS = {h.strip().lower() for h in os.environ.get('MODEL_URL_HOSTS', 'api.tone3000.com').split(',') if h.strip()}
+# The server never downloads models: the browser sends the file (local, or downloaded from
+# TONE3000 with the user's own login)
 MAX_MODEL_BYTES = int(os.environ.get('MAX_MODEL_MB', '25')) * 1024 * 1024
 app.config['MAX_CONTENT_LENGTH'] = MAX_MODEL_BYTES + 64 * 1024  # uploads (+ multipart overhead)
 
@@ -269,33 +267,6 @@ def _convert_with_dll(nam_path, timeout):
 
 _abandoned_buffers = []
 
-class ModelDownloadError(Exception):
-    def __init__(self, message, status):
-        super().__init__(message)
-        self.status = status
-
-def download_model(url):
-    """Download a model from an allowed host (https, no redirects), at most MAX_MODEL_BYTES."""
-    parsed = urlparse(str(url))
-    if parsed.scheme != 'https' or (parsed.hostname or '').lower() not in MODEL_URL_HOSTS:
-        raise ModelDownloadError("Sono ammessi solo i link diretti ai modelli di Tone3000.", 400)
-    too_large = ModelDownloadError(f"Modello troppo grande (massimo {MAX_MODEL_BYTES // (1024 * 1024)} MB).", 413)
-    try:
-        with requests.get(url, timeout=30, stream=True, allow_redirects=False) as resp:
-            if resp.is_redirect or not resp.ok:
-                raise ModelDownloadError(f"Download del modello non riuscito (HTTP {resp.status_code}).", 502)
-            if int(resp.headers.get('Content-Length') or 0) > MAX_MODEL_BYTES:
-                raise too_large
-            chunks, total = [], 0
-            for chunk in resp.iter_content(64 * 1024):
-                total += len(chunk)
-                if total > MAX_MODEL_BYTES:
-                    raise too_large
-                chunks.append(chunk)
-            return b''.join(chunks)
-    except requests.RequestException as e:
-        raise ModelDownloadError(f"Errore durante il download del modello: {e.__class__.__name__}.", 502)
-
 # --- Routes ---
 
 @app.route('/api/health', methods=['GET'])
@@ -318,38 +289,29 @@ def convert_nam():
     model_bytes = None
     model_name = "model"
 
-    # 1. Handle JSON body with URL
+    # Models arrive as files only: the server never downloads URLs
     if request.is_json:
-        data = request.get_json() or {}
-        url = data.get('url')
-        model_name = data.get('name', 'model')
-        if not url:
-            return jsonify({"error": "Missing 'url' parameter in JSON payload"}), 400
-        try:
-            print(f"[*] Fetching Tone model from: {url}")
-            model_bytes = download_model(url)
-        except ModelDownloadError as e:
-            return jsonify({"error": str(e)}), e.status
+        return jsonify({"error": "Invia il file .nam: il server non scarica modelli da indirizzi web."}), 400
 
-    # 2. Handle multipart file upload
-    elif 'file' in request.files:
+    # 1. Multipart file upload
+    if 'file' in request.files:
         uploaded = request.files['file']
         model_bytes = uploaded.read()
         model_name = uploaded.filename or "uploaded_model"
 
-    # 3. Handle raw binary upload
+    # 2. Raw binary upload
     elif request.data:
         model_bytes = request.data
         model_name = request.headers.get('X-File-Name', 'raw_model')
 
     if not model_bytes:
-        return jsonify({"error": "No file or URL provided"}), 400
+        return jsonify({"error": "Nessun file .nam ricevuto."}), 400
 
-    # Guard: Detect HTML webpage responses
+    # Guard: a web page instead of a model file
     stripped = model_bytes.strip()
     if stripped.startswith(b'<') or b'<html' in stripped[:300].lower() or b'<!doctype' in stripped[:300].lower():
         return jsonify({
-            "error": "Il link indicato non e un file modello diretto, ma una pagina web HTML. Usa un modello con download diretto o carica il file dal PC."
+            "error": "Il file ricevuto non e un modello NAM ma una pagina web HTML."
         }), 400
 
     file_hash = hashlib.sha256(model_bytes).hexdigest()[:16]

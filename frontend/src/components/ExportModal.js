@@ -92,8 +92,8 @@ export class ExportModal {
                   PRST
                 </div>
                 <div>
-                  <div class="text-xs sm:text-sm font-bold text-zinc-100 group-hover:text-amber-400 transition-colors">Formato Nativo Sonicake (.prst)</div>
-                  <div class="text-[11px] text-zinc-400">Compatibile 100% con app SonicLink e pedaliera</div>
+                  <div class="text-xs sm:text-sm font-bold text-zinc-100 group-hover:text-amber-400 transition-colors">Formato nativo della pedaliera (.prst)</div>
+                  <div class="text-[11px] text-zinc-400">Si apre anche con le app ufficiali Sonicake</div>
                 </div>
               </div>
               <span class="btn-status px-3 py-1.5 rounded-lg border border-zinc-700/60 bg-zinc-800/50 group-hover:bg-amber-500 group-hover:text-zinc-950 group-hover:border-amber-500 text-xs font-semibold text-zinc-300 transition-all">
@@ -219,7 +219,7 @@ export class ExportModal {
           const backupObj = presetEngine.exportAllPresetsBackupJson();
           const backupStr = JSON.stringify(backupObj, null, 2);
           const dateStr = new Date().toISOString().split('T')[0];
-          triggerDownload(backupStr, `Sonicake_Pedaliera_UserPresets_Backup_${dateStr}.json`, 'application/json');
+          triggerDownload(backupStr, `Pedaliera_Studio_UserPresets_Backup_${dateStr}.json`, 'application/json');
           this.showDownloadSuccess(backupCard, '✓ Backup Salvato!');
         } catch (err) {
           notify(`Errore backup: ${err.message}`, 'error');

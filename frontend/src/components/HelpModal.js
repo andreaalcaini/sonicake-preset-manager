@@ -136,8 +136,9 @@ export class HelpModal {
         </div>
 
         <!-- Footer -->
-        <div class="px-5 py-3.5 border-t border-zinc-800/80 bg-zinc-950/40 flex items-center justify-end">
-          <button class="modal-close-btn-bottom px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-semibold transition-colors">
+        <div class="px-5 py-3.5 border-t border-zinc-800/80 bg-zinc-950/40 flex items-center justify-between gap-3">
+          <p class="sl-disclaimer text-[10px] leading-snug text-zinc-500">Progetto indipendente e gratuito, non affiliato né approvato da Sonicake. Sonicake è un marchio dei rispettivi proprietari.</p>
+          <button class="modal-close-btn-bottom shrink-0 px-4 py-2 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 hover:text-white text-xs font-semibold transition-colors">
             Chiudi
           </button>
         </div>

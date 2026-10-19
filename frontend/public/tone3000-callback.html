@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex">
-  <title>TONE3000 · Sonicake</title>
+  <title>TONE3000 · Pedaliera Studio</title>
   <style>
     html, body { margin: 0; height: 100%; background: #121316; color: #e4e4e7; font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
     main { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; padding: 24px; box-sizing: border-box; text-align: center; }
@@ -15,7 +15,7 @@
 <body>
   <main>
     <img src="/assets/tone3000/tone3000-logo.svg" alt="TONE3000">
-    <p id="msg">Accesso completato, ritorno a Sonicake…</p>
+    <p id="msg">Accesso completato, ritorno a Pedaliera Studio…</p>
   </main>
   <script>
     // Redirect target of the TONE3000 OAuth flow (see frontend/src/services/tone3000.js).
@@ -38,7 +38,7 @@
         try { var bc = new BroadcastChannel('t3k_oauth'); bc.postMessage(msg); bc.close(); } catch (e) {}
         setTimeout(function () {
           window.close();
-          document.getElementById('msg').innerHTML = 'Accesso completato: puoi chiudere questa finestra e tornare a <a href="/">Sonicake</a>.';
+          document.getElementById('msg').innerHTML = 'Accesso completato: puoi chiudere questa finestra e tornare a <a href="/">Pedaliera Studio</a>.';
         }, 300);
       } else {
         try { sessionStorage.setItem('t3k_pending_callback', JSON.stringify(msg)); } catch (e) {}

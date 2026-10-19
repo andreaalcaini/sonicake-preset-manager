@@ -447,7 +447,7 @@ export class PresetList {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Sonicake_Pedaliera_Backup_${new Date().toISOString().slice(0,10)}.json`;
+        a.download = `Pedaliera_Studio_Backup_${new Date().toISOString().slice(0,10)}.json`;
         a.click();
         URL.revokeObjectURL(url);
       });

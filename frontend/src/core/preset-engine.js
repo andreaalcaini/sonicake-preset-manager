@@ -1139,7 +1139,7 @@ export class PresetEngine {
     return {
       version: "1.0",
       presetName: p.name,
-      description: "Exported from Sonicake Pedaliera Preset Manager",
+      description: "Exported from Pedaliera Studio",
       ampMode: p.ampMode === 'clone' ? 'Clone' : 'Normal',
       presetVolume: p.volume !== undefined ? p.volume : 75,
       states: p.states,
@@ -1148,7 +1148,7 @@ export class PresetEngine {
       order: p.order,
       metadata: {
         createdDate: new Date().toISOString(),
-        author: "Sonicake Preset Manager"
+        author: "Pedaliera Studio"
       }
     };
   }

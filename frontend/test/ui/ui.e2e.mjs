@@ -366,7 +366,7 @@ for (const vp of [{ label: 'desktop', width: 1366, height: 860 }, { label: 'smar
     it('cattura TONE3000 nel blocco della catena: immagine, marchio, dettagli; il preset condiviso porta solo il riferimento', async () => {
       const r = await page.evaluate(async () => {
         const e = window.app.presetEngine;
-        e.replaceCloneProfile(0, { source: 'tone3000', toneId: 9001, toneTitle: 'Marshall JCM800 Test', variationName: 'JCM800 Lead', pageUrl: 'https://www.tone3000.com/tones/t-9001', image: '/assets/images/amp_on.svg', gear: 'amp', gearLabel: 'Amp', format: 'nam', creator: 'tester', license: 'Licenza T3K' }, false);
+        e.replaceCloneProfile(0, { source: 'tone3000', toneId: 9001, toneTitle: 'Marshall JCM800 Test', variationName: 'JCM800 Lead', pageUrl: 'https://www.tone3000.com/tones/t-9001', image: '/assets/ui/amp_on.svg', gear: 'amp', gearLabel: 'Amp', format: 'nam', creator: 'tester', license: 'Licenza T3K' }, false);
         await e.activateCloneSlot(0, false);
         document.getElementById('tone3000ModalOverlay').classList.remove('active');
         window.app.moduleEditor.setModule(3);

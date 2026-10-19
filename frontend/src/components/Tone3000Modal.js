@@ -653,7 +653,7 @@ export class Tone3000Modal {
     const isIr = tone.format === 'ir';
     const author = tone.author;
     const picked = this.selectedTone && this.selectedTone.id === tone.id;
-    const fallbackIcon = isIr ? '/assets/images/ir_on.svg' : (tone.gear === 'pedal' ? '/assets/images/drv_on.svg' : '/assets/images/amp_on.svg');
+    const fallbackIcon = isIr ? '/assets/ui/ir_on.svg' : (tone.gear === 'pedal' ? '/assets/ui/drv_on.svg' : '/assets/ui/amp_on.svg');
 
     return `
       <div class="tone-card p-3 bg-[#18191d] border ${picked ? 'border-orange-500/70' : 'border-zinc-800 hover:border-orange-500/40'} rounded-xl flex flex-col gap-3 transition-all" data-id="${tone.id}">

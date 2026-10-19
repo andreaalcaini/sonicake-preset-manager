@@ -1,5 +1,5 @@
 /**
- * Sonicake Studio Preset Manager - Service Worker
+ * Pedaliera Studio - Service Worker
  * Enables offline caching and PWA installation for studio & gig environments without internet.
  *
  * Only the site's own static files are cached. Live data always comes from the network:
@@ -7,13 +7,13 @@
  */
 
 // v2: v1 also cached API and Tone3000 answers, which could show stale data first
-const CACHE_NAME = 'sonicake-studio-v2';
+const CACHE_NAME = 'pedaliera-studio-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/assets/images/logo_sonicake.svg',
-  '/assets/images/effects.svg'
+  '/assets/ui/icon.svg',
+  '/assets/ui/effects.svg'
 ];
 
 self.addEventListener('install', (event) => {

@@ -342,11 +342,11 @@ class App {
         deferredInstallPrompt.prompt();
         const { outcome } = await deferredInstallPrompt.userChoice;
         if (outcome === 'accepted') {
-          connection.log('Sonicake Studio installato come App nativa!', 'success');
+          connection.log('Pedaliera Studio installato come App nativa!', 'success');
         }
         deferredInstallPrompt = null;
       } else {
-        notify("Per installare Sonicake Studio come App nativa:\n\n• Su Chrome / Edge PC: Clicca sull'icona di installazione nella barra degli indirizzi del browser.\n• Su Android / iOS: Apri il menu del browser e seleziona 'Aggiungi a schermata Home' / 'Installa app'.", 'info');
+        notify("Per installare Pedaliera Studio come App nativa:\n\n• Su Chrome / Edge PC: Clicca sull'icona di installazione nella barra degli indirizzi del browser.\n• Su Android / iOS: Apri il menu del browser e seleziona 'Aggiungi a schermata Home' / 'Installa app'.", 'info');
       }
     });
 

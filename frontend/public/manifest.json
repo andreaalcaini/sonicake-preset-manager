@@ -1,7 +1,7 @@
 {
-  "name": "Sonicake Studio Preset Manager",
-  "short_name": "Sonicake Studio",
-  "description": "Studio Preset Manager and Visual Signal Chain Editor for Sonicake multi-effects pedals",
+  "name": "Pedaliera Studio",
+  "short_name": "Pedaliera Studio",
+  "description": "Editor non ufficiale per pedaliere multi-effetto Sonicake: progetto indipendente, non affiliato a Sonicake",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -11,7 +11,7 @@
   "categories": ["music", "utilities"],
   "icons": [
     {
-      "src": "/assets/images/logo_sonicake.svg",
+      "src": "/assets/ui/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

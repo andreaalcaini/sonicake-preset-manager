@@ -100,7 +100,7 @@ export class ModuleEditor {
           <button class="sl-switch module-power ${isOn ? 'on' : ''}" title="${isOn ? 'Modulo attivo: tocca per bypass' : 'Modulo in bypass: tocca per attivare'}"></button>
           <label class="sl-selector" title="${effectDef.descriptionEn || ''}">
             <span class="sl-selector-text">${moduleName} - ${displayFxName}</span>
-            <img src="/assets/images/dropdown.svg" alt="">
+            <img src="/assets/ui/dropdown.svg" alt="">
             <select class="model-select" data-module-id="${this.currentModuleId}">
               ${this.renderModelSelectOptions(availableEffects, currentFxId)}
             </select>
@@ -132,11 +132,11 @@ export class ModuleEditor {
             <span class="text-sm text-zinc-400">Fissa nel blocco DRV · AMP · IR · EQ</span>
           ` : `
             <button class="sl-pill-btn btn-chain-move" data-dir="-1" ${unitPos <= 0 ? 'disabled' : ''} title="Sposta prima nella catena">
-              <img src="/assets/images/btn_previous.svg" alt="" class="w-4 h-4">
+              <img src="/assets/ui/btn_previous.svg" alt="" class="w-4 h-4">
             </button>
             <span class="text-sm text-zinc-400 tabular-nums">${unitPos + 1} / ${units.length}</span>
             <button class="sl-pill-btn btn-chain-move" data-dir="1" ${unitPos >= units.length - 1 ? 'disabled' : ''} title="Sposta dopo nella catena">
-              <img src="/assets/images/btn_next.svg" alt="" class="w-4 h-4">
+              <img src="/assets/ui/btn_next.svg" alt="" class="w-4 h-4">
             </button>
           `}
         </div>
@@ -359,7 +359,7 @@ export class ModuleEditor {
       7: 'dly_on.svg',
       8: 'rvb_on.svg'
     };
-    return `/assets/images/${iconMap[modId] || 'effects.svg'}`;
+    return `/assets/ui/${iconMap[modId] || 'effects.svg'}`;
   }
 
   renderParameterControl(moduleId, param, rawValue) {

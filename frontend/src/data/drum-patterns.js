@@ -1,12 +1,12 @@
 export const DRUM_STYLES = [
-  { id: 'rock', name: 'Rock', icon: 'drum_icon_rock.svg', range: [0, 15] },
-  { id: 'pop', name: 'Pop', icon: 'drum_icon_pop.svg', range: [16, 29] },
-  { id: 'blues', name: 'Blues', icon: 'drum_icon_blues.svg', range: [30, 42] },
-  { id: 'jazz', name: 'Jazz', icon: 'drum_icon_jazz.svg', range: [43, 54] },
-  { id: 'funk', name: 'Funk', icon: 'drum_icon_funk.svg', range: [55, 67] },
-  { id: 'electronic', name: 'Electronic', icon: 'drum_icon_electronic.svg', range: [68, 79] },
-  { id: 'world', name: 'World', icon: 'drum_icon_world.svg', range: [80, 89] },
-  { id: 'metro', name: 'Metronome', icon: 'drum_icon_metro.svg', range: [90, 99] }
+  { id: 'rock', name: 'Rock', range: [0, 15] },
+  { id: 'pop', name: 'Pop', range: [16, 29] },
+  { id: 'blues', name: 'Blues', range: [30, 42] },
+  { id: 'jazz', name: 'Jazz', range: [43, 54] },
+  { id: 'funk', name: 'Funk', range: [55, 67] },
+  { id: 'electronic', name: 'Electronic', range: [68, 79] },
+  { id: 'world', name: 'World', range: [80, 89] },
+  { id: 'metro', name: 'Metronome', range: [90, 99] }
 ];
 
 export const DRUM_PATTERNS = Array.from({ length: 100 }, (_, i) => {

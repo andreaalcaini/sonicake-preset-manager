@@ -51,7 +51,7 @@ export class SignalChain {
         <input type="range" class="sl-range preset-volume-slider" min="0" max="100" value="${vol}" style="--fill:${vol}%">
         <span class="sl-row-value preset-volume-val">${vol}</span>
         <button class="sl-save-btn btn-save-preset" title="Salva preset sulla pedaliera (Ctrl+S)">
-          <img src="/assets/images/home_btn_save.svg" alt="Salva">
+          <img src="/assets/ui/home_btn_save.svg" alt="Salva">
         </button>
       </div>
 
@@ -100,7 +100,7 @@ export class SignalChain {
     const tag = MODULE_NAMES[modId] || `MOD ${modId}`;
     const fxName = this.getEffectName(modId);
     const isClone = modId === 3 && preset.ampMode === 'clone';
-    const icon = `/assets/images/${ICON_KEYS[modId] || 'amp'}_${isOn ? 'on' : 'off'}.svg`;
+    const icon = `/assets/ui/${ICON_KEYS[modId] || 'amp'}_${isOn ? 'on' : 'off'}.svg`;
     // Capture loaded from TONE3000: tone image + T3K mark in the block (API design requirements)
     const t3k = (modId === 3 || modId === 4) ? presetEngine.activeToneSource(modId) : null;
     const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -110,7 +110,7 @@ export class SignalChain {
         ${t3k ? `<span class="sl-tile-t3k"><img src="${T3K_MARK}" alt="TONE3000" draggable="false"></span>` : (isClone ? '<span class="sl-tile-badge">NAM</span>' : '')}
         ${t3k && t3k.image ? `<img class="sl-tile-tone" src="${esc(t3k.image)}" alt="" draggable="false" loading="lazy">` : ''}
         <img class="sl-tile-icon" src="${icon}" alt="${tag}" draggable="false">
-        <img class="sl-tile-pointer" src="/assets/images/effects_pointer.svg" alt="" draggable="false">
+        <img class="sl-tile-pointer" src="/assets/ui/effects_pointer.svg" alt="" draggable="false">
         <span class="sl-tile-name">${fxName}</span>
       </button>
     `;

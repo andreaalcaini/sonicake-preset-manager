@@ -23,7 +23,7 @@ const CHROME = process.env.CHROME_PATH || [
 const T3K = 'https://www.tone3000.com';
 const tone = (id, title, extra = {}) => ({
   id, title, description: `${title} description`, gear: 'amp', format: 'nam', images: [], published_at: '2026-10-01T00:00:00Z',
-  a1_models_count: 1, a2_models_count: 0, custom_models_count: 0, irs_count: 0, models_count: 1, downloads_count: 1234, favorites_count: 5,
+  a1_models_count: 1, a2_models_count: 0, custom_models_count: 0, irs_count: 0, models_count: 1, downloads_count: 1234, favorites_count: 5, license: 't3k',
   user: { id: 'u1', username: 'tester', display_name: null, avatar_url: null, is_verified: false, url: `${T3K}/tester` },
   url: `${T3K}/tones/t-${id}`, ...extra
 });
@@ -168,7 +168,7 @@ async function openTone3000Library() {
   await page.evaluate(async () => {
     document.getElementById('btnOpenTone3000').click();
     await new Promise(r => setTimeout(r, 300));
-    [...document.querySelectorAll('#tone3000ModalOverlay button')].find(b => /Libreria Tone3000/.test(b.textContent))?.click();
+    [...document.querySelectorAll('#tone3000ModalOverlay button')].find(b => /Libreria TONE3000/.test(b.textContent))?.click();
   });
   await sleep(1200);
 }
@@ -249,12 +249,19 @@ for (const vp of [{ label: 'desktop', width: 1366, height: 860 }, { label: 'smar
           splash: !!o.querySelector('.t3k-splash'),
           logo: !!o.querySelector('.t3k-splash img[alt="TONE3000"]'),
           copy: o.querySelector('.t3k-splash').textContent.includes('Neural Amp Modeler (NAM)'),
+          // API terms: no claimed partnership, "Powered by TONE3000" with a link to tone3000.com
+          partnership: /collabora|partner/i.test(o.querySelector('.t3k-splash').textContent),
+          poweredBy: o.querySelector('.t3k-splash .t3k-powered')?.href,
+          poweredText: o.querySelector('.t3k-splash .t3k-powered')?.textContent.trim(),
           button: btn?.textContent.trim(),
           buttonHeight: btn?.getBoundingClientRect().height,
           cards: o.querySelectorAll('.tone-card').length
         };
       });
       assert.ok(s.splash && s.logo && s.copy);
+      assert.equal(s.partnership, false);
+      assert.equal(s.poweredBy, 'https://www.tone3000.com/');
+      assert.equal(s.poweredText, 'Powered by');
       assert.equal(s.button, 'Continua');
       assert.ok(s.buttonHeight >= 44, `Continua ${s.buttonHeight}px`);
       assert.equal(s.cards, 0);
@@ -302,7 +309,10 @@ for (const vp of [{ label: 'desktop', width: 1366, height: 860 }, { label: 'smar
         await modal.fetchTones();
         await new Promise(r => setTimeout(r, 500));
         const ids = () => [...document.querySelectorAll('#tone3000ModalOverlay .tone-card')].map(c => Number(c.dataset.id));
-        const amp = { ids: ids(), hidden: modal.hiddenTones, emptyFiles: document.querySelector('#varSelect-9002')?.textContent.trim(), flashDisabled: document.querySelector('.btn-flash-tone[data-id="9002"]')?.disabled };
+        // Files are requested only for cards on screen (TONE3000 rate limit)
+        document.querySelector('#tone3000ModalOverlay .tone-card[data-id="9002"]').scrollIntoView();
+        await new Promise(r => setTimeout(r, 600));
+        const amp = { ids: ids(), hidden: modal.hiddenTones, license: document.querySelector('#tone3000ModalOverlay .tone-card[data-id="9001"] .t3k-license')?.textContent, emptyFiles: document.querySelector('#varSelect-9002')?.textContent.trim(), flashDisabled: document.querySelector('.btn-flash-tone[data-id="9002"]')?.disabled };
         const selector = document.querySelector('#tone3000ModalOverlay .target-slot-selector');
         selector.value = 'cab:2';
         selector.dispatchEvent(new Event('change', { bubbles: true }));
@@ -318,6 +328,7 @@ for (const vp of [{ label: 'desktop', width: 1366, height: 860 }, { label: 'smar
       assert.deepEqual(r.amp.ids, [9001, 9002]);
       assert.equal(r.amp.hidden, 1, 'la cattura solo A2 è nascosta');
       assert.match(r.amp.emptyFiles, /Nessun file scaricabile/);
+      assert.equal(r.amp.license, 'Licenza T3K');
       assert.equal(r.amp.flashDisabled, true);
       assert.deepEqual(r.cab.ids, [9004]);
       assert.deepEqual(network.fileAuth.slice(-1), ['Bearer AT']);
@@ -350,6 +361,46 @@ for (const vp of [{ label: 'desktop', width: 1366, height: 860 }, { label: 'smar
       assert.equal(r.picked, 9002);
       assert.equal(r.first, '9002');
       assert.equal(network.tokenRequests.at(-1).code, 'CODE2');
+    });
+
+    it('cattura TONE3000 nel blocco della catena: immagine, marchio, dettagli; il preset condiviso porta solo il riferimento', async () => {
+      const r = await page.evaluate(async () => {
+        const e = window.app.presetEngine;
+        e.replaceCloneProfile(0, { source: 'tone3000', toneId: 9001, toneTitle: 'Marshall JCM800 Test', variationName: 'JCM800 Lead', pageUrl: 'https://www.tone3000.com/tones/t-9001', image: '/assets/images/amp_on.svg', gear: 'amp', gearLabel: 'Amp', format: 'nam', creator: 'tester', license: 'Licenza T3K' }, false);
+        await e.activateCloneSlot(0, false);
+        document.getElementById('tone3000ModalOverlay').classList.remove('active');
+        window.app.moduleEditor.setModule(3);
+        await new Promise(r => setTimeout(r, 300));
+        const tile = document.querySelector('.sl-tile[data-module-id="3"]');
+        const card = document.querySelector('#moduleEditorArea .t3k-loaded-tone');
+        const res = {
+          mark: !!tile.querySelector('.sl-tile-t3k img[alt="TONE3000"]'),
+          image: !!tile.querySelector('.sl-tile-tone'),
+          card: card?.textContent.replace(/\s+/g, ' ').trim(),
+          entryLogo: !!document.querySelector('#moduleEditorArea .btn-browse-tone3000 img[alt="TONE3000"]')
+        };
+        const bundle = e.getPresetBundle();
+        res.bundle = bundle.tone3000Model;
+        res.presetMeta = 'tone3000Model' in bundle.preset;
+        window.app.tone3000Modal.selectedTone = null;
+        card.querySelector('.btn-t3k-tone-details').click();
+        await new Promise(r => setTimeout(r, 800));
+        res.details = window.app.tone3000Modal.selectedTone?.id;
+        res.open = document.getElementById('tone3000ModalOverlay').classList.contains('active');
+        return res;
+      });
+      assert.ok(r.mark && r.image && r.entryLogo);
+      assert.match(r.card, /Marshall JCM800 Test/);
+      assert.match(r.card, /@tester/);
+      assert.match(r.card, /Licenza T3K/);
+      assert.equal(r.bundle.toneId, 9001);
+      assert.equal(r.bundle.source, 'tone3000');
+      assert.equal(r.bundle.creator, 'tester');
+      assert.equal(r.bundle.license, 'Licenza T3K');
+      assert.equal('modelUrl' in r.bundle, false, 'nessun link al file nel preset condiviso');
+      assert.equal(r.presetMeta, false);
+      assert.equal(r.details, 9001);
+      assert.ok(r.open);
     });
 
     it('filtro dei preferiti: la X svuota e ricarica', async () => {

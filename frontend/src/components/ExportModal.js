@@ -141,7 +141,7 @@ export class ExportModal {
                 </div>
                 <div>
                   <div class="text-xs sm:text-sm font-bold text-zinc-100 group-hover:text-purple-400 transition-colors">Bundle Condivisibile (.sonicbundle)</div>
-                  <div class="text-[11px] text-zinc-400">Include catena, parametri e riferimenti Tone3000 NAM/IR</div>
+                  <div class="text-[11px] text-zinc-400">Include catena, parametri e riferimenti alle catture NAM/IR</div>
                 </div>
               </div>
               <span class="btn-status px-3 py-1.5 rounded-lg border border-zinc-700/60 bg-zinc-800/50 group-hover:bg-purple-500 group-hover:text-zinc-950 group-hover:border-purple-500 text-xs font-semibold text-zinc-300 transition-all">

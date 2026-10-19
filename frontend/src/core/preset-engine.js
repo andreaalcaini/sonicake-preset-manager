@@ -40,7 +40,21 @@ const slotSourceFields = (tone) => (tone && tone.source === 'tone3000' ? {
   image: tone.image || null,
   format: tone.format || null,
   gearLabel: tone.gearLabel || null,
-  creator: tone.creator || null
+  creator: tone.creator || null,
+  license: tone.license || null
+} : {});
+
+/**
+ * What a shared preset carries about a TONE3000 capture: the tone reference and its attribution,
+ * never the file or its download link. The recipient loads the tone with their own TONE3000
+ * account (Load Tone flow), as the API terms require.
+ */
+const tone3000Reference = (meta) => (meta && meta.source === 'tone3000' && meta.toneId ? {
+  source: 'tone3000',
+  toneId: meta.toneId,
+  pageUrl: meta.pageUrl || null,
+  creator: meta.creator || null,
+  license: meta.license || null
 } : {});
 
 export class PresetEngine {
@@ -678,7 +692,7 @@ export class PresetEngine {
       if (ampMode === 'clone') {
         const cloneFxId = this.activePreset?.selectedEffects?.[9];
         const cloneIdx = (cloneFxId ? cloneFxId - 901 : 0);
-        ampName = `Tone3000 NAM: ${this.cloneSlotNames[cloneIdx] || `User Profile ${cloneIdx + 1}`}`;
+        ampName = `Clone NAM: ${this.cloneSlotNames[cloneIdx] || `User Profile ${cloneIdx + 1}`}`;
       } else {
         const ampFxId = this.activePreset?.selectedEffects?.[3];
         const ampDef = MODULE_LIBRARY_DATA.effectLibrary[ampFxId];
@@ -1446,6 +1460,30 @@ export class PresetEngine {
     connection.log(`Aggiornato slot memoria User IR ${idx + 1}: "${cleanName}" (Preset invariati)`, 'success');
   }
 
+  /**
+   * TONE3000 origin of a Clone AMP ('amp') / User IR ('cab') slot, or null. Only while the slot
+   * still holds that capture (same name): another app may have overwritten it since.
+   */
+  slotSource(type, idx) {
+    const meta = (type === 'amp' ? this.cloneSlotMetadata : this.irSlotMetadata)[idx];
+    const name = (type === 'amp' ? this.cloneSlotNames : this.irSlotNames)[idx];
+    if (!meta || meta.source !== 'tone3000' || !name || !meta.variationName) return null;
+    const stored = String(meta.variationName);
+    return name === stored || name.startsWith(stored) || stored.startsWith(name) ? meta : null;
+  }
+
+  /** TONE3000 origin of the capture playing in the AMP (module 3, Clone mode) or IR (module 4) block */
+  activeToneSource(moduleId) {
+    const preset = this.activePreset;
+    if (moduleId === 3 && preset.ampMode === 'clone') {
+      const fxId = preset.selectedEffects[9] || 901;
+      return this.slotSource('amp', fxId - 901);
+    }
+    const fxId = preset.selectedEffects[4] || 0;
+    if (moduleId === 4 && fxId >= 416 && fxId <= 420) return this.slotSource('cab', fxId - 416);
+    return null;
+  }
+
   async activateCloneSlot(slotIndex, syncHardware = true) {
     const idx = Math.max(0, Math.min(4, parseInt(slotIndex, 10) || 0));
     const fxId = 901 + idx;
@@ -1484,6 +1522,8 @@ export class PresetEngine {
       preset: JSON.parse(JSON.stringify(p)),
       tone3000Model: null
     };
+    // The capture is described below (reference only), not with the local slot metadata
+    delete bundle.preset.tone3000Model;
 
     // Check if preset uses a Clone Profile (Slot 901-905)
     const isClone = p.ampMode === 'clone' || (p.selectedEffects && p.selectedEffects[9] >= 901 && p.selectedEffects[9] <= 905);
@@ -1497,11 +1537,8 @@ export class PresetEngine {
         slotName: slotName,
         toneTitle: (meta && meta.toneTitle) || slotName,
         variationName: (meta && meta.variationName) || slotName,
-        toneId: (meta && meta.toneId) || null,
-        modelId: (meta && meta.modelId) || null,
-        modelUrl: (meta && meta.modelUrl) || null,
-        pageUrl: (meta && meta.pageUrl) || null,
-        gear: 'amp'
+        gear: 'amp',
+        ...tone3000Reference(meta)
       };
     } else if (p.selectedEffects && p.selectedEffects[4] >= 416 && p.selectedEffects[4] <= 420) {
       // Check if preset uses a User IR (Slot 416-420)
@@ -1514,11 +1551,8 @@ export class PresetEngine {
         slotName: slotName,
         toneTitle: (meta && meta.toneTitle) || slotName,
         variationName: (meta && meta.variationName) || slotName,
-        toneId: (meta && meta.toneId) || null,
-        modelId: (meta && meta.modelId) || null,
-        modelUrl: (meta && meta.modelUrl) || null,
-        pageUrl: (meta && meta.pageUrl) || null,
-        gear: 'cab'
+        gear: 'cab',
+        ...tone3000Reference(meta)
       };
     }
 

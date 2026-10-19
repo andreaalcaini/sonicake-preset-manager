@@ -8,6 +8,9 @@
 import { presetEngine } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
 import { notify } from './ui-feedback.js';
+import { T3K_LOGO } from '../config/tone3000.js';
+
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 export class ImportBundleModal {
   constructor(overlayElement) {
@@ -44,6 +47,7 @@ export class ImportBundleModal {
     const toneModel = this.bundle.tone3000Model;
     const isAmpModel = toneModel && toneModel.type === 'amp';
     const isCabModel = toneModel && toneModel.type === 'cab';
+    const fromT3k = !!(toneModel && toneModel.source === 'tone3000' && toneModel.toneId);
 
     const cloneNames = presetEngine.cloneSlotNames;
     const irNames = presetEngine.irSlotNames;
@@ -62,7 +66,7 @@ export class ImportBundleModal {
             </div>
             <div>
               <h3 class="text-sm font-bold tracking-tight text-white uppercase">Preset Condiviso Ricevuto</h3>
-              <p class="text-[11px] text-zinc-400">Importa suono e assegna lo slot per i file Tone3000</p>
+              <p class="text-[11px] text-zinc-400">Importa il suono e scegli lo slot per la cattura</p>
             </div>
           </div>
           <button class="modal-close-btn p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">
@@ -89,12 +93,12 @@ export class ImportBundleModal {
           </div>
 
           ${toneModel ? `
-            <!-- Tone3000 Callout Card -->
+            <!-- Capture used by the preset -->
             <div class="p-3.5 bg-purple-950/20 border border-purple-800/40 rounded-xl space-y-1.5">
-              <div class="flex items-center justify-between">
+              <div class="flex items-center justify-between gap-2">
                 <span class="text-[10px] font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
                   <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
-                  Include Modello Tone3000
+                  ${fromT3k ? `Cattura da <img src="${T3K_LOGO}" alt="TONE3000" class="h-2.5 w-auto">` : 'Include una cattura'}
                 </span>
                 <span class="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono">
                   ${isAmpModel ? 'Clone AMP (NAM)' : 'Cabinet IR (.wav)'}
@@ -102,11 +106,15 @@ export class ImportBundleModal {
               </div>
 
               <div class="text-sm font-bold text-white">
-                ${toneModel.toneTitle || toneModel.slotName || 'Modello Tone3000'}
+                ${esc(toneModel.toneTitle || toneModel.slotName || 'Cattura')}
               </div>
               <div class="text-xs text-amber-400/90 font-medium">
-                Variazione originale: "${toneModel.variationName || toneModel.toneTitle}"
+                Variazione originale: "${esc(toneModel.variationName || toneModel.toneTitle)}"
               </div>
+              ${fromT3k ? `
+                <div class="text-[11px] text-zinc-400">${[toneModel.creator ? `@${toneModel.creator}` : null, toneModel.license].filter(Boolean).map(esc).join(' · ')}</div>
+                <p class="text-[11px] text-zinc-400">Il file non viaggia con il preset: dopo l'import si apre su TONE3000, dove lo ottieni con il tuo account e lo scrivi nello slot scelto.</p>
+              ` : ''}
             </div>
 
             <!-- Destination Slot Selector Prompt -->
@@ -200,16 +208,25 @@ export class ImportBundleModal {
         if (!this.bundle) return;
 
         try {
-          presetEngine.applyPresetBundle(this.bundle, {
+          const bundle = this.bundle;
+          presetEngine.applyPresetBundle(bundle, {
             ampSlot: this.selectedAmpSlot,
             cabSlot: this.selectedCabSlot
           });
 
           if (this.onSuccessCallback) {
-            this.onSuccessCallback(this.bundle);
+            this.onSuccessCallback(bundle);
           }
 
           this.close();
+
+          // TONE3000 capture: Load Tone flow with the recipient's own account, then write it
+          const model = bundle.tone3000Model;
+          if (model && model.source === 'tone3000' && model.toneId && window.app?.tone3000Modal) {
+            const modal = window.app.tone3000Modal;
+            modal.selectedTargetSlot = model.type === 'cab' ? this.selectedCabSlot : this.selectedAmpSlot;
+            modal.openToneDetails(model.toneId, model.type === 'cab' ? 'cab' : 'amp');
+          }
         } catch (err) {
           notify(`Errore caricamento bundle: ${err.message}`, 'error');
         }

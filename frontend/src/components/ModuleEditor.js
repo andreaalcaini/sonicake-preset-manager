@@ -7,6 +7,9 @@
 import { presetEngine } from '../core/preset-engine.js';
 import { MODULE_LIBRARY_DATA } from '../data/module-library.js';
 import { MODULE_NAMES, isFixedChainModule, toChainUnits, moveChainModule } from '../core/protocol.js';
+import { T3K_LOGO, T3K_MARK } from '../config/tone3000.js';
+
+const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const desktopQuery = window.matchMedia('(min-width: 1024px)');
 
@@ -82,6 +85,7 @@ export class ModuleEditor {
     const currentParams = preset.parameters[effectiveModuleId] || {};
 
     const canReplaceWithTone3000 = (this.currentModuleId === 3 || this.currentModuleId === 4);
+    const loadedTone = canReplaceWithTone3000 ? presetEngine.activeToneSource(this.currentModuleId) : null;
     const isOn = !!preset.states[this.currentModuleId];
     const order = preset.order || [0, 1, 2, 3, 4, 5, 6, 7, 8];
     const units = toChainUnits(order);
@@ -112,13 +116,14 @@ export class ModuleEditor {
               </div>
             ` : ''}
             ${canReplaceWithTone3000 ? `
-              <button class="sl-pill-btn accent btn-browse-tone3000" title="${isAmpModule ? 'Carica una cattura NAM da Tone3000 in uno slot Clone' : 'Carica un IR da Tone3000 in uno slot User IR'}">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                Tone3000
+              <button class="sl-pill-btn btn-browse-tone3000" title="${isAmpModule ? 'Carica una cattura NAM dalla libreria TONE3000 in uno slot Clone' : 'Carica un IR dalla libreria TONE3000 in uno slot User IR'}" aria-label="Libreria TONE3000">
+                <img src="${T3K_LOGO}" alt="TONE3000" class="h-3.5 w-auto">
               </button>
             ` : ''}
           </div>
         ` : ''}
+
+        ${loadedTone ? this.renderLoadedTone(loadedTone) : ''}
 
         <!-- Position in the chain (DRV-AMP-IR-EQ is a fixed block, like on SonicLink) -->
         <div class="sl-chip-row">
@@ -188,6 +193,29 @@ export class ModuleEditor {
         <span class="sl-param-label" title="${param.name}">${param.name}</span>
         <input type="range" class="sl-range white param-slider" min="${min}" max="${max}" step="1" value="${val}" style="--fill:${fill}%">
         <span class="sl-param-val">${val}${param.unit ? param.unit : ''}</span>
+      </div>
+    `;
+  }
+
+  /**
+   * Capture loaded from TONE3000 in this block (API design requirements): tone image, T3K mark,
+   * title, gear type, format, creator and license; "Dettagli" opens the tone details.
+   */
+  renderLoadedTone(tone) {
+    return `
+      <div class="t3k-loaded-tone flex items-center gap-3 p-2.5 rounded-xl bg-[#18191d] border border-zinc-800">
+        ${tone.image ? `<img src="${esc(tone.image)}" alt="" loading="lazy" class="w-12 h-12 rounded-lg object-cover shrink-0 bg-zinc-800">` : ''}
+        <div class="min-w-0 flex-1">
+          <div class="flex items-start gap-1.5 min-w-0">
+            <img src="${T3K_MARK}" alt="TONE3000" class="h-3 w-auto shrink-0 mt-1">
+            <span class="text-sm font-bold text-zinc-100 leading-snug line-clamp-2">${esc(tone.toneTitle)}</span>
+          </div>
+          <!-- Creator and license are never cut off (TONE3000 API terms) -->
+          <div class="text-[11px] text-zinc-400 leading-snug break-words">
+            ${[tone.gearLabel, tone.format ? String(tone.format).toUpperCase() : null, tone.creator ? `@${tone.creator}` : null, tone.license].filter(Boolean).map(esc).join(' · ')}
+          </div>
+        </div>
+        <button type="button" class="btn-t3k-tone-details sl-pill-btn shrink-0" data-tone-id="${esc(tone.toneId)}">Dettagli</button>
       </div>
     `;
   }
@@ -461,7 +489,7 @@ export class ModuleEditor {
       });
     });
 
-    // Browse & Replace on Tone3000 button
+    // TONE3000 library for this block (entry point next to the signal block)
     const btnTone3000 = this.container.querySelector('.btn-browse-tone3000');
     if (btnTone3000) {
       btnTone3000.addEventListener('click', () => {
@@ -471,6 +499,11 @@ export class ModuleEditor {
         }
       });
     }
+    // Details of the TONE3000 capture loaded in this block
+    this.container.querySelector('.btn-t3k-tone-details')?.addEventListener('click', (e) => {
+      const targetType = this.currentModuleId === 3 ? 'amp' : 'cab';
+      window.app?.tone3000Modal?.openToneDetails(e.currentTarget.dataset.toneId, targetType);
+    });
 
     // Rotary Knobs Mouse Drag, Wheel & DAW-Style Reset to Center (Double-Click / Alt+Click)
     this.container.querySelectorAll('.knob-control').forEach(knobCtrl => {

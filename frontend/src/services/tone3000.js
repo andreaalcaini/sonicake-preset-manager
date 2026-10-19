@@ -26,6 +26,18 @@ export const GEAR_LABELS = {
   'experimental': 'Experimental'
 };
 
+// Creator-chosen licenses (Tone Sharing Policy): always shown, never hidden or altered
+export const LICENSE_LABELS = {
+  't3k': 'Licenza T3K',
+  'cc-by': 'CC BY',
+  'cc-by-sa': 'CC BY-SA',
+  'cc-by-nc': 'CC BY-NC',
+  'cc-by-nc-sa': 'CC BY-NC-SA',
+  'cc-by-nd': 'CC BY-ND',
+  'cc-by-nc-nd': 'CC BY-NC-ND',
+  'cco': 'CC0'
+};
+
 export class Tone3000Error extends Error {
   constructor(message, status = 0) {
     super(message);
@@ -299,6 +311,8 @@ export function normalizeTone(t) {
     image: Array.isArray(t.images) && t.images.length ? t.images[0] : null,
     url: t.url || `${TONE3000_ORIGIN}/tones/${t.id}`,
     publishedAt: t.published_at || t.created_at || null,
+    license: t.license || null,
+    licenseLabel: t.license ? (LICENSE_LABELS[t.license] || String(t.license).toUpperCase()) : null,
     downloads: typeof t.downloads_count === 'number' ? t.downloads_count : null,
     favorites: typeof t.favorites_count === 'number' ? t.favorites_count : null,
     filesCount: pedalFiles,

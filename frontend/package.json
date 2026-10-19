@@ -2,7 +2,7 @@
   "name": "@sonicake/frontend",
   "version": "1.0.0",
   "private": true,
-  "description": "Web app: preset editor, Tone3000 explorer, Web MIDI / Web Bluetooth pedal protocol",
+  "description": "Web app: preset editor, TONE3000 library (official API), Web MIDI / Web Bluetooth pedal protocol",
   "type": "module",
   "scripts": {
     "dev": "vite --host",

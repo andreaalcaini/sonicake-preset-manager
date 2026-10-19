@@ -405,6 +405,30 @@ body { background-color: var(--sl-bg); }
   font-weight: 800;
   letter-spacing: 0.03em;
 }
+/* Capture loaded from TONE3000: T3K mark (unaltered, on a dark plate) + tone image in the block */
+.sl-tile-t3k {
+  position: absolute;
+  z-index: 3;
+  top: -5px;
+  right: 2%;
+  padding: 2px 3px;
+  border-radius: 4px;
+  background: #0b0b0c;
+  line-height: 0;
+}
+.sl-tile-t3k img { height: 10px; width: auto; }
+.sl-tile-tone {
+  position: absolute;
+  z-index: 3;
+  left: 2%;
+  top: -5px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  object-fit: cover;
+  border: 1px solid #0b0b0c;
+  background: #18181b;
+}
 
 @media (min-width: 1024px) {
   .sl-chain-panel { margin: 4px 16px 0; }
@@ -607,6 +631,9 @@ body { background-color: var(--sl-bg); }
 .sl-tab.active { color: var(--sl-text); }
 .sl-tab.active .sl-tab-icon { background: var(--sl-control); width: 56px; }
 .sl-tab.active .sl-tab-icon img, .sl-tab.active .sl-tab-icon svg { opacity: 1; }
+/* Official TONE3000 logo (entry point): full width of the tab, never dimmed or recolored */
+.sl-tab-icon.sl-tab-logo, .sl-tab.active .sl-tab-icon.sl-tab-logo { width: 72px; }
+.sl-tab-icon.sl-tab-logo img { width: 64px; height: auto; opacity: 1; }
 
 /* Debug console: selectable text so logs can be copied into bug reports */
 #logContainer, #logContainer * {

@@ -2,7 +2,7 @@
   "name": "sonicake-preset-manager",
   "version": "1.0.0",
   "private": true,
-  "description": "Sonicake Pedaliera Preset Manager & Tone3000 Cloud Explorer (all Sonicake multi-effects)",
+  "description": "Sonicake Pedaliera Preset Manager (all Sonicake multi-effects), capture library powered by TONE3000",
   "type": "module",
   "workspaces": [
     "frontend"

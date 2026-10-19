@@ -1,5 +1,5 @@
 /**
- * Tone3000 Cloud Explorer & Hardware Memory Manager Component
+ * Pedal capture memory manager + TONE3000 library (official API, see services/tone3000.js)
  * SonicLink Studio Smartphone & Desktop UI
  * 
  * Manages the Sonicake pedal internal file memory:
@@ -14,14 +14,19 @@
  */
 
 import { tone3000 } from '../services/tone3000.js';
+import { T3K_LOGO, T3K_MARK, TONE3000_ORIGIN } from '../config/tone3000.js';
 import { presetEngine, SLOT_RENAME_MAX } from '../core/preset-engine.js';
 import { connection } from '../core/connection.js';
 import { CompilerBridgeService } from '../services/compiler-bridge.js';
 import { convertCLOToLowModel } from '../core/protocol.js';
 import { notify, askText } from './ui-feedback.js';
 
-const T3K_LOGO = '/assets/tone3000/tone3000-logo.svg';
-const T3K_MARK = '/assets/tone3000/t3k-mark.svg';
+// API terms: identify TONE3000 with "Powered by TONE3000" and link to tone3000.com
+const POWERED_BY = `
+  <a href="${TONE3000_ORIGIN}" target="_blank" rel="noopener" class="t3k-powered inline-flex items-center gap-1.5 min-h-[32px] text-[11px] text-zinc-400 hover:text-zinc-200">
+    Powered by <img src="${T3K_LOGO}" alt="TONE3000" class="h-3 w-auto">
+  </a>
+`;
 
 // TONE3000 lists of the free API tier
 const LIBRARY_TABS = [
@@ -270,7 +275,7 @@ export class Tone3000Modal {
               </div>
               <div>
                 <h3 class="text-xs sm:text-sm font-black tracking-wider text-white uppercase flex items-center gap-1.5">
-                  Tone3000 & Memoria
+                  Catture e memoria
                   ${isConn ? `
                     <span class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 uppercase">Pedaliera connessa</span>
                   ` : `
@@ -287,7 +292,7 @@ export class Tone3000Modal {
                 Sulla pedaliera
               </button>
               <button class="px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-xs font-bold transition-all ${this.activeTab === 'browse' ? 'bg-gradient-to-r from-orange-600 to-amber-600 text-white shadow-md' : 'text-zinc-400 hover:text-zinc-200'}" id="tabBtnBrowse">
-                Libreria Tone3000
+                Libreria TONE3000
               </button>
             </div>
           </div>
@@ -367,7 +372,7 @@ export class Tone3000Modal {
                       </span>
                       <div class="min-w-0">
                         <div class="text-xs sm:text-sm font-bold text-zinc-100 truncate" title="${this.escapeHtml(name)}">${this.escapeHtml(name)}</div>
-                        ${this.renderSlotSource(presetEngine.cloneSlotMetadata[i], rawName)}
+                        ${this.renderSlotSource('amp', i)}
                       </div>
                     </div>
 
@@ -391,9 +396,8 @@ export class Tone3000Modal {
                         <span>${isCurrentActive ? 'Attivo' : 'Ascolta'}</span>
                       </button>
 
-                      <button class="btn-slot-search-tone3000 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-orange-500 hover:text-black text-zinc-300 text-[11px] font-bold transition-colors flex items-center gap-1" data-type="amp" data-slot="${i}" title="Cerca una cattura online su Tone3000">
-                        <svg class="w-3 h-3 text-orange-400 group-hover:text-black" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                        <span>Tone3000</span>
+                      <button class="btn-slot-search-tone3000 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 flex items-center" data-type="amp" data-slot="${i}" title="Scegli una cattura NAM dalla libreria TONE3000" aria-label="Libreria TONE3000">
+                        <img src="${T3K_LOGO}" alt="TONE3000" class="h-3 w-auto">
                       </button>
                     </div>
 
@@ -438,7 +442,7 @@ export class Tone3000Modal {
                       </span>
                       <div class="min-w-0">
                         <div class="text-xs sm:text-sm font-bold text-zinc-100 truncate" title="${this.escapeHtml(name)}">${this.escapeHtml(name)}</div>
-                        ${this.renderSlotSource(presetEngine.irSlotMetadata[i], name)}
+                        ${this.renderSlotSource('cab', i)}
                       </div>
                     </div>
 
@@ -462,9 +466,8 @@ export class Tone3000Modal {
                         <span>${isCurrentActive ? 'Attivo' : 'Ascolta'}</span>
                       </button>
 
-                      <button class="btn-slot-search-tone3000 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-amber-500 hover:text-black text-zinc-300 text-[11px] font-bold transition-colors flex items-center gap-1" data-type="cab" data-slot="${i}" title="Cerca casse / IR online su Tone3000">
-                        <svg class="w-3 h-3 text-amber-400" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 14.5c-2.49 0-4.5-2.01-4.5-4.5S9.51 7.5 12 7.5s4.5 2.01 4.5 4.5-2.01 4.5-4.5 4.5z"/></svg>
-                        <span>Casse IR</span>
+                      <button class="btn-slot-search-tone3000 px-2 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700/60 flex items-center" data-type="cab" data-slot="${i}" title="Scegli un IR dalla libreria TONE3000" aria-label="Libreria TONE3000">
+                        <img src="${T3K_LOGO}" alt="TONE3000" class="h-3 w-auto">
                       </button>
                     </div>
 
@@ -547,18 +550,15 @@ export class Tone3000Modal {
     if (!tone3000.isConnected()) {
       return `
         <div class="t3k-splash p-5 sm:p-8 bg-[#18191d] border border-zinc-800 rounded-xl flex flex-col items-center gap-4 text-center">
-          <div class="flex flex-wrap items-center justify-center gap-x-3 gap-y-2 max-w-full">
-            <img src="/assets/images/logo_sonicake.svg" alt="Sonicake" class="h-5 sm:h-6 w-auto max-w-[45%]" onerror="this.remove()">
-            <span class="text-zinc-500 text-lg" aria-hidden="true">×</span>
-            <img src="${T3K_LOGO}" alt="TONE3000" class="h-5 sm:h-6 w-auto max-w-[45%]">
-          </div>
+          <img src="${T3K_LOGO}" alt="TONE3000" class="h-6 sm:h-7 w-auto max-w-full">
           <p class="text-sm sm:text-base text-zinc-200 max-w-lg leading-relaxed">
-            Sonicake Preset Manager collabora con TONE3000 per darti accesso a una vasta libreria di catture Neural Amp Modeler (NAM) e IR di vera strumentazione analogica, create da una comunità globale di musicisti.
+            Sfoglia la libreria TONE3000 e carica le catture direttamente sulla pedaliera: un'enorme raccolta di catture Neural Amp Modeler (NAM) e IR di vera strumentazione analogica, create da una comunità globale di musicisti.
           </p>
           <button type="button" class="btn-t3k-continue min-h-[44px] px-6 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-sm font-black disabled:opacity-60" ${this.authBusy ? 'disabled' : ''}>
             ${this.authBusy ? 'Accesso in corso nella finestra TONE3000…' : 'Continua'}
           </button>
-          <p class="text-[11px] text-zinc-500 max-w-md">Accedi con la tua email TONE3000 (ricevi un codice di 6 cifre). Il tuo account resta su TONE3000: questo sito conserva solo l'accesso, in questo browser.</p>
+          <p class="text-[11px] text-zinc-500 max-w-md">Accedi con il tuo account TONE3000 (email e codice di 6 cifre). Catture, autori e licenze restano di TONE3000 e dei loro creatori: questo sito conserva solo l'accesso, in questo browser, finché non esci.</p>
+          ${POWERED_BY}
         </div>
       `;
     }
@@ -603,6 +603,7 @@ export class Tone3000Modal {
         ` : ''}
 
         <div class="tones-grid-container flex-1 overflow-y-auto min-h-[300px]"></div>
+        <div class="flex justify-center">${POWERED_BY}</div>
       </div>
     `;
   }
@@ -611,18 +612,16 @@ export class Tone3000Modal {
    * TONE3000 origin of a slot (image + T3K mark + tone, as the API design requires for loaded
    * tones). Only while the slot still holds that capture: another app may have overwritten it.
    */
-  renderSlotSource(meta, slotName) {
-    if (!meta || meta.source !== 'tone3000' || !slotName) return '';
-    const stored = String(meta.variationName || '');
-    const same = stored && (slotName === stored || slotName.startsWith(stored) || stored.startsWith(slotName));
-    if (!same) return '';
+  renderSlotSource(type, idx) {
+    const meta = presetEngine.slotSource(type, idx);
+    if (!meta) return '';
     const esc = (v) => this.escapeHtml(v);
     return `
-      <a href="${esc(meta.pageUrl || '#')}" target="_blank" rel="noopener" class="mt-1 flex items-center gap-1.5 min-w-0 text-[11px] text-zinc-400 hover:text-zinc-200" title="Apri su TONE3000">
+      <button type="button" class="btn-slot-tone-details mt-1 flex items-center gap-1.5 min-w-0 max-w-full text-left text-[11px] text-zinc-400 hover:text-zinc-200" data-tone-id="${esc(meta.toneId)}" data-type="${type}" title="Dettagli su TONE3000">
         ${meta.image ? `<img src="${esc(meta.image)}" alt="" loading="lazy" class="w-6 h-6 rounded object-cover shrink-0 bg-zinc-800">` : ''}
         <img src="${T3K_MARK}" alt="TONE3000" class="h-3 w-auto shrink-0">
-        <span class="truncate">${esc(meta.toneTitle || '')}${meta.creator ? ` · @${esc(meta.creator)}` : ''}</span>
-      </a>
+        <span class="leading-snug break-words">${esc(meta.toneTitle || '')}${meta.creator ? ` · @${esc(meta.creator)}` : ''}${meta.license ? ` · ${esc(meta.license)}` : ''}</span>
+      </button>
     `;
   }
 
@@ -664,15 +663,16 @@ export class Tone3000Modal {
             ${tone.image
               ? `<img src="${esc(tone.image)}" alt="" loading="lazy" class="w-full h-full object-cover" onerror="this.replaceWith(Object.assign(document.createElement('img'),{src:'${fallbackIcon}',className:'w-12 h-auto opacity-80'}))">`
               : `<img src="${fallbackIcon}" alt="" class="w-12 h-auto opacity-80">`}
-            <img src="${T3K_MARK}" alt="TONE3000" class="absolute bottom-1 right-1 h-3.5 w-auto drop-shadow">
+            <span class="absolute bottom-1 right-1 px-1 py-0.5 rounded bg-zinc-950/80"><img src="${T3K_MARK}" alt="TONE3000" class="h-3 w-auto block"></span>
           </a>
 
           <div class="min-w-0 flex-1 flex flex-col gap-1.5">
             <a href="${esc(tone.url)}" target="_blank" rel="noopener" class="text-sm sm:text-base font-bold text-white leading-snug line-clamp-2 hover:text-orange-300" title="${esc(tone.title)}">${esc(tone.title)}</a>
 
-            <div class="flex items-center gap-2 text-xs sm:text-sm text-zinc-400">
+            <div class="flex items-center gap-2 text-xs sm:text-sm text-zinc-400 min-w-0">
               <span class="truncate">${esc(tone.gearLabel || 'Capture')}</span>
               <span class="px-1.5 py-px rounded text-[10px] font-bold uppercase bg-zinc-300 text-zinc-900 shrink-0">${isIr ? 'IR' : 'NAM'}</span>
+              ${tone.licenseLabel ? `<span class="t3k-license px-1.5 py-px rounded text-[10px] font-bold border border-zinc-600 text-zinc-300 shrink-0" title="Licenza scelta dal creatore">${esc(tone.licenseLabel)}</span>` : ''}
             </div>
 
             <div class="flex items-center gap-4 text-xs sm:text-sm text-zinc-300">
@@ -698,7 +698,10 @@ export class Tone3000Modal {
             ` : ''}
           </div>
         </div>
-        ${picked && tone.description ? `<p class="text-xs text-zinc-400 line-clamp-3 whitespace-pre-line">${esc(tone.description)}</p>` : ''}
+        ${tone.description ? `
+          <p class="text-xs text-zinc-400 ${picked ? 'line-clamp-4' : 'line-clamp-2'} whitespace-pre-line">${esc(tone.description)}</p>
+          <a href="${esc(tone.url)}" target="_blank" rel="noopener" class="-mt-2 text-[11px] text-orange-400 hover:text-orange-300 self-start">Leggi tutto su TONE3000</a>
+        ` : ''}
 
         <!-- Files of this capture -->
         <div class="flex items-center gap-2">
@@ -780,9 +783,18 @@ export class Tone3000Modal {
     `;
     gridContainer.querySelector('.btn-t3k-discover').addEventListener('click', () => this.browseTone3000());
 
-    tones.forEach(tone => {
-      this.loadToneVariations(tone);
+    // Files of a tone are requested only when its card is on screen (TONE3000 rate limit:
+    // 100 requests per minute), or when Scrivi / Download is pressed
+    this.filesObserver?.disconnect();
+    this.filesObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        this.filesObserver.unobserve(entry.target);
+        const tone = tones.find(t => String(t.id) === entry.target.dataset.id);
+        if (tone) this.loadToneVariations(tone);
+      }
     });
+    gridContainer.querySelectorAll('.tone-card').forEach(card => this.filesObserver.observe(card));
 
     // Flash Button Click Handler
     gridContainer.querySelectorAll('.btn-flash-tone').forEach(btn => {
@@ -796,6 +808,7 @@ export class Tone3000Modal {
           return;
         }
 
+        if (!(toneId in this.selectedVariations)) await this.loadToneVariations(tone);
         const selectedVar = this.selectedVariations[toneId];
         if (!selectedVar?.url) {
           notify("Questa cattura non ha ancora un file scaricabile: attendi il caricamento dei file o scegline un'altra.", 'warning');
@@ -824,6 +837,7 @@ export class Tone3000Modal {
         const tone = tones.find(t => String(t.id) === String(toneId));
         if (!tone) return;
 
+        if (!(toneId in this.selectedVariations)) await this.loadToneVariations(tone);
         const selectedVar = this.selectedVariations[toneId];
         if (!selectedVar?.url) {
           notify("Questa cattura non ha ancora un file scaricabile: attendi il caricamento dei file o scegline un'altra.", 'warning');
@@ -860,8 +874,28 @@ export class Tone3000Modal {
       gear: tone.gear,
       gearLabel: tone.gearLabel,
       format: tone.format,
+      license: tone.licenseLabel,
       creator: tone.author ? tone.author.username || tone.author.name : null
     };
+  }
+
+  /**
+   * Tone details from a signal block or a memory slot: signed in, straight to the tone; otherwise
+   * the Load Tone flow (sign-in, access check, replacement if the tone is no longer available).
+   */
+  async openToneDetails(toneId, targetType = 'amp') {
+    this.selectedTargetType = targetType;
+    this.activeTab = 'browse';
+    this.overlay.classList.add('active');
+    if (tone3000.isConnected()) return this.showSelectedTone(toneId);
+    this.render();
+    try {
+      const result = await tone3000.startFlow({ prompt: 'load_tone', toneId, format: targetType === 'cab' ? 'ir' : 'nam' });
+      if (result.toneId) await this.showSelectedTone(result.toneId);
+      else this.render();
+    } catch (err) {
+      notify(err.message, 'error');
+    }
   }
 
   /**
@@ -1171,7 +1205,12 @@ export class Tone3000Modal {
       });
     });
 
-    // Library: TONE3000 sign-in (partnership splash), Select flow, sign-out, lists
+    // Memory Tab: TONE3000 origin of a slot → tone details
+    this.overlay.querySelectorAll('.btn-slot-tone-details[data-tone-id]').forEach(btn => {
+      btn.addEventListener('click', () => this.openToneDetails(btn.dataset.toneId, btn.dataset.type));
+    });
+
+    // Library: TONE3000 sign-in (splash), Select flow, sign-out, lists
     this.overlay.querySelectorAll('.btn-t3k-continue, .btn-t3k-browse').forEach(btn => {
       btn.addEventListener('click', () => this.browseTone3000());
     });

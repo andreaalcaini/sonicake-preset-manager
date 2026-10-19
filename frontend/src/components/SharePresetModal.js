@@ -120,7 +120,7 @@ export class SharePresetModal {
               <div>
                 <div class="text-[10px] font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
                   <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
-                  Include Modello Tone3000 (${toneModel.type === 'amp' ? 'Clone NAM' : 'Cabinet IR'})
+                  Include cattura (${toneModel.type === 'amp' ? 'Clone NAM' : 'Cabinet IR'})
                 </div>
                 <div class="text-xs sm:text-sm font-bold text-white mt-1">
                   ${toneModel.toneTitle}
@@ -177,7 +177,7 @@ export class SharePresetModal {
                 </div>
                 <div>
                   <div class="text-xs sm:text-sm font-bold text-zinc-100">File Bundle Completo (.sonicbundle)</div>
-                  <div class="text-[11px] text-zinc-400">Include catena, parametri e riferimenti Tone3000</div>
+                  <div class="text-[11px] text-zinc-400">Include catena, parametri e riferimenti alle catture</div>
                 </div>
               </div>
               <button class="px-3.5 py-2 rounded-lg border border-zinc-700/60 bg-zinc-800/60 hover:bg-zinc-800 text-zinc-200 text-xs font-semibold whitespace-nowrap transition-colors" id="btnDownloadBundle">

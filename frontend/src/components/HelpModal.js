@@ -116,7 +116,7 @@ export class HelpModal {
             </div>
           </div>
 
-          <!-- Section 3: Tone3000 & Internal Memory Guide -->
+          <!-- Section 3: captures & internal memory -->
           <div class="space-y-2">
             <h4 class="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -127,8 +127,11 @@ export class HelpModal {
               Amplificatori e casse personali
             </h4>
             <div class="p-3 bg-zinc-950/40 border border-zinc-800 rounded-xl text-xs text-zinc-400 leading-relaxed">
-              La pedaliera dispone di <strong>5 slot Clone AMP (NAM)</strong> e <strong>5 slot Cabinet IR</strong> nella memoria della pedaliera. Lo strumento Tone3000 ti permette di caricare e sostituire questi file senza intaccare la lista dei tuoi 50 preset.
+              La pedaliera dispone di <strong>5 slot Clone AMP (NAM)</strong> e <strong>5 slot Cabinet IR</strong> nella memoria della pedaliera. Puoi caricarli con i tuoi file <strong>.nam</strong> / <strong>.wav</strong> oppure dalla libreria TONE3000 (accesso con il tuo account TONE3000), senza intaccare la lista dei tuoi 50 preset.
             </div>
+            <a href="https://www.tone3000.com" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 min-h-[32px] text-[11px] text-zinc-400 hover:text-zinc-200">
+              Powered by <img src="/assets/tone3000/tone3000-logo.svg" alt="TONE3000" class="h-3 w-auto">
+            </a>
           </div>
         </div>
 

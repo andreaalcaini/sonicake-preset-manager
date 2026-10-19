@@ -8,6 +8,7 @@
 import { presetEngine } from '../core/preset-engine.js';
 import { MODULE_LIBRARY_DATA } from '../data/module-library.js';
 import { MODULE_NAMES, isFixedChainModule } from '../core/protocol.js';
+import { T3K_MARK } from '../config/tone3000.js';
 
 const ICON_KEYS = ['nr', 'fx1', 'drv', 'amp', 'ir', 'eq', 'fx2', 'dly', 'rvb'];
 const desktopQuery = window.matchMedia('(min-width: 1024px)');
@@ -100,10 +101,14 @@ export class SignalChain {
     const fxName = this.getEffectName(modId);
     const isClone = modId === 3 && preset.ampMode === 'clone';
     const icon = `/assets/images/${ICON_KEYS[modId] || 'amp'}_${isOn ? 'on' : 'off'}.svg`;
+    // Capture loaded from TONE3000: tone image + T3K mark in the block (API design requirements)
+    const t3k = (modId === 3 || modId === 4) ? presetEngine.activeToneSource(modId) : null;
+    const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     return `
-      <button class="sl-tile ${blockClass} ${isSelected ? 'is-selected' : ''}" data-module-id="${modId}" title="${tag} · ${fxName}${isOn ? '' : ' (bypass)'} — doppio tocco per on/off">
-        ${isClone ? '<span class="sl-tile-badge">NAM</span>' : ''}
+      <button class="sl-tile ${blockClass} ${isSelected ? 'is-selected' : ''}" data-module-id="${modId}" title="${tag} · ${esc(fxName)}${t3k ? ` (TONE3000: ${esc(t3k.toneTitle)})` : ''}${isOn ? '' : ' (bypass)'} — doppio tocco per on/off">
+        ${t3k ? `<span class="sl-tile-t3k"><img src="${T3K_MARK}" alt="TONE3000" draggable="false"></span>` : (isClone ? '<span class="sl-tile-badge">NAM</span>' : '')}
+        ${t3k && t3k.image ? `<img class="sl-tile-tone" src="${esc(t3k.image)}" alt="" draggable="false" loading="lazy">` : ''}
         <img class="sl-tile-icon" src="${icon}" alt="${tag}" draggable="false">
         <img class="sl-tile-pointer" src="/assets/images/effects_pointer.svg" alt="" draggable="false">
         <span class="sl-tile-name">${fxName}</span>

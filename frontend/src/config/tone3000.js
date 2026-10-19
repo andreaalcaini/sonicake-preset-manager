@@ -6,6 +6,11 @@
 
 export const TONE3000_ORIGIN = 'https://www.tone3000.com';
 
+// Official brand assets (TONE3000 Logos.zip), never altered. The full logo comes first (entry
+// points, list headers); the T3K mark only in compact places after it (buttons, block markers).
+export const T3K_LOGO = '/assets/tone3000/tone3000-logo.svg';
+export const T3K_MARK = '/assets/tone3000/t3k-mark.svg';
+
 // Publishable key (OAuth client_id) from tone3000.com/settings: public by design, safe in the
 // bundle. VITE_TONE3000_CLIENT_ID overrides it at build time; the global is for the UI tests.
 const BUILT_IN_CLIENT_ID = '';

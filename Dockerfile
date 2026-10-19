@@ -14,6 +14,7 @@ FROM --platform=$BUILDPLATFORM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 COPY package.json package-lock.json* ./
+COPY frontend/package.json ./frontend/
 RUN npm ci
 
 # 2. Builder frontend nativo veloce
@@ -38,8 +39,8 @@ RUN curl -fsSL -o /tmp/ndk.zip "https://dl.google.com/android/repository/android
  && rm /tmp/ndk.zip
 ENV TC=/opt/android-ndk-${NDK_VERSION}/toolchains/llvm/prebuilt/linux-x86_64
 WORKDIR /src
-COPY server/nam2clo/nam2clo.c server/nam2clo/juce_android_shim.cpp ./
-COPY server/nam2clo/stubs/ ./stubs/
+COPY backend/nam2clo/nam2clo.c backend/nam2clo/juce_android_shim.cpp ./
+COPY backend/nam2clo/stubs/ ./stubs/
 RUN set -e; mkdir -p /out /link; \
     CC="$TC/bin/aarch64-linux-android24-clang"; CXX="$TC/bin/aarch64-linux-android24-clang++"; \
     # link-time stand-in for the vendor library (real one is mounted at runtime)
@@ -60,7 +61,7 @@ FROM --platform=linux/arm64 redroid/redroid:13.0.0-latest AS android
 #    (never installed with the runner's architecture: charset_normalizer ships compiled modules)
 FROM --platform=$BUILDPLATFORM python:3.12-slim-bookworm AS pydeps
 ARG TARGETARCH
-COPY server/requirements.txt /tmp/requirements.txt
+COPY backend/requirements.txt /tmp/requirements.txt
 RUN case "$TARGETARCH" in \
       arm64) plat=manylinux2014_aarch64 ;; \
       amd64) plat=manylinux2014_x86_64 ;; \
@@ -100,8 +101,8 @@ RUN groupadd --system --gid 1001 app \
  && mkdir -p /app/data/vendor /app/data/cache \
  && chown -R app:app /app/data
 
-COPY server/server.py ./server.py
-COPY --from=builder /app/dist ./static
+COPY backend/server.py ./server.py
+COPY --from=builder /app/frontend/dist ./static
 
 USER app
 EXPOSE 3000

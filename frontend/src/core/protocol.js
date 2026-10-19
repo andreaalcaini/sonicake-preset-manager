@@ -767,7 +767,7 @@ export function convertCLOToLowModel(cloBytes) {
 
 /**
  * Build the 22-byte "rename slot" message (Sonicake Manager "Rename Clone" / "Rename IR",
- * captured on USB 2026-10-19, tests/fixtures/slot_rename_capture.json):
+ * captured on USB 2026-10-19, frontend/test/fixtures/slot_rename_capture.json):
  *   [11 26 | 11 22] [slot] [00] [00 0F | 10 0A] + name (16 bytes, null padded)
  * The opcode follows the flash one (25 -> 26 Clone AMP, 21 -> 22 User IR) and bytes 2-5 repeat
  * bytes 6-9 of the flash payload header. Only the name changes: the capture is not rewritten.

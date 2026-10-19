@@ -1,6 +1,6 @@
 /**
  * Renaming Clone AMP / User IR slots with the native rename message, checked against the
- * Sonicake Manager capture (tests/fixtures/slot_rename_capture.json).
+ * Sonicake Manager capture (test/fixtures/slot_rename_capture.json).
  */
 import { describe, it, before } from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { installBrowserStubs, loadSite, VirtualPedal, ROOT } from '../support/virtual-pedal.mjs';
 
-const capture = JSON.parse(readFileSync(path.join(ROOT, 'tests', 'fixtures', 'slot_rename_capture.json'), 'utf8'));
+const capture = JSON.parse(readFileSync(path.join(ROOT, 'test', 'fixtures', 'slot_rename_capture.json'), 'utf8'));
 const hex = (bytes) => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
 let site, E, P, pedal;
 

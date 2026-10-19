@@ -9,12 +9,13 @@ Microservizio Flask che converte i profili **Neural Amp Modeler (.nam)** nel **L
 Usa la `5868USB.dll` inclusa e il WAV di eccitazione dell'installazione di Sonicake Manager.
 
 ```cmd
-run_server.bat
-:: oppure
-python server.py
+:: dalla root del repository: compiler + sito insieme
+npm run dev
+:: solo il compiler
+npm run dev:backend
 ```
 
-Il server risponde su `http://localhost:8080`; il dev server Vite (`npm run dev`) inoltra `/api` a questa porta.
+Il server risponde su `http://localhost:8080`; il dev server Vite inoltra `/api` a questa porta. La cache delle conversioni sta in `data/cache/`, come in produzione.
 Verifica: `curl http://localhost:8080/api/health` → `compiler_backend: "dll"`.
 
 ---
@@ -25,7 +26,7 @@ Il `Dockerfile` nella root del repository produce un'unica immagine con sito e c
 
 1. **Estrai i file vendor** dall'APK SonicLink, dalla root del repository:
    ```powershell
-   .\server\nam2clo\extract-vendor.ps1 -SplitApk ...\split_config.arm64_v8a.apk -BaseApk ...\SONICLINK.apk
+   .\backend\nam2clo\extract-vendor.ps1 -SplitApk ...\split_config.arm64_v8a.apk -BaseApk ...\SONICLINK.apk
    ```
    Il risultato finisce in `data/vendor/`: `lib5868USB.so`, `libc++_shared.so`, `nam_input_wav.wav`.
 2. **Copiali sul server** in `./data/vendor/` (accanto a `docker-compose.yml`), poi `sudo chown -R 1001:1001 data`.

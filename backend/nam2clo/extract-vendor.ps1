@@ -7,7 +7,7 @@
     nam_input_wav.wav                 <- base APK (assets/flutter_assets/assets/clone_config/nam_input_file.wav)
 
   Usage (from the repo root):
-    .\server\nam2clo\extract-vendor.ps1 -SplitApk ...\split_config.arm64_v8a.apk -BaseApk ...\SONICLINK.apk
+    .\backend\nam2clo\extract-vendor.ps1 -SplitApk ...\split_config.arm64_v8a.apk -BaseApk ...\SONICLINK.apk
   Then copy data/vendor to the server's ./data/vendor.
 #>
 param(

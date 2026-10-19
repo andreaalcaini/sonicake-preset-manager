@@ -1,4 +1,4 @@
-"""Limits of the public compiler server (server/server.py). Run: python -m unittest discover tests/server"""
+"""Limits of the public compiler server (backend/server.py). Run: npm run test:backend"""
 import importlib.util
 import io
 import os
@@ -6,9 +6,9 @@ import sys
 import unittest
 from unittest import mock
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+BACKEND = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 os.environ.setdefault('MAX_MODEL_MB', '1')
-spec = importlib.util.spec_from_file_location('sonicake_server', os.path.join(ROOT, 'server', 'server.py'))
+spec = importlib.util.spec_from_file_location('sonicake_server', os.path.join(BACKEND, 'server.py'))
 server = importlib.util.module_from_spec(spec)
 sys.modules['sonicake_server'] = server
 spec.loader.exec_module(server)

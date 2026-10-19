@@ -1,0 +1,22 @@
+{
+  "name": "@sonicake/frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Web app: preset editor, Tone3000 explorer, Web MIDI / Web Bluetooth pedal protocol",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test": "node --test \"test/engine/*.test.mjs\" \"test/protocol/*.test.mjs\"",
+    "test:ui": "vite build && node --test test/ui/ui.e2e.mjs"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^2.3.0",
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.29",
+    "puppeteer-core": "^23.11.1",
+    "tailwindcss": "^3.4.17",
+    "vite": "^6.0.0"
+  }
+}

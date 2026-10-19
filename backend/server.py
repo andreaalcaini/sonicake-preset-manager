@@ -46,8 +46,9 @@ def too_large(_err):
 
 # --- Directories ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-# DATA_DIR is the persistent volume in Docker (/app/data): conversion cache + vendor files
-DATA_DIR = os.environ.get('DATA_DIR', SCRIPT_DIR)
+# DATA_DIR is the persistent volume (/app/data in Docker, the repository's data/ in development):
+# conversion cache + vendor files
+DATA_DIR = os.environ.get('DATA_DIR', os.path.join(os.path.dirname(SCRIPT_DIR), 'data'))
 CACHE_DIR = os.path.join(DATA_DIR, 'cache')
 try:
     os.makedirs(CACHE_DIR, exist_ok=True)

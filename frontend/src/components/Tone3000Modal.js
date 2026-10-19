@@ -928,7 +928,7 @@ export class Tone3000Modal {
       const offline = /Failed to fetch|NetworkError|HTTP 50[24]/i.test(err.message);
       if (offline) {
         notify(import.meta.env?.DEV
-          ? 'Server di conversione NAM non raggiungibile. Avvia "python server/server.py" sul PC con Sonicake Manager installato.'
+          ? 'Server di conversione NAM non raggiungibile. Avvia "npm run dev:backend" sul PC con Sonicake Manager installato.'
           : 'Il servizio di conversione NAM non è raggiungibile in questo momento: riprova tra qualche minuto.', 'error');
       } else {
         notify(`Errore conversione/scrittura NAM: ${err.message}`, 'error');

@@ -40,8 +40,8 @@ jobs:
 
       - name: Compiler server tests
         run: |
-          pip install -r server/requirements.txt
-          npm run test:server
+          pip install -r backend/requirements.txt
+          npm run test:backend
 
       - name: Interface tests (headless Chrome)
         run: npm run test:ui

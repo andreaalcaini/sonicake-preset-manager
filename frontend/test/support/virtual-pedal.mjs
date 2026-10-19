@@ -12,7 +12,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
-export const fixture = (name) => new Uint8Array(readFileSync(path.join(ROOT, 'tests', 'fixtures', name)));
+export const fixture = (name) => new Uint8Array(readFileSync(path.join(ROOT, 'test', 'fixtures', name)));
 
 /** Minimal browser globals the engine modules expect */
 export function installBrowserStubs() {

@@ -1,5 +1,5 @@
 {
-  "source": "Sonicake Manager 'Rename Clone' / 'Rename IR' (QME-20, USB), captured 2026-10-19 with server/tools/sniff_import.py",
+  "source": "Sonicake Manager 'Rename Clone' / 'Rename IR' (QME-20, USB), captured 2026-10-19 with tools/sniff_import.py",
   "clone": {
     "slot": 1,
     "oldName": "BOOGIE V TWIN",

@@ -41,24 +41,20 @@ env/
 venv/
 ENV/
 
-# Hardware binary dumps and model cache
+# Hardware binary dumps, models and local captures (they can contain preset names)
 *.bin
-server/cache/*
-!server/cache/.gitkeep
-server/*.bin
-server/*.clo
-server/*.nam
+tools/captures/
 
-# Server data volume (conversion cache + vendor ARM64 converter files from the SonicLink APK)
+# Data volume (conversion cache + vendor ARM64 converter files from the SonicLink APK)
 data/*
 !data/.gitkeep
-server/nam2clo/vendor/
-server/nam2clo/build/
+backend/nam2clo/vendor/
+backend/nam2clo/build/
 
 # Environment (template: .env.example)
 .env
 .env*.local
 
 # Small protocol captures used by the automated tests
-!tests/fixtures/
-!tests/fixtures/**
+!frontend/test/fixtures/
+!frontend/test/fixtures/**

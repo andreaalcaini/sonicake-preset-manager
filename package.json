@@ -1,23 +1,24 @@
 {
   "name": "sonicake-preset-manager",
   "version": "1.0.0",
+  "private": true,
   "description": "Sonicake Pedaliera Preset Manager & Tone3000 Cloud Explorer (all Sonicake multi-effects)",
   "type": "module",
+  "workspaces": [
+    "frontend"
+  ],
   "scripts": {
-    "dev": "vite --host",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test": "node --test",
-    "test:server": "python -m unittest discover -s tests/server",
-    "test:ui": "vite build && node --test tests/ui/ui.e2e.mjs",
-    "test:all": "npm test && npm run test:server && npm run test:ui"
+    "dev": "concurrently -k -n backend,frontend -c blue,magenta \"npm run dev:backend\" \"npm run dev -w frontend\"",
+    "dev:backend": "python backend/server.py",
+    "dev:frontend": "npm run dev -w frontend",
+    "build": "npm run build -w frontend",
+    "preview": "npm run preview -w frontend",
+    "test": "npm test -w frontend",
+    "test:backend": "python -m unittest discover -s backend/test",
+    "test:ui": "npm run test:ui -w frontend",
+    "test:all": "npm test && npm run test:backend && npm run test:ui"
   },
   "devDependencies": {
-    "@vitejs/plugin-basic-ssl": "^2.3.0",
-    "autoprefixer": "^10.6.1",
-    "postcss": "^8.5.29",
-    "puppeteer-core": "^23.11.1",
-    "tailwindcss": "^3.4.17",
-    "vite": "^6.0.0"
+    "concurrently": "^9.2.5"
   }
 }

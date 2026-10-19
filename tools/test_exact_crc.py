@@ -1,4 +1,4 @@
-with open('backend/5868USB.dll', 'rb') as f:
+with open('data/vendor/5868USB.dll', 'rb') as f:
     dll = f.read()
 
 # RVA of Table1 and Table2

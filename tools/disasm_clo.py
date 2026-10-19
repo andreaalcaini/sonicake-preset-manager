@@ -1,7 +1,7 @@
 import pefile
 import capstone
 
-pe = pefile.PE('backend/5868USB.dll')
+pe = pefile.PE('data/vendor/5868USB.dll')
 exports = {}
 for exp in pe.DIRECTORY_ENTRY_EXPORT.symbols:
     if exp.name:

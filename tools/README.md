@@ -20,3 +20,6 @@ compiler server.
 | `disasm_*`, `find_*`, `search_*`, `inspect_*` | Look for functions and data in the vendor binaries |
 | `dump_*`, `parse_*`, `print_*`, `list_*`, `query_*`, `read_*` | Decode names, presets and module tables |
 | `decode_*`, `test_*` | Experiments on single formats (CRC, Low Model, reassembly) |
+
+`make_ui_assets.py` is the exception: it generates the site's original artwork in
+`frontend/public/assets/ui/` (`python tools/make_ui_assets.py frontend/public/assets/ui`).

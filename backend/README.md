@@ -6,7 +6,7 @@ Microservizio Flask che converte i profili **Neural Amp Modeler (.nam)** nel **L
 
 ## 🪟 Sviluppo locale su Windows (backend `dll`)
 
-Usa la `5868USB.dll` inclusa e il WAV di eccitazione dell'installazione di Sonicake Manager.
+Usa la `5868USB.dll` e il WAV di eccitazione dell'installazione di Sonicake Manager (serve Sonicake Manager installato). La libreria è proprietaria e non è nel repository: per usarne una copia altrove mettila in `data/vendor/` o indica il percorso con `SONICAKE_LIB_PATH`.
 
 ```cmd
 :: dalla root del repository: compiler + sito insieme

@@ -3,7 +3,7 @@ import os
 import sys
 import time
 
-dll_path = os.path.abspath('backend/5868USB.dll')
+dll_path = os.path.abspath('data/vendor/5868USB.dll')
 print(f"Loading {dll_path}...")
 dll = ctypes.CDLL(dll_path)
 

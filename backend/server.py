@@ -148,10 +148,12 @@ def validate_clo(clo_data):
         raise ValueError(f"CLO non valido: CRC16 {calc_crc:#06x} != {file_crc:#06x}.")
 
 # --- Locate Sonicake C++ Native Library ---
+# Sonicake Manager's own library: proprietary, never in the repository. Taken from the local
+# Sonicake Manager installation, or copied into data/vendor/ (like the ARM64 vendor files).
 dll_candidates = [
-    os.path.join(SCRIPT_DIR, '5868USB.dll'),
+    os.environ.get('SONICAKE_LIB_PATH', ''),
+    os.path.join(DATA_DIR, 'vendor', '5868USB.dll'),
     r'C:\Program Files\Sonicake\Sonicake Manager\assets\5868USB.dll',
-    os.environ.get('SONICAKE_LIB_PATH', '')
 ]
 
 # Excitation signal Sonicake Manager plays through the NAM model before fitting the CLO

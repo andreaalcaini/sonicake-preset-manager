@@ -43,6 +43,9 @@ ENV/
 
 # Hardware binary dumps, models and local captures (they can contain preset names)
 *.bin
+
+# Proprietary Sonicake libraries (Sonicake Manager / SonicLink): never committed, see data/vendor/
+*.dll
 tools/captures/
 
 # Data volume (conversion cache + vendor ARM64 converter files from the SonicLink APK)

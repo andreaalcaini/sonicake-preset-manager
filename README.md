@@ -3,7 +3,7 @@
 # 🎛️ Sonicake Studio Preset Manager
 
 **Editor visivo e Preset Manager moderno, gratuito e open-source per pedaliere Sonicake.**  
-*Gestisci la catena degli effetti, sfoglia la libreria Tone3000 con le variazioni dei modelli NAM/IR e controlla la tua pedaliera via USB o Bluetooth BLE da PC, Mac, tablet e smartphone.*
+*Gestisci la catena degli effetti, carica sulla pedaliera catture NAM e IR dalla libreria [TONE3000](https://www.tone3000.com) e controlla la tua pedaliera via USB o Bluetooth BLE da PC, Mac, tablet e smartphone.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20PWA%20%7C%20Touch-cyan.svg)](#)
@@ -35,15 +35,15 @@ Funziona direttamente dal browser sfruttando gli standard moderni **Web MIDI** e
 - **Confronto Istantaneo A/B:** Ascolta istantaneamente la differenza tra il suono originale e le modifiche con un solo clic o con la scorciatoia `Alt + A`.
 - **Annulla / Ripristina (Undo/Redo):** Storico illimitato delle modifiche con `Ctrl + Z` e `Ctrl + Y`.
 
-### 🌐 2. Tone3000 Cloud Explorer & Variazioni del Modello
-- **Integrazione ufficiale TONE3000:** Accedi con il tuo account TONE3000 (email + codice) e sfoglia il catalogo completo di amplificatori NAM e casse IR; nel sito trovi anche i tuoi preferiti, i download, le tue catture e le novità. Le catture NAM A2, che la pedaliera non può caricare, vengono nascoste.
+### 🌐 2. Libreria TONE3000 (Powered by [TONE3000](https://www.tone3000.com))
+- **Libreria TONE3000 tramite la sua [API pubblica](https://www.tone3000.com/api):** Accedi con il tuo account TONE3000 (email + codice) e sfoglia il catalogo completo di amplificatori NAM e casse IR; nel sito trovi anche i tuoi preferiti, i download, le tue catture e le novità. Le catture NAM A2, che la pedaliera non può caricare, vengono nascoste.
 - **Selettore Variazioni del Creatore:** Quando selezioni un tone, visualizzi il menu con tutte le variazioni caricate dall'autore (es. *Clean, Crunch, Lead, High Gain, SM57, R121*) per scaricare esattamente il timbro che desideri.
 - **Gestione Memoria File Interni (5 NAM + 5 IR):** I file scaricati vengono scritti negli slot hardware dedicati (Slot NAM 1–5 e Slot IR 1–5), **senza rischiare di sovrascrivere o alterare i tuoi 50 preset utente**.
 - **Caricamento Locale:** Trascina o carica direttamente i tuoi file `.nam` o `.wav` dal computer negli slot interni.
 
 ### 🔗 3. Condivisione Preset 1-Click (Web Link & File Bundle)
 - **Condivisione Istantanea via Link:** Genera con un clic un URL compatto e condivisibile contenente l'intera catena e tutti i parametri.
-- **File `.sonicbundle`:** Pacchetto completo che include la catena degli effetti e i metadati del profilo Tone3000 utilizzato.
+- **File `.sonicbundle`:** Pacchetto completo che include la catena degli effetti e il riferimento alla cattura usata: per le catture TONE3000 solo il tone (titolo, creatore, licenza), mai il file. Chi apre il preset ottiene la cattura da TONE3000 con il proprio account.
 - **Scelta Slot all'Importazione:** Chi apre il link o importa il bundle viene guidato nella scelta dello slot della memoria interna (NAM o IR) in cui salvare il file, applicando la catena in modo sicuro.
 
 ### 📶 4. Doppia Connettività (USB MIDI & Wireless Bluetooth BLE)
@@ -88,7 +88,7 @@ L'applicazione utilizza le API native del W3C **Web MIDI** e **Web Bluetooth**.
 
 | Percorso | Contenuto |
 |---|---|
-| [`frontend/`](frontend/) | Web app (Vite, ES modules, PWA): editor, Tone3000, protocollo Web MIDI / Web Bluetooth; test con la pedaliera virtuale in [`frontend/test/`](frontend/test/) |
+| [`frontend/`](frontend/) | Web app (Vite, ES modules, PWA): editor, libreria TONE3000, protocollo Web MIDI / Web Bluetooth; test con la pedaliera virtuale in [`frontend/test/`](frontend/test/) |
 | [`backend/`](backend/) | Compiler NAM → Clone AMP (Flask) che in produzione serve anche il sito. [Guida](backend/README.md) |
 | [`docs/PROTOCOL.md`](docs/PROTOCOL.md) | Protocollo della pedaliera: frame SysEx, comandi, flash, export/import, rinomina |
 | [`tools/`](tools/) | Script di reverse engineering (storici, non usati dal sito) |

@@ -47,7 +47,7 @@ This project is an open-source, community-driven desktop editor designed to prov
 ## 💡 How You Can Help
 
 - **Model & AlgID Verification:** Help verify effect parameters, algorithm mappings, and EQ frequencies against physical hardware firmware versions.
-- **Tone3000 Cloud Enhancements:** Expand Neural Amp Modeler search filters, tags, and cloud preview.
+- **TONE3000 library:** Improvements within the [TONE3000 API](https://www.tone3000.com/api) terms and design requirements (free tier: Select / Load Tone flows and the bounded lists only).
 - **UI / Skeuomorphic Design:** Improve knob rendering, rack animations, and stage mode visibility.
 - **Documentation & Localization:** Translations (English, Spanish, Italian, German, Japanese, Chinese).
 

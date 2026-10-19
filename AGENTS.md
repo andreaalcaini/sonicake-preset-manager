@@ -146,6 +146,20 @@ Un'unica immagine (`Dockerfile`) con sito Vite + API compiler:
 
 ---
 
+## 🎸 Progetto: TONE3000 (API e termini)
+
+La libreria usa solo l'[API pubblica TONE3000](https://www.tone3000.com/api) (piano gratuito, non commerciale) e deve restare conforme ai suoi [termini](https://www.tone3000.com/api/terms) e requisiti grafici:
+
+- **Solo endpoint del piano gratuito**: flussi OAuth `select_tone` / `load_tone`, `user`, `tones/{id}`, `models` ed elenchi `favorited`, `downloaded`, `created`, `trending`, `latest`. **Mai** `tones/search`, download zip o il database interno (`api.tone3000.com/rest`).
+- **Accesso dell'utente**: OAuth 2.0 + PKCE con la publishable key (`frontend/src/config/tone3000.js`); la secret key non entra mai nel codice. Token solo nel browser dell'utente, cancellati con "Esci".
+- **Niente cache né hosting del catalogo**: i file si scaricano solo quando l'utente lo chiede, dal suo browser e con il suo token. Il compiler non conserva modelli né conversioni (`data/cache` contiene solo file temporanei). I preset condivisi portano solo il riferimento al tone (ID, titolo, creatore, licenza), mai il file o il suo link: chi li apre usa Load Tone con il proprio account.
+- **Rate limit 100 richieste/minuto**: i file di un tone si caricano solo per le card visibili o su richiesta.
+- **Attribuzione**: "Powered by TONE3000" con link a https://www.tone3000.com; creatore e licenza sempre visibili; logo e marchio T3K ufficiali (`frontend/public/assets/tone3000/`) mai alterati (niente opacità, ombre o colori). Il logo completo ai punti di accesso, il marchio T3K solo dopo, in posizioni compatte.
+- **Niente partnership dichiarate** senza approvazione scritta di TONE3000 e niente white-labeling: la libreria si presenta come TONE3000.
+- **Design**: presentazione prima del login, elenchi con immagine, titolo, tipo, formato e creatore, pulsante "Sfoglia TONE3000" sempre presente, immagine + marchio T3K sul blocco della catena con una cattura TONE3000.
+
+---
+
 ## 🔒 Progetto: Regole Hardware Inderogabili
 
 > [!CAUTION]

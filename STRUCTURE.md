@@ -3,7 +3,7 @@
 Descrive l'architettura dei file, la topologia di rete, i container e le variabili d'ambiente del progetto.
 Mantenere aggiornato questo file ad ogni modifica strutturale o aggiunta di endpoint.
 
-**Sonicake Preset Manager & Tone3000 Cloud Explorer**: web app progressiva (desktop e mobile) per **tutte le pedaliere multi-effetto Sonicake** (hardware di riferimento: QME-20 e Pocket Master). Comunica direttamente con la pedaliera via **Web MIDI** (USB) e **Web Bluetooth** (BLE), senza software proprietario.
+**Sonicake Preset Manager** (libreria catture Powered by [TONE3000](https://www.tone3000.com)): web app progressiva (desktop e mobile) per **tutte le pedaliere multi-effetto Sonicake** (hardware di riferimento: QME-20 e Pocket Master). Comunica direttamente con la pedaliera via **Web MIDI** (USB) e **Web Bluetooth** (BLE), senza software proprietario.
 
 ---
 
@@ -38,7 +38,7 @@ sonicake-preset-manager/
 │   │   │   └── prst-parser.js  # Parser file .prst
 │   │   ├── components/
 │   │   │   ├── Tone3000Modal.js    # Memory Manager (10 slot), libreria TONE3000 (login, Sfoglia, elenchi), Drag&Drop, progress SysEx
-│   │   │   ├── ModuleEditor.js     # Editor effetti, toggle Factory/Clone, sostituzione Tone3000
+│   │   │   ├── ModuleEditor.js     # Editor effetti, toggle Factory/Clone, pulsante libreria TONE3000, scheda della cattura TONE3000 caricata nel blocco
 │   │   │   ├── SignalChain.js      # Routing e ordine della catena a 9 moduli
 │   │   │   ├── PresetList.js       # Gestione 50 preset (U01-U50)
 │   │   │   ├── PresetDropdown.js   # Menu a tendina della barra preset (desktop): ricerca, Utente/Fabbrica
@@ -118,7 +118,7 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 - **Stage di build:** `deps`, `builder` e `pydeps` su `$BUILDPLATFORM`; `nam2clo` su `linux/amd64` (l'NDK esiste solo x86_64, l'output è sempre Android arm64); `android` copia il runtime bionic da redroid. Nello stage finale non si compila nulla.
 - **Porta interna:** `3000` (waitress, utente `app` uid 1001)
 - **Porta host:** `127.0.0.1:3010` → `3000`, solo per verifiche dal server stesso
-- **Volume persistente:** `./data:/app/data` (`cache/` conversioni e `active_preset.json`, `vendor/` file Sonicake). Proprietario: `sudo chown -R 1001:1001 data`
+- **Volume persistente:** `./data:/app/data` (`cache/` cartella di lavoro: solo file temporanei delle conversioni e `active_preset.json` di sviluppo, nessun modello conservato; `vendor/` file Sonicake). Proprietario: `sudo chown -R 1001:1001 data`
 - **Host di produzione:** VPS Oracle Ampere (ARM64)
 
 ### Rete Cloudflare Tunnel (`cloudflared-mesh`)
@@ -144,7 +144,7 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 
 | Metodo | Path | Descrizione |
 |---|---|---|
-| `GET` | `/api/health` | Stato del servizio, `compiler_backend`, numero di elementi in cache |
+| `GET` | `/api/health` | Stato del servizio e `compiler_backend` |
 | `POST` | `/api/convert-nam` | Multipart `file` (`.nam`) → Low Model 2.696 byte. Il server non scarica mai URL (JSON con `url` → 400) |
 | `GET`/`POST` | `/api/active-preset` | Solo sviluppo: legge/salva il preset attivo (`active_preset.json` nella cache) |
 | `GET` | `/*` | Sito compilato con fallback SPA su `index.html` (solo se `STATIC_DIR` è impostata) |
@@ -165,7 +165,7 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 | Variabile | Default (container) | Descrizione |
 |---|---|---|
 | `PORT` | `8080` (`3000`) | Porta del server Flask |
-| `DATA_DIR` | `data/` del repository (`/app/data`) | Volume persistente: `cache/` (fallback su `/tmp` se non scrivibile) |
+| `DATA_DIR` | `data/` del repository (`/app/data`) | Volume persistente: `vendor/` e `cache/`, la cartella di lavoro delle conversioni (fallback su `/tmp` se non scrivibile). All'avvio vengono cancellate le conversioni salvate dalle versioni precedenti |
 | `STATIC_DIR` | — (`/app/static`) | Sito compilato servito dallo stesso processo |
 | `NAM2CLO_BIN` | — (`/opt/nam2clo/nam2clo`) | Convertitore ARM64 |
 | `NAM2CLO_LIB` | — (`/app/data/vendor/lib5868USB.so`) | Libreria vendor montata |

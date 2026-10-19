@@ -52,7 +52,7 @@ sonicake-preset-manager/
 │   │   │   ├── compiler-bridge.js  # Client del compiler (/api sulla stessa origine, NAM → Low Model 2.696 byte)
 │   │   │   ├── tone3000.js         # API ufficiale TONE3000: OAuth PKCE nel popup, token, elenchi, download dei file
 │   │   │   └── update-check.js     # Confronta la versione compilata con /version.json pubblicato
-│   │   ├── styles/             # main.css, soniclink.css, tone3000.css, knobs.css, rack.css, drums-tuner.css
+│   │   ├── styles/             # main.css, studio.css, tone3000.css, knobs.css, rack.css, drums-tuner.css
 │   │   └── utils/
 │   │       └── bundle-encoder.js   # Codifica link/bundle di condivisione
 │   ├── public/                 # Grafica originale (assets/ui/), loghi TONE3000 (assets/tone3000/), manifest PWA, service worker,

@@ -29,14 +29,15 @@ sonicake-preset-manager/
 │   ├── src/
 │   │   ├── main.js             # Bootstrap app, scorciatoie, wiring dei modali
 │   │   ├── config/
-│   │   │   └── features.js     # Feature flag (funzioni nascoste nel sito pubblicato)
+│   │   │   ├── features.js     # Feature flag (funzioni nascoste nel sito pubblicato)
+│   │   │   └── tone3000.js     # API TONE3000: publishable key (client_id), redirect di ritorno del login
 │   │   ├── core/
 │   │   │   ├── connection.js   # Trasporto MIDI & BLE, invio/ricezione SysEx, riconnessione dopo il ricaricamento
 │   │   │   ├── protocol.js     # Framing SysEx, CRC16 (VTSI), CRC8 SMBus PEC (0x07), convertitore Low Model
 │   │   │   ├── preset-engine.js # State machine 50 preset, flash streaming (Clone AMP & IR), export/import, swap
 │   │   │   └── prst-parser.js  # Parser file .prst
 │   │   ├── components/
-│   │   │   ├── Tone3000Modal.js    # Memory Manager (10 slot), Cloud Explorer, Drag&Drop, progress SysEx
+│   │   │   ├── Tone3000Modal.js    # Memory Manager (10 slot), libreria TONE3000 (login, Sfoglia, elenchi), Drag&Drop, progress SysEx
 │   │   │   ├── ModuleEditor.js     # Editor effetti, toggle Factory/Clone, sostituzione Tone3000
 │   │   │   ├── SignalChain.js      # Routing e ordine della catena a 9 moduli
 │   │   │   ├── PresetList.js       # Gestione 50 preset (U01-U50)
@@ -49,12 +50,13 @@ sonicake-preset-manager/
 │   │   ├── data/               # Librerie comandi/moduli, lookup EQ, pattern batteria
 │   │   ├── services/
 │   │   │   ├── compiler-bridge.js  # Client del compiler (/api sulla stessa origine, NAM → Low Model 2.696 byte)
-│   │   │   ├── tone3000.js         # Client REST Supabase di Tone3000
+│   │   │   ├── tone3000.js         # API ufficiale TONE3000: OAuth PKCE nel popup, token, elenchi, download dei file
 │   │   │   └── update-check.js     # Confronta la versione compilata con /version.json pubblicato
 │   │   ├── styles/             # main.css, soniclink.css, tone3000.css, knobs.css, rack.css, drums-tuner.css
 │   │   └── utils/
 │   │       └── bundle-encoder.js   # Codifica link/bundle di condivisione
-│   ├── public/                 # Asset statici, manifest PWA, service worker (solo file statici in cache)
+│   ├── public/                 # Asset statici (loghi TONE3000 in assets/tone3000/), manifest PWA, service worker,
+│   │                           # tone3000-callback.html (ritorno del login TONE3000)
 │   ├── test/                   # Test automatici (girano anche in CI prima della build dell'immagine)
 │   │   ├── support/            # Pedaliera virtuale (risponde come quella vera) e scenario del motore
 │   │   ├── engine/             # Scenario completo su USB, BLE a frame spezzati, BLE a 5 frame per notifica
@@ -93,7 +95,7 @@ sonicake-preset-manager/
 
 Identica a Sonicake Manager, verificata byte per byte.
 
-1. `.nam` (`model_url` di Tone3000 o file locale) → `POST /api/convert-nam`.
+1. `.nam` (file locale, oppure scaricato dal browser da TONE3000 con il login dell'utente) → `POST /api/convert-nam` come file.
 2. `namConvertCloDataWithProcess(ctx, inWav, outWav, namPath, cloOut, int* outSize, int* progress, int* total)` riproduce `nam_input_wav.wav` attraverso il modello e ricava un **CLO da 8.840 byte** (~15-20 s, worker asincrono; completato quando `*outSize == 8840`, errore quando progress/total `== -2`).
 3. `convert_clo_to_low()` → **Low Model da 2.696 byte** (identico all'upload catturato di Sonicake Manager `frontend/test/fixtures/transfer2_clone.bin`).
 4. Frontend `buildClonePayload()` + `flashCloneToPedal()` → 146 pacchetti SysEx.
@@ -143,7 +145,7 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 | Metodo | Path | Descrizione |
 |---|---|---|
 | `GET` | `/api/health` | Stato del servizio, `compiler_backend`, numero di elementi in cache |
-| `POST` | `/api/convert-nam` | JSON `{url, name}` (solo modelli Tone3000) oppure multipart `file` (`.nam`) → Low Model 2.696 byte |
+| `POST` | `/api/convert-nam` | Multipart `file` (`.nam`) → Low Model 2.696 byte. Il server non scarica mai URL (JSON con `url` → 400) |
 | `GET`/`POST` | `/api/active-preset` | Solo sviluppo: legge/salva il preset attivo (`active_preset.json` nella cache) |
 | `GET` | `/*` | Sito compilato con fallback SPA su `index.html` (solo se `STATIC_DIR` è impostata) |
 
@@ -176,9 +178,9 @@ Due backend intercambiabili (`server.py` ne sceglie uno, `/api/health` riporta `
 | Variabile | Default | Descrizione |
 |---|---|---|
 | `APP_VERSION` | `build-<data ISO>` | Versione compilata nel sito e scritta in `dist/version.json`. La CI passa lo SHA del commit (build arg del `Dockerfile`). Una pagina aperta legge `/version.json` all'avvio, ogni 5 minuti e quando torna visibile: se è diversa mostra "È disponibile un aggiornamento". Il service worker non mette mai in cache `/version.json`, `/api` e le richieste ad altri domini |
+| `VITE_TONE3000_CLIENT_ID` | chiave in `frontend/src/config/tone3000.js` | Publishable key TONE3000 (OAuth `client_id`, pubblica per natura). Gli indirizzi di ritorno `<origine>/tone3000-callback.html` (produzione e `https://localhost:5173`) vanno registrati sulla chiave in tone3000.com/settings |
 | `SONICAKE_LIB_PATH` | — | Percorso alternativo di `5868USB.dll` (solo Windows) |
-| `MODEL_URL_HOSTS` | `api.tone3000.com` | Host (separati da virgola) da cui `/api/convert-nam` può scaricare modelli: solo `https`, niente redirect |
-| `MAX_MODEL_MB` | `25` | Dimensione massima di un modello scaricato o caricato (oltre: HTTP 413) |
+| `MAX_MODEL_MB` | `25` | Dimensione massima di un modello caricato (oltre: HTTP 413) |
 | `CORS_ORIGINS` | — (nessuno) | Origini esterne ammesse a chiamare `/api` (il sito usa la stessa origine e non ne ha bisogno) |
 | `SONICAKE_DEV_ENDPOINTS` | `1` in locale, `0` con `STATIC_DIR` | Abilita `/api/active-preset` (solo debug) |
 

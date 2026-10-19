@@ -36,7 +36,7 @@ Funziona direttamente dal browser sfruttando gli standard moderni **Web MIDI** e
 - **Annulla / Ripristina (Undo/Redo):** Storico illimitato delle modifiche con `Ctrl + Z` e `Ctrl + Y`.
 
 ### 🌐 2. Tone3000 Cloud Explorer & Variazioni del Modello
-- **Ricerca Diretta nel Cloud:** Sfoglia migliaia di amplificatori NAM e casse IR della community di Tone3000.
+- **Integrazione ufficiale TONE3000:** Accedi con il tuo account TONE3000 (email + codice) e sfoglia il catalogo completo di amplificatori NAM e casse IR; nel sito trovi anche i tuoi preferiti, i download, le tue catture e le novità. Le catture NAM A2, che la pedaliera non può caricare, vengono nascoste.
 - **Selettore Variazioni del Creatore:** Quando selezioni un tone, visualizzi il menu con tutte le variazioni caricate dall'autore (es. *Clean, Crunch, Lead, High Gain, SM57, R121*) per scaricare esattamente il timbro che desideri.
 - **Gestione Memoria File Interni (5 NAM + 5 IR):** I file scaricati vengono scritti negli slot hardware dedicati (Slot NAM 1–5 e Slot IR 1–5), **senza rischiare di sovrascrivere o alterare i tuoi 50 preset utente**.
 - **Caricamento Locale:** Trascina o carica direttamente i tuoi file `.nam` o `.wav` dal computer negli slot interni.
